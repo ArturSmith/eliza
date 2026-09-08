@@ -135,8 +135,35 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await dialog.getByRole('button', { name: 'Retry payment confirmation' }).click();
   await expect(dialog.getByRole('heading', { name: 'Sale complete' })).toBeVisible();
   await dialog.getByRole('button', { name: 'Next customer' }).click();
+
+  await page.getByRole('button', { name: 'Search / refund' }).click();
+  await dialog.getByRole('button', { name: 'Open receipt' }).first().click();
+  await dialog.getByLabel(/Sourdough bread —/).fill('1');
+  await dialog.getByLabel('Saleable: restore stock').check();
+  await dialog.getByLabel('Return reason').fill('Customer returned unopened item');
+  await dialog.getByLabel('I confirm these items should be refunded in cash.').check();
+  await dialog.getByLabel('Approving manager code').fill('OWNER');
+  await dialog.getByLabel('Approving manager PIN').fill('654321');
+  let refundDropped = false;
+  await page.route('**/api/pos/refunds', async (route) => {
+    if (!refundDropped) {
+      refundDropped = true;
+      await route.fetch();
+      await route.abort('failed');
+    } else await route.continue();
+  });
+  await dialog.getByRole('button', { name: 'Confirm refund', exact: true }).click();
+  await expect(
+    dialog.getByText('A refund confirmation is pending.', { exact: false }),
+  ).toBeVisible();
+  await expect(dialog.getByRole('alert')).toContainText('Cannot reach the server');
+  await page.unroute('**/api/pos/refunds');
+  await dialog.getByRole('button', { name: 'Recover refund' }).click();
+  await expect(dialog.getByRole('heading', { name: /Refund recorded:/ })).toBeVisible();
+  await page.screenshot({ path: 'test-results/refund-recorded.png', fullPage: true });
+  await dialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await page.getByRole('button', { name: 'Close shift', exact: true }).click();
-  await dialog.getByLabel('Counted cash').fill('189.82');
+  await dialog.getByLabel('Counted cash').fill('139.92');
   await dialog.getByLabel('Closing notes').fill('Drawer balanced');
   await dialog.getByRole('button', { name: 'Close shift', exact: true }).click();
   await expect(page.getByText('No open shift', { exact: true })).toBeVisible();

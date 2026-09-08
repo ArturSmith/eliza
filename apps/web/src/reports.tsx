@@ -1,3 +1,4 @@
+import { ReceiptSearch } from './refunds';
 import { SalesSummary } from './sales-summary';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -22,6 +23,7 @@ export function SalesPage() {
         </div>
       </div>
       <SalesSummary />
+      <ReceiptSearch />
       <h2>Recent receipts</h2>
       <ErrorMessage error={query.error} />
       <section className="panel">

@@ -11,6 +11,7 @@ export const permissions = [
   'pos.access',
   'sales.read',
   'discount.approve',
+  'refund.approve',
   'shift.approve',
   'cash.manage',
   'devices.manage',

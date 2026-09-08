@@ -1,3 +1,4 @@
+import { ReceiptSearch } from './refunds';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { z } from 'zod';
@@ -816,6 +817,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
           </div>
         </aside>
       </div>
+      <ReceiptSearch context={context} />
       <footer className="pos-footer">
         <div>
           <span className="status-dot" />

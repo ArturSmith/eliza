@@ -90,7 +90,7 @@ Supplier payments, invoice matching, purchase returns, barcode receiving, and of
 3. Store tax/receipt configuration, password recovery, and production hardening.
 4. Durable IndexedDB cart/product storage, a separately designed offline synchronization protocol, and payment/printing hardware integrations.
 
-No full offline checkout, direct card charging, refunds, job processing, email recovery, or hardware integration is implemented yet.
+No full offline checkout, direct card charging, job processing, email recovery, or hardware integration is implemented yet.
 
 ## Repository
 
@@ -105,4 +105,12 @@ This is a development foundation bound to localhost. Before deployment, configur
 
 ### Sales summaries
 
-Sales and Shifts now show date-range summaries grouped by day, week, month, shift, cashier, register, product, category, or payment method. Totals cover all completed sales in the range, independently of the recent-receipt limit. Both dates are inclusive in the store timezone, including daylight-saving transitions. Reports include transactions, sales after discounts including tax, cash/card sales, discounts, tax, and average basket. Shift grouping includes only sales within the selected dates. Opening float and drawer movements are excluded. Weeks start Monday. Product reports include quantities in each product’s unit. Product/category averages show group revenue per matching receipt; overall average basket always uses complete sales. Receipt counts across product/category rows may overlap. Payment totals exclude change; tax and discounts are not allocated to payment methods, and payments are not allocated to products. New receipts preserve category snapshots; older receipts appear under Unrecorded category. Profit and refunds remain future work.
+Sales and Shifts now show date-range summaries grouped by day, week, month, shift, cashier, register, product, category, or payment method. Totals cover all completed sales in the range, independently of the recent-receipt limit. Both dates are inclusive in the store timezone, including daylight-saving transitions. Reports include transactions, sales after discounts including tax, cash/card sales, discounts, tax, and average basket. Shift grouping includes only sales within the selected dates. Opening float and drawer movements are excluded. Weeks start Monday. Product reports include quantities in each product’s unit. Product/category averages show group revenue per matching receipt; overall average basket always uses complete sales. Receipt counts across product/category rows may overlap. Payment totals exclude change; tax and discounts are not allocated to payment methods, and payments are not allocated to products. New receipts preserve category snapshots; older receipts appear under Unrecorded category. Profit remains future work.
+
+### Receipt search and refunds
+
+Use **Sales → Search all receipts** to find any stored receipt by number or transaction ID, optional dates, and pagination. Checkout has **Search / refund** for the same lookup and original receipt/refund history. Receipt reprints are audited.
+
+An open register shift is required to issue a refund. Select returned quantities, mark saleable items for stock restoration, and enter a reason. Cashiers require a manager PIN; Owner/Manager may approve their own refund. Refunds use the original payment method, preserve the original sale, prevent over-returning, and retain immutable lines and approval history. Partial refunds use cumulative rounding so their sum exactly matches the discounted original line. Damaged/non-saleable returns do not restore stock. Cash refunds reduce the current shift drawer and cannot exceed its recorded balance. Card refunds must be performed on the external terminal and explicitly confirmed; Eliza records them but does not contact the terminal.
+
+Pending refund requests are saved without PINs in this browser tab, scoped to operator/register/receipt. Reopen the receipt and choose Recover refund after a lost response; do not repeat an external payment. Closing the browser tab or clearing its storage can lose the pending request, so inspect refund history first. Reports show original sales before refunds, refunds issued during the selected dates, and sales less refunds. Breakdown rows remain original sales, not refund allocations.

@@ -17,6 +17,8 @@ const groups = {
 };
 type Group = keyof typeof groups;
 type Totals = {
+  refunds: string;
+  net: string;
   label: string | null;
   quantity: string | null;
   unit: string | null;
@@ -63,7 +65,8 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
       <h2>Sales summary</h2>
       <p className="muted">
         All completed sales in the selected dates, using {store.timezone}. Sales include tax and are
-        after discounts. Opening float and cash in/out are excluded.
+        after discounts. Refunds are counted on the date issued; breakdown rows show original sales
+        before refunds. Opening float and cash in/out are excluded.
       </p>
       <form
         className="form-grid"
@@ -134,7 +137,9 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
               }}
             >
               {[
-                ['Sales', data.totals.total],
+                ['Sales before refunds', data.totals.total],
+                ['Refunds', data.totals.refunds],
+                ['Sales less refunds', data.totals.net],
                 ['Cash sales', data.totals.cash],
                 ['Card sales', data.totals.card],
                 ['Tax included', data.totals.tax],

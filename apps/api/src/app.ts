@@ -20,6 +20,7 @@ import { InventoryModule } from './inventory.js';
 import { ManagementModule } from './management.js';
 import { TeamModule } from './team.js';
 import { RegisterModule } from './register.js';
+import { RefundModule } from './refunds.js';
 import { SalesSummaryModule } from './sales-summary.js';
 import { PurchasingModule } from './purchasing.js';
 import { CheckoutModule } from './checkout.js';
@@ -76,6 +77,7 @@ class HealthController {
     CheckoutModule,
     PurchasingModule,
     SalesSummaryModule,
+    RefundModule,
   ],
   controllers: [HealthController],
 })
