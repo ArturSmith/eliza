@@ -329,6 +329,7 @@ export type Receipt = {
   lines: {
     productId: string;
     name: string;
+    category?: string;
     sku: string;
     unit: string;
     quantity: string;

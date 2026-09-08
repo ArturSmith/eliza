@@ -152,11 +152,44 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole('link', { name: 'Sales', exact: true }).click();
-  await expect(page.locator('tbody tr')).toHaveCount(2);
+  await expect(
+    page.getByRole('table', { name: 'Recent receipts' }).locator('tbody tr'),
+  ).toHaveCount(2);
   await page.getByRole('link', { name: 'Shifts', exact: true }).click();
   await expect(page.getByRole('cell', { name: 'closed', exact: true })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'NOK 0.00', exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole('table', { name: 'Drawer reconciliation' })
+      .getByRole('cell', { name: 'NOK 0.00', exact: true }),
+  ).toBeVisible();
 
+  const summary = page.getByRole('region', { name: 'Sales summary' });
+  await expect(summary).toContainText('NOK 89.82');
+  await summary.getByLabel('Group sales by').selectOption('month');
+  await summary.getByRole('button', { name: 'Apply dates' }).click();
+  await expect(summary.getByRole('columnheader', { name: 'Month', exact: true })).toBeVisible();
+  for (const [group, heading] of [
+    ['week', 'Week starting Monday'],
+    ['cashier', 'Cashier'],
+    ['register', 'Register'],
+    ['product', 'Product'],
+    ['category', 'Category'],
+    ['payment', 'Payment method'],
+  ]) {
+    await summary.getByLabel('Group sales by').selectOption(group);
+    await summary.getByRole('button', { name: 'Apply dates' }).click();
+    await expect(summary.getByRole('columnheader', { name: heading, exact: true })).toBeVisible();
+    await expect(summary).toContainText('NOK 89.82');
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/report-breakdowns-mobile.png', fullPage: true });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await summary.getByLabel('From date').fill('2000-01-01');
+  await summary.getByLabel('To date').fill('2000-01-31');
+  await summary.getByRole('button', { name: 'Apply dates' }).click();
+  await expect(summary).toContainText('No completed sales in this date range.');
+  await page.screenshot({ path: 'test-results/sales-summary.png', fullPage: true });
   await page.getByRole('link', { name: 'Suppliers', exact: true }).click();
   await page.getByRole('button', { name: 'Add supplier', exact: true }).click();
   await dialog.getByLabel('Supplier code').fill('BAKERY');

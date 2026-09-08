@@ -408,4 +408,176 @@ describe.sequential('register, shifts and checkout', () => {
     expect((await register.request('/pos/context')).body.blocked).toBe(true);
     expect((await register.request('/auth/session')).status).toBe(401);
   });
+
+  it('reports exact totals and shift/month groups without drawer float or receipt limits', async () => {
+    const bounds = (
+      await db.pool.query(
+        "SELECT to_char(min(created_at) AT TIME ZONE 'Europe/Oslo','YYYY-MM-DD') AS first,to_char(max(created_at) AT TIME ZONE 'Europe/Oslo','YYYY-MM-DD') AS last FROM sales",
+      )
+    ).rows[0];
+    const expected = (
+      await db.pool.query(
+        'SELECT sum(total)::text AS total,sum(tax)::text AS tax,sum(discount)::text AS discount,count(*)::text AS transactions FROM sales',
+      )
+    ).rows[0];
+    for (const group of [
+      'day',
+      'week',
+      'month',
+      'shift',
+      'cashier',
+      'register',
+      'product',
+      'category',
+      'payment',
+    ]) {
+      const r = await manager.request(
+        `/reports/sales-summary?from=${bounds.first}&to=${bounds.last}&group=${group}`,
+      );
+      expect(r.status).toBe(200);
+      expect(r.body.totals).toMatchObject(expected);
+      const payment = (
+        await db.pool.query(
+          "SELECT COALESCE(sum(amount) FILTER(WHERE method='cash'),0)::text AS cash,COALESCE(sum(amount) FILTER(WHERE method='card'),0)::text AS card FROM payments",
+        )
+      ).rows[0];
+      expect(r.body.totals).toMatchObject(payment);
+      expect(r.body.rows.length).toBeGreaterThan(0);
+      const cents = (v: string) => BigInt(v.replace('.', ''));
+      expect(r.body.rows.reduce((sum: bigint, row: any) => sum + cents(row.total), 0n)).toBe(
+        cents(expected.total),
+      );
+      if (group === 'product')
+        expect(r.body.rows.every((row: any) => row.quantity && row.unit && row.cash === null)).toBe(
+          true,
+        );
+      if (group === 'category')
+        expect(r.body.rows.some((row: any) => row.label === 'Dairy')).toBe(true);
+      if (group === 'shift')
+        expect(r.body.rows.every((row: any) => row.cashier && row.register && row.openedAt)).toBe(
+          true,
+        );
+    }
+  });
+  it('validates reporting dates, returns empty totals, and requires management access', async () => {
+    for (const query of [
+      'from=2026-02-30&to=2026-03-01',
+      'from=2026-02-02&to=2026-02-01',
+      'from=2000-01-01&to=2026-01-01',
+      'from=2026-01-01&to=2026-01-31&group=invalid',
+    ])
+      expect((await manager.request('/reports/sales-summary?' + query)).status).toBe(400);
+    const empty = await manager.request('/reports/sales-summary?from=2000-01-01&to=2000-01-31');
+    expect(empty.status).toBe(200);
+    expect(empty.body.rows).toEqual([]);
+    expect(empty.body.totals.transactions).toBe('0');
+    expect(Number(empty.body.totals.total)).toBe(0);
+    expect(
+      (await register.request('/reports/sales-summary?from=2000-01-01&to=2000-01-31')).status,
+    ).toBe(401);
+  });
+
+  it('includes all sales beyond 100 receipts and honors DST midnight boundaries', async () => {
+    const seed = (await db.pool.query('SELECT * FROM sales LIMIT 1')).rows[0];
+    for (const [count, timestamp] of [
+      [103, '2020-03-28T23:00:00Z'],
+      [1, '2020-03-29T21:59:59Z'],
+      [1, '2020-03-28T22:59:59Z'],
+      [1, '2020-03-29T22:00:00Z'],
+    ] as const) {
+      await db.pool.query(
+        `INSERT INTO sales(store_id,device_id,employee_id,shift_id,request_id,request_hash,receipt_number,total,tax,discount,receipt,created_at)
+        SELECT $1,$2,$3,$4,gen_random_uuid(),'report-fixture',gen_random_uuid()::text,1,0,0,$5,$6::timestamptz FROM generate_series(1,$7::int)`,
+        [
+          seed.store_id,
+          seed.device_id,
+          seed.employee_id,
+          seed.shift_id,
+          seed.receipt,
+          timestamp,
+          count,
+        ],
+      );
+    }
+    const r = await manager.request(
+      '/reports/sales-summary?from=2020-03-29&to=2020-03-29&group=day',
+    );
+    expect(r.status).toBe(200);
+    expect(r.body.totals.transactions).toBe('104');
+    expect(r.body.totals.total).toBe('104.00');
+    expect(r.body.rows).toHaveLength(1);
+    expect(r.body.rows[0].bucket).toBe('2020-03-29');
+    const weekly = await manager.request(
+      '/reports/sales-summary?from=2020-03-29&to=2020-03-29&group=week',
+    );
+    expect(weekly.body.rows[0].bucket).toBe('2020-03-23');
+    expect(weekly.body.totals.total).toBe('104.00');
+  });
+
+  it('groups original product/category values and counts a multi-line receipt only once', async () => {
+    const seed = (await db.pool.query('SELECT * FROM sales LIMIT 1')).rows[0];
+    const product = crypto.randomUUID();
+    const receipt = {
+      ...seed.receipt,
+      lines: [
+        {
+          productId: product,
+          name: 'Original name',
+          sku: 'A',
+          unit: 'piece',
+          quantity: '2',
+          total: '20.00',
+          tax: '2.00',
+          discount: '1.00',
+          category: 'Original category',
+        },
+        {
+          productId: product,
+          name: 'Original name',
+          sku: 'A',
+          unit: 'piece',
+          quantity: '1',
+          total: '10.00',
+          tax: '1.00',
+          discount: '0.00',
+          category: 'Original category',
+        },
+        {
+          productId: crypto.randomUUID(),
+          name: 'Old item',
+          sku: 'B',
+          unit: 'kilogram',
+          quantity: '0.5',
+          total: '5.00',
+          tax: '0.00',
+          discount: '0.00',
+        },
+      ],
+    };
+    await db.pool.query(
+      `INSERT INTO sales(store_id,device_id,employee_id,shift_id,request_id,request_hash,receipt_number,total,tax,discount,receipt,created_at)
+    VALUES($1,$2,$3,$4,gen_random_uuid(),'fixture',gen_random_uuid()::text,35,3,1,$5,'2021-01-01T12:00:00Z')`,
+      [seed.store_id, seed.device_id, seed.employee_id, seed.shift_id, receipt],
+    );
+    const p = (
+      await manager.request('/reports/sales-summary?from=2021-01-01&to=2021-01-01&group=product')
+    ).body;
+    expect(p.totals.transactions).toBe('1');
+    expect(p.totals.average).toBe('35.00');
+    expect(p.rows.find((r: any) => r.bucket === product)).toMatchObject({
+      transactions: '1',
+      quantity: '3',
+      total: '30.00',
+      average: '30.00',
+      label: 'Original name · A',
+    });
+    const c = (
+      await manager.request('/reports/sales-summary?from=2021-01-01&to=2021-01-01&group=category')
+    ).body;
+    expect(c.rows.find((r: any) => r.bucket === 'Original category')).toMatchObject({
+      transactions: '1',
+      total: '30.00',
+    });
+    expect(c.rows.find((r: any) => r.bucket === 'Unrecorded category').total).toBe('5.00');
+  });
 });

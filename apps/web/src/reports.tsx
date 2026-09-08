@@ -1,3 +1,4 @@
+import { SalesSummary } from './sales-summary';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { Receipt, Shift } from '@eliza/contracts';
@@ -20,13 +21,15 @@ export function SalesPage() {
           </p>
         </div>
       </div>
+      <SalesSummary />
+      <h2>Recent receipts</h2>
       <ErrorMessage error={query.error} />
       <section className="panel">
         {query.isPending ? (
           <p className="panel-padding muted">Loading sales…</p>
         ) : query.data?.length ? (
           <div className="table-scroll">
-            <table>
+            <table aria-label="Recent receipts">
               <thead>
                 <tr>
                   <th>Receipt</th>
@@ -115,13 +118,15 @@ export function ShiftsPage() {
           </p>
         </div>
       </div>
+      <SalesSummary initialGroup="shift" />
+      <h2>Drawer reconciliation</h2>
       <ErrorMessage error={query.error} />
       <section className="panel">
         {query.isPending ? (
           <p className="panel-padding muted">Loading shifts…</p>
         ) : query.data?.length ? (
           <div className="table-scroll">
-            <table>
+            <table aria-label="Drawer reconciliation">
               <thead>
                 <tr>
                   <th>Cashier / register</th>

@@ -303,6 +303,7 @@ export class CheckoutController {
         lines.push({
           productId: product.id,
           name: product.name,
+          category: product.category,
           sku: product.sku,
           unit: product.unit,
           quantity: item.quantity,

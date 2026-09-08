@@ -102,3 +102,7 @@ No full offline checkout, direct card charging, refunds, job processing, email r
 - `docs/architecture.md`: design choices and implementation boundaries.
 
 This is a development foundation bound to localhost. Before deployment, configure a non-superuser database role, private database credentials, HTTPS, backups and restore verification, account recovery, and deployment-level rate limiting. No paid service is necessary to implement those capabilities.
+
+### Sales summaries
+
+Sales and Shifts now show date-range summaries grouped by day, week, month, shift, cashier, register, product, category, or payment method. Totals cover all completed sales in the range, independently of the recent-receipt limit. Both dates are inclusive in the store timezone, including daylight-saving transitions. Reports include transactions, sales after discounts including tax, cash/card sales, discounts, tax, and average basket. Shift grouping includes only sales within the selected dates. Opening float and drawer movements are excluded. Weeks start Monday. Product reports include quantities in each product’s unit. Product/category averages show group revenue per matching receipt; overall average basket always uses complete sales. Receipt counts across product/category rows may overlap. Payment totals exclude change; tax and discounts are not allocated to payment methods, and payments are not allocated to products. New receipts preserve category snapshots; older receipts appear under Unrecorded category. Profit and refunds remain future work.

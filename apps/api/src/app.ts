@@ -20,6 +20,7 @@ import { InventoryModule } from './inventory.js';
 import { ManagementModule } from './management.js';
 import { TeamModule } from './team.js';
 import { RegisterModule } from './register.js';
+import { SalesSummaryModule } from './sales-summary.js';
 import { PurchasingModule } from './purchasing.js';
 import { CheckoutModule } from './checkout.js';
 @Catch()
@@ -74,6 +75,7 @@ class HealthController {
     RegisterModule,
     CheckoutModule,
     PurchasingModule,
+    SalesSummaryModule,
   ],
   controllers: [HealthController],
 })
