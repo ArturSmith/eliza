@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   pgTable,
   uuid,
@@ -37,7 +38,11 @@ export const employees = pgTable('employees', {
     .notNull()
     .references(() => roles.id),
   name: text('name').notNull(),
-  email: text('email').notNull().unique(),
+  email: text('email').unique(),
+  employeeCode: text('employee_code')
+    .notNull()
+    .default(sql`('E-' || substring(replace(gen_random_uuid()::text,'-','') from 1 for 12))`),
+  pinHash: text('pin_hash'),
   passwordHash: text('password_hash').notNull(),
   active: boolean('active').notNull().default(true),
   createdAt: created(),
@@ -75,6 +80,7 @@ export const products = pgTable(
     sku: text('sku').notNull(),
     category: text('category').notNull(),
     unit: text('unit').notNull(),
+    taxRate: numeric('tax_rate', { precision: 5, scale: 2 }).notNull().default('0'),
     price: numeric('price', { precision: 14, scale: 2 }).notNull(),
     cost: numeric('cost', { precision: 14, scale: 2 }).notNull(),
     minStock: numeric('min_stock', { precision: 15, scale: 3 }).notNull(),

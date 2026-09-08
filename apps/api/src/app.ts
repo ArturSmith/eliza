@@ -18,6 +18,9 @@ import { AuthModule } from './auth.js';
 import { CatalogModule } from './catalog.js';
 import { InventoryModule } from './inventory.js';
 import { ManagementModule } from './management.js';
+import { TeamModule } from './team.js';
+import { RegisterModule } from './register.js';
+import { CheckoutModule } from './checkout.js';
 @Catch()
 class Errors implements ExceptionFilter {
   catch(error: unknown, host: ArgumentsHost) {
@@ -30,7 +33,8 @@ class Errors implements ExceptionFilter {
     const code = err.code ?? err.cause?.code;
     if (code === '23505') {
       res.status(409).json({
-        message: 'This SKU, PLU, email, or barcode is already registered. Use a unique value.',
+        message:
+          'This code or record is already registered. Check the employee code, SKU, PLU, email, or barcode.',
       });
       return;
     }
@@ -59,7 +63,16 @@ class HealthController {
   }
 }
 @Module({
-  imports: [DatabaseModule, AuthModule, CatalogModule, InventoryModule, ManagementModule],
+  imports: [
+    DatabaseModule,
+    AuthModule,
+    CatalogModule,
+    InventoryModule,
+    ManagementModule,
+    TeamModule,
+    RegisterModule,
+    CheckoutModule,
+  ],
   controllers: [HealthController],
 })
 class AppModule {}

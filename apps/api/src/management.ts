@@ -10,7 +10,7 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { Database } from './database.js';
 import { AccessGuard, type AuthRequest, parse, Require } from './security.js';
@@ -43,7 +43,10 @@ export class ManagementController {
       .select({
         id: employees.id,
         name: employees.name,
-        email: employees.email,
+        email: sql<string>`COALESCE(${employees.email},'')`,
+        roleId: employees.roleId,
+        employeeCode: employees.employeeCode,
+        hasPin: sql<boolean>`${employees.pinHash} IS NOT NULL`,
         role: roles.name,
         active: employees.active,
         createdAt: employees.createdAt,

@@ -31,6 +31,8 @@ export async function api<T>(
     .json()
     .catch(() => ({ message: 'The server returned an unexpected response.' }));
   if (!response.ok) {
+    if (path.startsWith('/pos/') && [401, 403].includes(response.status) && path !== '/pos/enter')
+      void queryClient.invalidateQueries({ queryKey: ['pos-context'] });
     if (response.status === 401 && path !== '/auth/session' && path !== '/auth/login')
       void queryClient.invalidateQueries({ queryKey: ['session'] });
     throw new ApiError(data.message ?? 'Request failed.', response.status);

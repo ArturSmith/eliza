@@ -22,19 +22,42 @@ Alternatively, use `docker compose up -d` instead of `pnpm db:start`. Choose one
 
 Optional overrides go in a root `.env` file (see `.env.example`). The API loads it without overwriting existing environment variables. API: http://127.0.0.1:3001/api/health. Development endpoint documentation: http://127.0.0.1:3001/api/docs. Request contracts are defined in `packages/contracts/src/index.ts`.
 
-## Implemented milestone
+## Implemented workflows
 
-- First-run store and owner setup; local password authentication with salted scrypt hashes.
-- Opaque, hashed database sessions in HttpOnly, SameSite cookies; logout, expiry, and active-user/device checks.
-- Owner, Manager, and Cashier permission collections; server-side access checks and cost visibility restrictions. Only the owner is created through the UI in this milestone.
-- Management browser registration on authenticated login, renaming, blocking, and an activity trail. This is **not yet** trusted POS registration: a management user who knows their password can register a new browser.
-- Product creation and editing, store-unique SKU/PLU, zero or multiple barcodes, categories as labels, activation and deactivation.
-- Product search by name, barcode, SKU, and PLU, plus category filtering.
-- Opening stock and manual adjustments, exact decimal quantities, row locking, idempotent request IDs, negative-stock prevention, and append-only stock movement records.
-- Inventory overview, low-stock indicators, purchase-cost valuation, recent activity, employee listing, device management, and store profile display.
-- Responsive desktop/mobile UI, with accessible Radix dialogs, validation, loading, empty, and error states.
+- First-run store and owner setup; salted scrypt passwords and HttpOnly database sessions.
+- Employee creation, store-unique employee codes, role assignment, activation/deactivation, and six-digit PIN setup/reset. Employees can use PIN-only access, without email or an external account. An owner cannot disable their own account or change their own role.
+- Owner, Manager, and Cashier permission collections. Team administration is owner-controlled; cost visibility and reports are enforced on the server.
+- Management browser registration and blocking, plus **explicit owner/authorized manager enrollment of POS registers**. Entering an enrolled register ends this browser's management session. PIN sessions never authenticate management API endpoints.
+- Register PIN login, manual locking, a five-minute inactivity lock, and database-persisted PIN attempt limits (five failed attempts lock PIN entry on that device for five minutes).
+- Product creation/editing, SKU/PLU, zero or multiple barcodes, tax rate, category labels, activation/deactivation, and catalog search.
+- Opening stock and manual adjustments with exact decimal quantities, row locks, idempotency, and append-only movement/audit history.
+- Checkout by barcode, PLU, SKU, product search, or product buttons. Weighted quantities use manual entry in the product's unit.
+- Cart quantity editing, up to ten held carts, and reload recovery using **sessionStorage in the same browser tab**. These are not durable offline storage or a cross-device cart service; closing the tab or clearing its storage can lose drafts.
+- Sale-wide percentage discounts; cashier discounts above 10% need a manager/owner PIN. The approver is recorded separately and the active cashier does not change.
+- Cash payment with change; manually recorded card payment with an explicit external-terminal confirmation. The app **does not charge a card terminal**. Single payment method per sale currently; no split payments yet.
+- Transactional sale finalization: immutable receipt/item/payment snapshots, stock reduction, cash movement, and audit entry. Stable request IDs recover an uncertain result without duplicating sales.
+- Shift opening float, manager cash in/out during their own shift, expected drawer totals, closing count and difference, and permanent closed-shift totals. Cashier differences require a manager/owner PIN.
+- Original cashier must close the shift before another employee takes over that register. One employee can have one open shift at a time. Employee deactivation requires closing their open shift first.
+- Printable receipts, audited reprints, sales history, and shift cash history, plus the dashboard and inventory views.
 
-A unit cannot currently be changed on an existing product; a conversion workflow must preserve the meaning of historical movements. Product prices/costs and barcodes can be edited with audit history. Categories are labels in this milestone; hierarchical category management remains on the roadmap. Inventory history and audit screens show the most recent 100 entries; the database retains the complete history.
+### Use checkout
+
+1. Sign in to management and open **Team**. Edit your own account to set a six-digit PIN; create cashier accounts as needed.
+2. Add products and stock. Set each product's appropriate tax rate: **prices include tax**, and existing products default to 0% until configured.
+3. Open **Checkout**, name and enroll the browser as a register. This ends its management session.
+4. Select an employee, enter their PIN, and start a shift with the opening drawer cash.
+5. Scan or select items, take payment, then print the receipt. If the result is uncertain, use **Recover payment**; the same request ID is retained across reloads.
+6. Finish or clear all active/held carts, then close the shift and enter the counted cash.
+
+Existing stores upgrade without deleting products or history:
+
+```sh
+pnpm build
+pnpm db:migrate
+pnpm dev
+```
+
+A product unit cannot currently be changed; historical movements need an explicit conversion workflow. Categories remain labels rather than a hierarchy. History screens show the latest 100 records (cashier receipt history: 20); older records remain in PostgreSQL. Receipt numbering is globally unique and may have gaps after rollbacks. Receipts currently contain basic store details; jurisdiction-specific fiscal/receipt requirements and hardware support must be completed before live retail use.
 
 ## Checks
 
@@ -49,16 +72,16 @@ pnpm test:e2e
 pnpm format:check
 ```
 
-Integration coverage includes duplicate barcode rollback, idempotent retries, concurrent updates, fractional inventory, permissions, cross-store isolation, blocked devices, logout, and database-enforced history protection. The browser test covers setup → create/edit product → opening stock → audit → persisted dashboard → mobile layout → logout/login. Screenshots are written to `test-results`.
+Integration coverage includes duplicate barcode rollback, sale retries, concurrent register stock conflicts, weighted tax/discount rounding, manager approvals, PIN throttling, device blocking, drawer reconciliation, and immutable history. The browser test covers store setup through checkout and shift close, including a deliberately lost successful payment response and recovery after reload. Screenshots are written to `test-results`.
 
 ## Next milestones
 
-1. Employee management, cashier PINs, explicit POS device enrollment, basic shifts, and manager approvals.
-2. POS scanning/cart, tax and rounding policy, payment records, atomic sale completion, and receipts. External card charging is a separate integration.
-3. Purchasing and partial receiving, suppliers, counts, expenses, returns, and financial reports.
-4. Locally preserved POS carts, product caches, and a separately designed offline synchronization protocol.
+1. Purchasing, suppliers, partial receiving, stock counts, and expenses.
+2. Referenced refunds/returns, void controls, split payments, and richer financial reports.
+3. Store tax/receipt configuration, password recovery, and production hardening.
+4. Durable IndexedDB cart/product storage, a separately designed offline synchronization protocol, and payment/printing hardware integrations.
 
-Checkout is not enabled yet. There are no fabricated sales metrics. File uploads, job processing, email recovery, full offline checkout, and hardware integrations are not implemented in this milestone.
+No full offline checkout, direct card charging, refunds, job processing, email recovery, or hardware integration is implemented yet.
 
 ## Repository
 

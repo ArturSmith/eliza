@@ -7,6 +7,12 @@ export const permissions = [
   'inventory.adjust',
   'audit.read',
   'team.read',
+  'team.manage',
+  'pos.access',
+  'sales.read',
+  'discount.approve',
+  'shift.approve',
+  'cash.manage',
   'devices.manage',
   'settings.manage',
 ] as const;
@@ -61,9 +67,18 @@ export const productSchema = z.object({
   sku: short,
   category: short,
   unit: z.enum(units),
+  taxRate: money
+    .refine(
+      (v) => /^\d+(\.\d{1,2})?$/.test(v) && toScaled(v, 2) <= 10000n,
+      'Tax rate must be between 0 and 100',
+    )
+    .default('0'),
   price: money,
   cost: money,
-  minStock: quantity.refine((v) => toScaled(v, 3) >= 0n, 'Minimum stock cannot be negative'),
+  minStock: quantity.refine(
+    (v) => isQuantity(v) && toScaled(v, 3) >= 0n,
+    'Minimum stock cannot be negative',
+  ),
   plu: z.string().trim().max(20).default(''),
   barcodes: z
     .array(z.string().trim().min(1).max(100))
@@ -72,7 +87,10 @@ export const productSchema = z.object({
 });
 export const adjustmentSchema = z.object({
   productId: z.uuid(),
-  quantity: quantity.refine((v) => toScaled(v, 3) !== 0n, 'Quantity cannot be zero'),
+  quantity: quantity.refine(
+    (v) => isQuantity(v) && toScaled(v, 3) !== 0n,
+    'Quantity cannot be zero',
+  ),
   reason: z.enum([
     'opening_balance',
     'received',
@@ -132,6 +150,9 @@ export type Employee = {
   name: string;
   email: string;
   role: string;
+  roleId: string;
+  employeeCode: string;
+  hasPin: boolean;
   active: boolean;
   createdAt: string;
 };
@@ -148,3 +169,175 @@ export function fromScaled(value: bigint, scale: number): string {
   const digits = (value < 0n ? -value : value).toString().padStart(scale + 1, '0');
   return scale ? `${sign}${digits.slice(0, -scale)}.${digits.slice(-scale)}` : `${sign}${digits}`;
 }
+
+function isQuantity(v: string) {
+  return /^-?\d{1,9}(\.\d{1,3})?$/.test(v);
+}
+export const cashierPermissions: Permission[] = ['catalog.read', 'pos.access'];
+export const pinSchema = z.string().regex(/^\d{6}$/, 'Use exactly six digits');
+export const employeeSchema = z.object({
+  name: short,
+  employeeCode: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9-]{1,20}$/, 'Use letters, digits, or hyphens')
+    .transform((v) => v.toUpperCase()),
+  roleId: z.uuid(),
+  email: z.union([z.email().max(254), z.literal('')]).default(''),
+  password: z.union([z.string().min(12).max(128), z.literal('')]).default(''),
+  pin: pinSchema,
+});
+export const pinLoginSchema = z.object({
+  employeeCode: z
+    .string()
+    .trim()
+    .min(1)
+    .max(20)
+    .transform((v) => v.toUpperCase()),
+  pin: pinSchema,
+});
+export const approvalSchema = pinLoginSchema;
+export const startShiftSchema = z.object({ requestId: z.uuid(), openingCash: money });
+export const closeShiftSchema = z.object({
+  requestId: z.uuid(),
+  countedCash: money,
+  notes: z.string().trim().max(500).default(''),
+  approval: approvalSchema.optional(),
+});
+export const cashSchema = z.object({
+  requestId: z.uuid(),
+  amount: money.refine(
+    (v) => /^\d+(\.\d{1,2})?$/.test(v) && toScaled(v, 2) > 0n,
+    'Amount must be positive',
+  ),
+  direction: z.enum(['in', 'out']),
+  reason: z.string().trim().min(1).max(300),
+});
+export const saleSchema = z.object({
+  requestId: z.uuid(),
+  shiftId: z.uuid(),
+  lines: z
+    .array(
+      z.object({
+        productId: z.uuid(),
+        quantity: quantity.refine(
+          (v) => isQuantity(v) && toScaled(v, 3) > 0n,
+          'Quantity must be positive',
+        ),
+        expectedPrice: money,
+        expectedTaxRate: money,
+      }),
+    )
+    .min(1)
+    .max(100)
+    .refine(
+      (lines) => new Set(lines.map((l) => l.productId)).size === lines.length,
+      'Combine duplicate products into one line',
+    ),
+  discountPercent: money
+    .refine(
+      (v) => /^\d+(\.\d{1,2})?$/.test(v) && toScaled(v, 2) <= 10000n,
+      'Discount cannot exceed 100%',
+    )
+    .default('0'),
+  payment: z.object({ method: z.enum(['cash', 'card']), tendered: money }),
+  approval: approvalSchema.optional(),
+});
+export function calculateLine(
+  price: string,
+  quantity: string,
+  taxRate: string,
+  discountPercent = '0',
+) {
+  const cents = toScaled(price, 2),
+    units = toScaled(quantity, 3),
+    taxBps = toScaled(taxRate, 2),
+    discountBps = toScaled(discountPercent, 2);
+  if (
+    cents < 0n ||
+    units <= 0n ||
+    taxBps < 0n ||
+    taxBps > 10000n ||
+    discountBps < 0n ||
+    discountBps > 10000n
+  )
+    throw new Error('Invalid sale values');
+  const gross = (cents * units + 500n) / 1000n;
+  const discount = (gross * discountBps + 5000n) / 10000n;
+  const total = gross - discount;
+  const divisor = 10000n + taxBps;
+  const tax = (total * taxBps + divisor / 2n) / divisor;
+  return {
+    gross: fromScaled(gross, 2),
+    discount: fromScaled(discount, 2),
+    total: fromScaled(total, 2),
+    tax: fromScaled(tax, 2),
+  };
+}
+export type Role = { id: string; name: string; permissions: Permission[] };
+export type Shift = {
+  id: string;
+  status: 'open' | 'closed';
+  employeeName: string;
+  deviceName: string;
+  openingCash: string;
+  expectedCash: string;
+  countedCash: string | null;
+  difference: string | null;
+  openedAt: string;
+  closedAt: string | null;
+  notes: string;
+  cashierId: string;
+};
+export type PosProduct = {
+  id: string;
+  name: string;
+  sku: string;
+  category: string;
+  unit: string;
+  price: string;
+  taxRate: string;
+  stock: string;
+  plu: string;
+  barcodes: string[];
+};
+export type PosContext = {
+  registered: boolean;
+  blocked?: boolean;
+  device?: { id: string; name: string };
+  store?: Session['store'];
+  operator?: { id: string; name: string; employeeCode: string; permissions: Permission[] };
+  shift?: Shift | null;
+  employees?: { name: string; employeeCode: string }[];
+};
+export type Receipt = {
+  id: string;
+  receiptNumber: string;
+  createdAt: string;
+  storeName: string;
+  currency: string;
+  timezone: string;
+  cashierName: string;
+  deviceName: string;
+  shiftId: string;
+  lines: {
+    productId: string;
+    name: string;
+    sku: string;
+    unit: string;
+    quantity: string;
+    price: string;
+    taxRate: string;
+    gross: string;
+    discount: string;
+    tax: string;
+    total: string;
+  }[];
+  subtotal: string;
+  discount: string;
+  tax: string;
+  total: string;
+  discountPercent: string;
+  payment: { method: 'cash' | 'card'; tendered: string; change: string };
+  approverName: string | null;
+};

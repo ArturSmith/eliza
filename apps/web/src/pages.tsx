@@ -3,6 +3,7 @@ import { Link, Outlet, useLocation } from '@tanstack/react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   Activity,
+  Clock3,
   ArrowDownLeft,
   ArrowRight,
   ArrowUpRight,
@@ -37,13 +38,15 @@ import {
   useProducts,
   useMovements,
   useAudit,
-  useEmployees,
   useDevices,
 } from './api';
 import { AuthForm, AddProduct, ProductForm, AdjustmentForm, ErrorMessage, Field } from './forms';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 const nav = [
+  { to: '/pos', label: 'Checkout', icon: Monitor, permission: 'pos.access' },
+  { to: '/sales', label: 'Sales', icon: ClipboardList, permission: 'sales.read' },
+  { to: '/shifts', label: 'Shifts', icon: Clock3, permission: 'sales.read' },
   { to: '/', label: 'Overview', icon: LayoutDashboard, permission: 'catalog.read' },
   { to: '/products', label: 'Products', icon: Package, permission: 'catalog.read' },
   { to: '/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory.read' },
@@ -478,8 +481,7 @@ export function Overview() {
           <div className="next-note">
             <CircleHelp size={17} />
             <p>
-              Checkout and shifts are the next milestone. This version focuses on your store
-              foundation.
+              Set employee PINs in Team, then open Checkout to enroll a register and start a shift.
             </p>
           </div>
         </section>
@@ -911,58 +913,6 @@ export function AuditPage() {
           )
         )}
       </section>
-    </>
-  );
-}
-export function TeamPage() {
-  const query = useEmployees();
-  return (
-    <>
-      <PageHeading
-        eyebrow="YOUR PEOPLE"
-        title="Team"
-        description="People with access to this store and their assigned roles."
-      />
-      <section className="panel">
-        <ErrorMessage error={query.error} />
-        {query.isPending ? (
-          <Loading />
-        ) : (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Employee</th>
-                  <th>Role</th>
-                  <th>Status</th>
-                  <th>Added</th>
-                </tr>
-              </thead>
-              <tbody>
-                {query.data?.map((e) => (
-                  <tr key={e.id}>
-                    <td>
-                      <strong>{e.name}</strong>
-                      <small>{e.email}</small>
-                    </td>
-                    <td>
-                      <Badge tone="gray">{e.role}</Badge>
-                    </td>
-                    <td>
-                      <Badge>{e.active ? 'Active' : 'Inactive'}</Badge>
-                    </td>
-                    <td>{date(e.createdAt)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-      <p className="muted footnote">
-        Employee invitations, cashier PINs, and role editing will arrive with register access. This
-        milestone includes your owner account and permission enforcement.
-      </p>
     </>
   );
 }

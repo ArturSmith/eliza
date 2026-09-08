@@ -279,6 +279,17 @@ export function ProductForm({ onDone, initial }: { onDone: () => void; initial?:
             required
           />
         </Field>
+        <Field
+          label="Tax rate (%)"
+          hint="Selling prices include this tax. Set the appropriate rate for this product."
+        >
+          <input
+            name="taxRate"
+            inputMode="decimal"
+            defaultValue={initial?.taxRate ?? '0'}
+            required
+          />
+        </Field>
         <Field label="Purchase cost">
           <input
             name="cost"

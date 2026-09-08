@@ -15,7 +15,7 @@ import {
 } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
 import type { Request, Response } from 'express';
-import { loginSchema, permissions, setupSchema } from '@eliza/contracts';
+import { loginSchema, permissions, setupSchema, cashierPermissions } from '@eliza/contracts';
 import { Database } from './database.js';
 import {
   AccessGuard,
@@ -65,9 +65,9 @@ export class AuthService {
         {
           storeId: store.id,
           name: 'Manager',
-          permissions: permissions.filter((p) => p !== 'settings.manage'),
+          permissions: permissions.filter((p) => !['settings.manage', 'team.manage'].includes(p)),
         },
-        { storeId: store.id, name: 'Cashier', permissions: ['catalog.read'] },
+        { storeId: store.id, name: 'Cashier', permissions: cashierPermissions },
       ]);
       const [owner] = await tx
         .insert(employees)
@@ -75,6 +75,7 @@ export class AuthService {
           storeId: store.id,
           roleId: ownerRole.id,
           name: body.ownerName,
+          employeeCode: 'OWNER',
           email: body.email,
           passwordHash: encoded,
         })

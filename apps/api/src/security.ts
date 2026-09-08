@@ -79,7 +79,7 @@ export class AccessGuard implements CanActivate {
       user: {
         id: row.user.id,
         name: row.user.name,
-        email: row.user.email,
+        email: row.user.email ?? '',
         role: row.role.name,
         permissions: row.role.permissions as Permission[],
       },
