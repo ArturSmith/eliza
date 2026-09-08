@@ -38,6 +38,7 @@ Optional overrides go in a root `.env` file (see `.env.example`). The API loads 
 - Transactional sale finalization: immutable receipt/item/payment snapshots, stock reduction, cash movement, and audit entry. Stable request IDs recover an uncertain result without duplicating sales.
 - Shift opening float, manager cash in/out during their own shift, expected drawer totals, closing count and difference, and permanent closed-shift totals. Cashier differences require a manager/owner PIN.
 - Original cashier must close the shift before another employee takes over that register. One employee can have one open shift at a time. Employee deactivation requires closing their open shift first.
+- Supplier contacts, editable purchase drafts, order placement/cancellation, partial receiving, immutable delivery history, and linked stock/cost audit records.
 - Printable receipts, audited reprints, sales history, and shift cash history, plus the dashboard and inventory views.
 
 ### Use checkout
@@ -74,9 +75,17 @@ pnpm format:check
 
 Integration coverage includes duplicate barcode rollback, sale retries, concurrent register stock conflicts, weighted tax/discount rounding, manager approvals, PIN throttling, device blocking, drawer reconciliation, and immutable history. The browser test covers store setup through checkout and shift close, including a deliberately lost successful payment response and recovery after reload. Screenshots are written to `test-results`.
 
+### Use purchasing
+
+Open **Suppliers** to add contacts, then **Purchases** to create and edit a draft. Place the order when ready. Use **Receive delivery** for each actual delivery; quantities may be partial. Receiving updates stock and the latest purchase cost, while preserving order and delivery cost snapshots. Purchase costs exclude tax. Drafts and placed orders do not change stock.
+
+Owner and Manager roles have purchasing access. Deliveries cannot exceed outstanding quantities; piece, pack, and box products require whole quantities. Draft or placed orders can be cancelled with a reason; partially received orders cannot be cancelled. Supplier deactivation blocks new orders but still permits receiving existing placed orders. Receiving retries reuse the same request while its dialog stays open; after closing/reloading, check delivery history before entering another delivery.
+
+Supplier payments, invoice matching, purchase returns, barcode receiving, and offline delivery synchronization are not implemented. Orders list the latest 200 records.
+
 ## Next milestones
 
-1. Purchasing, suppliers, partial receiving, stock counts, and expenses.
+1. Stock counts, expenses, and supplier invoice/payment tracking.
 2. Referenced refunds/returns, void controls, split payments, and richer financial reports.
 3. Store tax/receipt configuration, password recovery, and production hardening.
 4. Durable IndexedDB cart/product storage, a separately designed offline synchronization protocol, and payment/printing hardware integrations.

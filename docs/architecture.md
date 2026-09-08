@@ -52,4 +52,8 @@ Drafts and held carts currently use sessionStorage scoped by store, register, em
 
 Checkout is online-only. The next persistence step is IndexedDB/Dexie with explicit offline synchronization rules for stale stock, prices, permissions, receipt numbering, and payment restrictions. No service worker caches authenticated responses. File uploads and background jobs remain deferred until actual workflows need them.
 
-Remaining retail workflows include purchasing/partial receiving, counts, expenses, referenced refunds, voids, split payments, and expanded reporting. Tax settings, receipt/fiscal requirements, account recovery, backup/restore, and hardware integration require further implementation before deployment as a live till.
+Remaining retail workflows include counts, expenses, referenced refunds, voids, split payments, and expanded reporting. Tax settings, receipt/fiscal requirements, account recovery, backup/restore, and hardware integration require further implementation before deployment as a live till.
+
+## Purchasing
+
+Migration 0003 adds suppliers, purchase orders/lines, immutable goods receipts/lines, and idempotent purchasing commands. Mutations revalidate active sessions, employees, devices, and roles inside their transaction. Order versions reject stale edits and receipts; idempotency is checked before order versions so committed deliveries can be recovered. Receiving locks orders then products in UUID order, preserves line snapshots, updates stock and latest cost, and writes movements and audits atomically. Purchase costs exclude tax; extension and tax use scaled BigInt rounding. Existing sale cost snapshots remain unchanged.

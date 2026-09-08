@@ -156,4 +156,38 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.getByRole('link', { name: 'Shifts', exact: true }).click();
   await expect(page.getByRole('cell', { name: 'closed', exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'NOK 0.00', exact: true })).toBeVisible();
+
+  await page.getByRole('link', { name: 'Suppliers', exact: true }).click();
+  await page.getByRole('button', { name: 'Add supplier', exact: true }).click();
+  await dialog.getByLabel('Supplier code').fill('BAKERY');
+  await dialog.getByLabel('Supplier name').fill('Local Bakery');
+  await dialog.getByRole('button', { name: 'Save supplier' }).click();
+  await expect(page.getByRole('cell', { name: 'Local Bakery BAKERY' })).toBeVisible();
+  await page.getByRole('link', { name: 'Purchases', exact: true }).click();
+  await page.getByRole('button', { name: 'New purchase order' }).click();
+  await dialog.getByLabel('Supplier', { exact: true }).selectOption({ label: 'Local Bakery' });
+  await dialog
+    .getByLabel('Product', { exact: true })
+    .selectOption({ label: 'Sourdough bread · BREAD-01 (piece)' });
+  await dialog.getByLabel('Quantity', { exact: true }).fill('24');
+  await dialog.getByLabel('Purchase tax %').fill('15');
+  await dialog.getByRole('button', { name: 'Save draft' }).click();
+  await page.getByRole('button', { name: 'Edit draft' }).click();
+  await dialog.getByLabel('Order notes').fill('Two deliveries expected');
+  await dialog.getByRole('button', { name: 'Save draft' }).click();
+  await expect(page.getByText('Two deliveries expected', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Place order' }).click();
+  await page.getByRole('button', { name: 'Receive delivery' }).click();
+  await dialog.getByLabel('Delivery reference').fill('DEL-1');
+  await dialog.getByLabel(/Sourdough bread/).fill('18');
+  await dialog.getByRole('button', { name: 'Record delivery' }).click();
+  await expect(page.getByRole('cell', { name: 'partially received', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Receive delivery' }).click();
+  await dialog.getByLabel(/Sourdough bread/).fill('6');
+  await dialog.getByRole('button', { name: 'Record delivery' }).click();
+  await expect(page.getByRole('cell', { name: 'received', exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/purchasing-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/purchasing-mobile.png', fullPage: true });
 });

@@ -44,6 +44,8 @@ import { AuthForm, AddProduct, ProductForm, AdjustmentForm, ErrorMessage, Field 
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 const nav = [
+  { to: '/purchases', label: 'Purchases', icon: ClipboardList, permission: 'purchases.read' },
+  { to: '/suppliers', label: 'Suppliers', icon: Store, permission: 'suppliers.read' },
   { to: '/pos', label: 'Checkout', icon: Monitor, permission: 'pos.access' },
   { to: '/sales', label: 'Sales', icon: ClipboardList, permission: 'sales.read' },
   { to: '/shifts', label: 'Shifts', icon: Clock3, permission: 'sales.read' },

@@ -29,6 +29,7 @@ function CheckoutRoute() {
     </Suspense>
   );
 }
+import { SuppliersPage, PurchasesPage } from './purchasing';
 import { TeamManagementPage } from './team';
 import { SalesPage, ShiftsPage } from './reports';
 function Root() {
@@ -45,6 +46,8 @@ const root = createRootRoute({
   ),
 });
 const routes = [
+  createRoute({ getParentRoute: () => root, path: '/suppliers', component: SuppliersPage }),
+  createRoute({ getParentRoute: () => root, path: '/purchases', component: PurchasesPage }),
   createRoute({ getParentRoute: () => root, path: '/pos', component: CheckoutRoute }),
   createRoute({ getParentRoute: () => root, path: '/sales', component: SalesPage }),
   createRoute({ getParentRoute: () => root, path: '/shifts', component: ShiftsPage }),

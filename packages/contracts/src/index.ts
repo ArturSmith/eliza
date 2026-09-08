@@ -15,6 +15,12 @@ export const permissions = [
   'cash.manage',
   'devices.manage',
   'settings.manage',
+  'suppliers.read',
+  'suppliers.manage',
+  'purchases.read',
+  'purchases.write',
+  'purchases.receive',
+  'purchases.cost',
 ] as const;
 export type Permission = (typeof permissions)[number];
 const short = z.string().trim().min(1).max(120);
@@ -340,4 +346,167 @@ export type Receipt = {
   discountPercent: string;
   payment: { method: 'cash' | 'card'; tendered: string; change: string };
   approverName: string | null;
+};
+
+// Supplier purchase costs exclude tax; selling prices use the separate inclusive-tax model.
+export const supplierSchema = z.object({
+  code: z
+    .string()
+    .trim()
+    .regex(/^[A-Za-z0-9-]{1,30}$/, 'Use letters, digits, or hyphens for the supplier code')
+    .transform((v) => v.toUpperCase()),
+  name: short,
+  contactName: z.string().trim().max(120).default(''),
+  email: z.union([z.email().max(254), z.literal('')]).default(''),
+  phone: z.string().trim().max(40).default(''),
+  address: z.string().trim().max(400).default(''),
+  companyNumber: z.string().trim().max(100).default(''),
+  paymentTerms: z.string().trim().max(200).default(''),
+  notes: z.string().trim().max(1000).default(''),
+});
+const positiveQuantity = quantity.refine(
+  (v) => /^\d{1,9}(\.\d{1,3})?$/.test(v) && toScaled(v, 3) > 0n,
+  'Quantity must be positive',
+);
+const purchaseTax = money.refine(
+  (v) => /^\d{1,9}(\.\d{1,2})?$/.test(v) && toScaled(v, 2) <= 10000n,
+  'Tax must be between 0 and 100%',
+);
+const optionalDate = z
+  .string()
+  .refine(
+    (v) =>
+      v === '' ||
+      (/^\d{4}-\d{2}-\d{2}$/.test(v) &&
+        !Number.isNaN(Date.parse(v)) &&
+        new Date(v).toISOString().slice(0, 10) === v),
+    'Use a valid calendar date',
+  );
+export const purchaseDraftSchema = z.object({
+  supplierId: z.uuid(),
+  supplierReference: z.string().trim().max(120).default(''),
+  expectedDate: optionalDate.default(''),
+  notes: z.string().trim().max(1000).default(''),
+  lines: z
+    .array(
+      z.object({
+        productId: z.uuid(),
+        quantity: positiveQuantity,
+        unitCost: money,
+        taxRate: purchaseTax,
+      }),
+    )
+    .min(1)
+    .max(100)
+    .refine(
+      (lines) => new Set(lines.map((l) => l.productId)).size === lines.length,
+      'Combine duplicate products into one order line',
+    ),
+});
+export const receiptInputSchema = z.object({
+  requestId: z.uuid(),
+  version: z.number().int().positive(),
+  deliveryReference: z.string().trim().max(120).default(''),
+  notes: z.string().trim().max(1000).default(''),
+  lines: z
+    .array(
+      z.object({
+        purchaseLineId: z.uuid(),
+        quantity: positiveQuantity,
+        unitCost: money.optional(),
+      }),
+    )
+    .min(1)
+    .max(100)
+    .refine(
+      (lines) => new Set(lines.map((l) => l.purchaseLineId)).size === lines.length,
+      'Each order line can only appear once',
+    ),
+});
+export function calculatePurchaseLine(unitCost: string, quantity: string, taxRate: string) {
+  const cents = toScaled(unitCost, 2),
+    qty = toScaled(quantity, 3),
+    bps = toScaled(taxRate, 2);
+  if (cents < 0n || qty <= 0n || bps < 0n || bps > 10000n)
+    throw new Error('Invalid purchase values');
+  const subtotal = (cents * qty + 500n) / 1000n;
+  const tax = (subtotal * bps + 5000n) / 10000n;
+  return {
+    subtotal: fromScaled(subtotal, 2),
+    tax: fromScaled(tax, 2),
+    total: fromScaled(subtotal + tax, 2),
+  };
+}
+export type SupplierInput = z.infer<typeof supplierSchema>;
+export type Supplier = SupplierInput & {
+  id: string;
+  active: boolean;
+  version: number;
+  createdAt: string;
+};
+export type PurchaseDraftInput = z.infer<typeof purchaseDraftSchema>;
+export type ReceiptInput = z.infer<typeof receiptInputSchema>;
+export type PurchaseStatus = 'draft' | 'ordered' | 'partially_received' | 'received' | 'cancelled';
+export type PurchaseSummary = {
+  id: string;
+  number: string;
+  supplierId: string;
+  supplierName: string;
+  status: PurchaseStatus;
+  version: number;
+  expectedDate: string;
+  createdAt: string;
+  orderedAt: string | null;
+  subtotal: string;
+  tax: string;
+  total: string;
+  supplierReference: string;
+  notes: string;
+  cancelReason: string;
+  lineCount: number;
+  receivedQuantity: string;
+  orderedQuantity: string;
+};
+export type PurchaseLine = {
+  id: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  unit: string;
+  orderedQuantity: string;
+  receivedQuantity: string;
+  unitCost: string;
+  taxRate: string;
+  subtotal: string;
+  tax: string;
+  total: string;
+};
+export type GoodsReceipt = {
+  id: string;
+  number: string;
+  deliveryReference: string;
+  notes: string;
+  createdAt: string;
+  actor: string;
+  device: string;
+  subtotal: string;
+  tax: string;
+  total: string;
+  lines: {
+    productId: string;
+    productName: string;
+    sku: string;
+    unit: string;
+    quantity: string;
+    unitCost: string;
+    taxRate: string;
+    subtotal: string;
+    tax: string;
+    total: string;
+  }[];
+};
+export type PurchaseDetail = PurchaseSummary & {
+  supplier: Supplier;
+  lines: PurchaseLine[];
+  receipts: GoodsReceipt[];
 };

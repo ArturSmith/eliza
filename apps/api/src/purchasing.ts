@@ -1,0 +1,495 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Module,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  UseGuards,
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { z } from 'zod';
+import {
+  supplierSchema,
+  purchaseDraftSchema,
+  receiptInputSchema,
+  calculatePurchaseLine,
+  toScaled,
+  fromScaled,
+} from '@eliza/contracts';
+import { Database } from './database.js';
+import { AuthModule } from './auth.js';
+import { AccessGuard, Require, parse, hash, cookie, type AuthRequest } from './security.js';
+import { Operations, audit } from './operations.js';
+import type { PoolClient } from 'pg';
+const command = z.object({ requestId: z.uuid(), version: z.number().int().positive() });
+const supplierColumns = `id,code,name,contact_name AS "contactName",email,phone,address,company_number AS "companyNumber",payment_terms AS "paymentTerms",notes,active,version,created_at AS "createdAt"`;
+@Controller()
+@UseGuards(AccessGuard)
+export class PurchasingController {
+  constructor(
+    private database: Database,
+    private operations: Operations,
+  ) {}
+  private async run(
+    req: AuthRequest,
+    requestId: string,
+    action: string,
+    body: unknown,
+    work: (c: PoolClient) => Promise<unknown>,
+  ) {
+    const { store, user, device } = req.context;
+    const signature = hash(JSON.stringify({ action, body, employee: user.id, device: device.id }));
+    return this.operations.transaction(async (c) => {
+      const permission =
+        action === 'supplier'
+          ? 'suppliers.manage'
+          : action === 'receive'
+            ? 'purchases.receive'
+            : 'purchases.write';
+      const actor = (
+        await c.query(
+          'SELECT r.permissions FROM sessions s JOIN employees e ON e.id=s.employee_id JOIN devices d ON d.id=s.device_id JOIN roles r ON r.id=e.role_id WHERE s.token_hash=$1 AND s.expires_at>now() AND e.active AND d.active AND e.id=$2 AND d.id=$3 AND e.store_id=$4 AND d.store_id=$4 AND r.store_id=$4 FOR SHARE OF s,e,d,r',
+          [hash(cookie(req, 'eliza_session')), user.id, device.id, store.id],
+        )
+      ).rows[0];
+      if (!actor?.permissions.includes(permission))
+        throw new ForbiddenException('Your access changed. Sign in again.');
+      req.context.user.permissions = actor.permissions;
+      await c.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [store.id + requestId]);
+      const old = (
+        await c.query(
+          'SELECT request_hash,result FROM purchasing_commands WHERE store_id=$1 AND request_id=$2',
+          [store.id, requestId],
+        )
+      ).rows[0];
+      if (old) {
+        if (old.request_hash !== signature)
+          throw new ConflictException('This request was already used for another change.');
+        return old.result;
+      }
+      const result = await work(c);
+      await c.query(
+        'INSERT INTO purchasing_commands(store_id,request_id,action,request_hash,result,employee_id,device_id) VALUES($1,$2,$3,$4,$5,$6,$7)',
+        [store.id, requestId, action, signature, JSON.stringify(result), user.id, device.id],
+      );
+      return result;
+    });
+  }
+  @Get('suppliers') @Require('suppliers.read') async suppliers(@Req() req: AuthRequest) {
+    return (
+      await this.database.pool.query(
+        `SELECT ${supplierColumns} FROM suppliers WHERE store_id=$1 ORDER BY name`,
+        [req.context.store.id],
+      )
+    ).rows;
+  }
+  @Post('suppliers') @Require('suppliers.manage') async supplier(
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(
+      supplierSchema.extend({
+        requestId: z.uuid(),
+        id: z.uuid().optional(),
+        version: z.number().int().positive().optional(),
+        active: z.boolean().default(true),
+      }),
+      input,
+    );
+    return this.run(req, b.requestId, 'supplier', b, async (c) => {
+      const values = [
+        req.context.store.id,
+        b.code,
+        b.name,
+        b.contactName,
+        b.email,
+        b.phone,
+        b.address,
+        b.companyNumber,
+        b.paymentTerms,
+        b.notes,
+        b.active,
+      ];
+      let row;
+      if (b.id) {
+        row = (
+          await c.query(
+            `UPDATE suppliers SET code=$2,name=$3,contact_name=$4,email=$5,phone=$6,address=$7,company_number=$8,payment_terms=$9,notes=$10,active=$11,version=version+1 WHERE store_id=$1 AND id=$12 AND version=$13 RETURNING ${supplierColumns}`,
+            [...values, b.id, b.version],
+          )
+        ).rows[0];
+        if (!row) throw new ConflictException('Supplier changed. Refresh and try again.');
+      } else
+        row = (
+          await c.query(
+            `INSERT INTO suppliers(store_id,code,name,contact_name,email,phone,address,company_number,payment_terms,notes,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING ${supplierColumns}`,
+            values,
+          )
+        ).rows[0];
+      await audit(
+        c,
+        {
+          storeId: req.context.store.id,
+          employeeId: req.context.user.id,
+          deviceId: req.context.device.id,
+        },
+        b.id ? 'Supplier updated' : 'Supplier created',
+        row.id,
+        { code: b.code, name: b.name, active: b.active },
+      );
+      return row;
+    });
+  }
+  @Get('purchases') @Require('purchases.read') async list(@Req() req: AuthRequest) {
+    return (
+      await this.database.pool.query(
+        `SELECT p.id,p.number,p.status,p.version,p.total,p.created_at AS "createdAt",s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.store_id=$1 ORDER BY p.created_at DESC LIMIT 200`,
+        [req.context.store.id],
+      )
+    ).rows;
+  }
+  @Get('purchases/:id') @Require('purchases.read') async detail(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    const c = await this.database.pool.connect();
+    try {
+      return await this.details(c, id, req.context.store.id);
+    } finally {
+      c.release();
+    }
+  }
+  private async details(c: PoolClient, id: string, store: string) {
+    const p = (
+      await c.query(
+        `SELECT p.*,s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.id=$1 AND p.store_id=$2`,
+        [id, store],
+      )
+    ).rows[0];
+    if (!p) throw new NotFoundException('Order not found.');
+    const lines = (
+      await c.query('SELECT * FROM purchase_lines WHERE purchase_id=$1 ORDER BY sku', [id])
+    ).rows;
+    const receipts = (
+      await c.query(
+        `SELECT g.*,e.name AS actor,d.name AS device FROM goods_receipts g JOIN employees e ON e.id=g.employee_id JOIN devices d ON d.id=g.device_id WHERE g.purchase_id=$1 ORDER BY g.created_at DESC`,
+        [id],
+      )
+    ).rows;
+    for (const r of receipts)
+      r.lines = (
+        await c.query('SELECT * FROM goods_receipt_lines WHERE receipt_id=$1 ORDER BY sku', [r.id])
+      ).rows;
+    return { ...p, lines, receipts };
+  }
+  @Post('purchases') @Require('purchases.write') async draft(
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(
+      purchaseDraftSchema.extend({
+        requestId: z.uuid(),
+        id: z.uuid().optional(),
+        version: z.number().int().positive().optional(),
+      }),
+      input,
+    );
+    return this.run(req, b.requestId, 'draft', b, async (c) => {
+      const store = req.context.store.id;
+      if (b.id) {
+        const previous = await this.lock(c, b.id, store, b.version ?? 0);
+        if (previous.status !== 'draft') throw new ConflictException('Only drafts can be edited.');
+      }
+      if (
+        !(
+          await c.query(
+            'SELECT id FROM suppliers WHERE id=$1 AND store_id=$2 AND active FOR SHARE',
+            [b.supplierId, store],
+          )
+        ).rowCount
+      )
+        throw new BadRequestException('Choose an active supplier.');
+      const lines = [];
+      let subtotal = 0n,
+        tax = 0n;
+      for (const line of [...b.lines].sort((a, b) => a.productId.localeCompare(b.productId))) {
+        const p = (
+          await c.query('SELECT * FROM products WHERE id=$1 AND store_id=$2 AND active FOR SHARE', [
+            line.productId,
+            store,
+          ])
+        ).rows[0];
+        if (!p) throw new BadRequestException('Choose active products from this store.');
+        this.whole(p.unit, line.quantity);
+        const totals = calculatePurchaseLine(line.unitCost, line.quantity, line.taxRate);
+        subtotal += toScaled(totals.subtotal, 2);
+        tax += toScaled(totals.tax, 2);
+        lines.push({ p, line, totals });
+      }
+      if (subtotal + tax > 99999999999n) throw new BadRequestException('Order total is too large.');
+      const p = b.id
+        ? { id: b.id }
+        : (
+            await c.query(
+              `INSERT INTO purchases(store_id,supplier_id,number,supplier_reference,expected_date,notes,subtotal,tax,total,created_by,device_id) VALUES($1,$2,'PO-'||lpad(nextval('purchase_number_sequence')::text,6,'0'),$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+              [
+                store,
+                b.supplierId,
+                b.supplierReference,
+                b.expectedDate || null,
+                b.notes,
+                fromScaled(subtotal, 2),
+                fromScaled(tax, 2),
+                fromScaled(subtotal + tax, 2),
+                req.context.user.id,
+                req.context.device.id,
+              ],
+            )
+          ).rows[0];
+      if (b.id) {
+        await c.query('DELETE FROM purchase_lines WHERE purchase_id=$1', [b.id]);
+        await c.query(
+          'UPDATE purchases SET supplier_id=$2,supplier_reference=$3,expected_date=$4,notes=$5,subtotal=$6,tax=$7,total=$8,version=version+1 WHERE id=$1',
+          [
+            b.id,
+            b.supplierId,
+            b.supplierReference,
+            b.expectedDate || null,
+            b.notes,
+            fromScaled(subtotal, 2),
+            fromScaled(tax, 2),
+            fromScaled(subtotal + tax, 2),
+          ],
+        );
+      }
+      for (const { p: product, line, totals } of lines)
+        await c.query(
+          'INSERT INTO purchase_lines(store_id,purchase_id,product_id,product_name,sku,unit,ordered_quantity,unit_cost,tax_rate,subtotal,tax,total) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
+          [
+            store,
+            p.id,
+            product.id,
+            product.name,
+            product.sku,
+            product.unit,
+            line.quantity,
+            line.unitCost,
+            line.taxRate,
+            totals.subtotal,
+            totals.tax,
+            totals.total,
+          ],
+        );
+      await audit(
+        c,
+        { storeId: store, employeeId: req.context.user.id, deviceId: req.context.device.id },
+        b.id ? 'Purchase draft edited' : 'Purchase drafted',
+        p.id,
+        { total: fromScaled(subtotal + tax, 2) },
+      );
+      return this.details(c, p.id, store);
+    });
+  }
+  private whole(unit: string, quantity: string) {
+    if (['piece', 'pack', 'box'].includes(unit) && toScaled(quantity, 3) % 1000n !== 0n)
+      throw new BadRequestException('This product requires a whole-number quantity.');
+  }
+  @Post('purchases/:id/status') @Require('purchases.write') async status(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(
+      command.extend({
+        status: z.enum(['ordered', 'cancelled']),
+        reason: z.string().trim().max(500).default(''),
+      }),
+      input,
+    );
+    return this.run(req, b.requestId, 'status', { id, ...b }, async (c) => {
+      const p = await this.lock(c, id, req.context.store.id, b.version);
+      if (
+        (b.status === 'ordered' && p.status !== 'draft') ||
+        (b.status === 'cancelled' && !['draft', 'ordered'].includes(p.status))
+      )
+        throw new ConflictException('This order cannot make that transition.');
+      if (b.status === 'cancelled' && !b.reason)
+        throw new BadRequestException('Enter a cancellation reason.');
+      if (
+        b.status === 'ordered' &&
+        !(
+          await c.query('SELECT id FROM suppliers WHERE id=$1 AND active FOR SHARE', [
+            p.supplier_id,
+          ])
+        ).rowCount
+      )
+        throw new BadRequestException('Activate the supplier before placing this order.');
+      await c.query(
+        "UPDATE purchases SET status=$2,version=version+1,cancel_reason=$3,ordered_at=CASE WHEN $2='ordered' THEN now() ELSE ordered_at END WHERE id=$1",
+        [id, b.status, b.reason],
+      );
+      await audit(
+        c,
+        {
+          storeId: req.context.store.id,
+          employeeId: req.context.user.id,
+          deviceId: req.context.device.id,
+        },
+        b.status === 'ordered' ? 'Purchase placed' : 'Purchase cancelled',
+        id,
+        { reason: b.reason },
+      );
+      return this.details(c, id, req.context.store.id);
+    });
+  }
+  private async lock(c: PoolClient, id: string, store: string, version: number) {
+    const p = (
+      await c.query('SELECT * FROM purchases WHERE id=$1 AND store_id=$2 FOR UPDATE', [id, store])
+    ).rows[0];
+    if (!p) throw new NotFoundException('Order not found.');
+    if (p.version !== version)
+      throw new ConflictException('Order changed. Refresh before continuing.');
+    return p;
+  }
+  @Post('purchases/:id/receipts') @Require('purchases.receive') async receive(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(receiptInputSchema, input);
+    return this.run(req, b.requestId, 'receive', { id, ...b }, async (c) => {
+      const store = req.context.store.id,
+        p = await this.lock(c, id, store, b.version);
+      if (!['ordered', 'partially_received'].includes(p.status))
+        throw new ConflictException('Only placed orders can be received.');
+      const orderLines = (
+        await c.query('SELECT * FROM purchase_lines WHERE purchase_id=$1 ORDER BY product_id', [id])
+      ).rows;
+      const received = [];
+      let subtotal = 0n,
+        tax = 0n;
+      for (const line of orderLines) {
+        const entry = b.lines.find((l) => l.purchaseLineId === line.id);
+        if (!entry) continue;
+        const product = (
+          await c.query('SELECT * FROM products WHERE id=$1 AND store_id=$2 FOR UPDATE', [
+            line.product_id,
+            store,
+          ])
+        ).rows[0];
+        if (!product.active)
+          throw new BadRequestException('Activate the product before receiving it.');
+        this.whole(line.unit, entry.quantity);
+        if (
+          toScaled(entry.quantity, 3) + toScaled(line.received_quantity, 3) >
+          toScaled(line.ordered_quantity, 3)
+        )
+          throw new BadRequestException('Delivery exceeds the remaining order quantity.');
+        const cost = entry.unitCost ?? line.unit_cost;
+        if (cost !== line.unit_cost && !req.context.user.permissions.includes('purchases.cost'))
+          throw new BadRequestException('You cannot change receiving costs.');
+        const totals = calculatePurchaseLine(cost, entry.quantity, line.tax_rate);
+        subtotal += toScaled(totals.subtotal, 2);
+        tax += toScaled(totals.tax, 2);
+        received.push({ line, entry, cost, totals, product });
+      }
+      if (received.length !== b.lines.length)
+        throw new BadRequestException('Delivery contains a line outside this order.');
+      if (subtotal + tax > 99999999999n)
+        throw new BadRequestException('Delivery total is too large.');
+      const receipt = (
+        await c.query(
+          `INSERT INTO goods_receipts(store_id,purchase_id,number,delivery_reference,notes,employee_id,device_id,subtotal,tax,total) VALUES($1,$2,'GR-'||lpad(nextval('goods_receipt_number_sequence')::text,6,'0'),$3,$4,$5,$6,$7,$8,$9) RETURNING id,number`,
+          [
+            store,
+            id,
+            b.deliveryReference,
+            b.notes,
+            req.context.user.id,
+            req.context.device.id,
+            fromScaled(subtotal, 2),
+            fromScaled(tax, 2),
+            fromScaled(subtotal + tax, 2),
+          ],
+        )
+      ).rows[0];
+      for (const { line, entry, cost, totals, product } of received) {
+        await c.query(
+          'INSERT INTO goods_receipt_lines(store_id,receipt_id,purchase_line_id,product_id,product_name,sku,unit,quantity,unit_cost,tax_rate,subtotal,tax,total) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
+          [
+            store,
+            receipt.id,
+            line.id,
+            product.id,
+            line.product_name,
+            line.sku,
+            line.unit,
+            entry.quantity,
+            cost,
+            line.tax_rate,
+            totals.subtotal,
+            totals.tax,
+            totals.total,
+          ],
+        );
+        const balance = fromScaled(toScaled(product.stock, 3) + toScaled(entry.quantity, 3), 3);
+        await c.query('UPDATE products SET stock=$2,cost=$3 WHERE id=$1', [
+          product.id,
+          balance,
+          cost,
+        ]);
+        await c.query(
+          'UPDATE purchase_lines SET received_quantity=received_quantity+$2 WHERE id=$1',
+          [line.id, entry.quantity],
+        );
+        await c.query(
+          "INSERT INTO movements(store_id,product_id,employee_id,device_id,quantity,balance,reason,notes,request_id,request_hash,purchase_id,goods_receipt_id) VALUES($1,$2,$3,$4,$5,$6,'received',$7,$8,$9,$10,$11)",
+          [
+            store,
+            product.id,
+            req.context.user.id,
+            req.context.device.id,
+            entry.quantity,
+            balance,
+            receipt.number + ' ' + b.deliveryReference,
+            randomUUID(),
+            hash(JSON.stringify(entry)),
+            id,
+            receipt.id,
+          ],
+        );
+      }
+      await c.query(
+        "UPDATE purchases SET version=version+1,status=CASE WHEN EXISTS(SELECT 1 FROM purchase_lines WHERE purchase_id=$1 AND received_quantity<ordered_quantity) THEN 'partially_received' ELSE 'received' END WHERE id=$1",
+        [id],
+      );
+      await audit(
+        c,
+        { storeId: store, employeeId: req.context.user.id, deviceId: req.context.device.id },
+        'Purchase received',
+        id,
+        {
+          receiptId: receipt.id,
+          number: receipt.number,
+          lines: received.map(({ line, entry, cost, product }) => ({
+            productId: product.id,
+            quantity: entry.quantity,
+            previousCost: product.cost,
+            cost,
+            orderedCost: line.unit_cost,
+          })),
+        },
+      );
+      return this.details(c, id, store);
+    });
+  }
+}
+@Module({ imports: [AuthModule], controllers: [PurchasingController], providers: [Operations] })
+export class PurchasingModule {}

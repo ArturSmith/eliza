@@ -20,6 +20,7 @@ import { InventoryModule } from './inventory.js';
 import { ManagementModule } from './management.js';
 import { TeamModule } from './team.js';
 import { RegisterModule } from './register.js';
+import { PurchasingModule } from './purchasing.js';
 import { CheckoutModule } from './checkout.js';
 @Catch()
 class Errors implements ExceptionFilter {
@@ -72,6 +73,7 @@ class HealthController {
     TeamModule,
     RegisterModule,
     CheckoutModule,
+    PurchasingModule,
   ],
   controllers: [HealthController],
 })
