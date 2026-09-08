@@ -166,6 +166,7 @@ textarea:focus {
   min-height: 100vh;
 }
 .sidebar {
+  overflow-y: auto;
   width: 236px;
   position: fixed;
   inset: 0 auto 0 0;
@@ -246,6 +247,9 @@ textarea:focus {
   color: #929b8c;
   font-weight: 600;
   margin: 0 12px 13px;
+}
+.sidebar > * {
+  flex-shrink: 0;
 }
 .sidebar nav {
   display: flex;

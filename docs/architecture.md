@@ -57,3 +57,7 @@ Remaining retail workflows include counts, expenses, referenced refunds, voids, 
 ## Purchasing
 
 Migration 0003 adds suppliers, purchase orders/lines, immutable goods receipts/lines, and idempotent purchasing commands. Mutations revalidate active sessions, employees, devices, and roles inside their transaction. Order versions reject stale edits and receipts; idempotency is checked before order versions so committed deliveries can be recovered. Receiving locks orders then products in UUID order, preserves line snapshots, updates stock and latest cost, and writes movements and audits atomically. Purchase costs exclude tax; extension and tax use scaled BigInt rounding. Existing sale cost snapshots remain unchanged.
+
+## Physical counts
+
+Stock counts capture selected product quantities and movement counts while holding product row locks. Finalization locks the count and products in stable ID order, then rejects any changed movement history or balance. A movement-count comparison catches changes that net back to the same stock quantity. Quantities are exact decimal strings and whole-unit products require integral counts. Only nonzero differences create movements, all changes commit together, and database triggers protect completed count records and lines. Command IDs prevent duplicate finalization; optimistic versions prevent concurrent editors from overwriting each other. Owner and Manager receive manage/finalize permissions through migration 0005.

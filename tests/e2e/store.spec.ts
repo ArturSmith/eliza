@@ -250,4 +250,27 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/purchasing-mobile.png', fullPage: true });
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole('link', { name: 'Stock counts', exact: true }).click();
+  await page.getByRole('button', { name: 'New stock count' }).click();
+  await dialog.getByLabel('Count name').fill('Bakery shelf count');
+  await dialog.getByLabel('Sourdough bread · BREAD-01 (piece)', { exact: true }).check();
+  await dialog.getByRole('button', { name: 'Create draft' }).click();
+  await page.getByRole('button', { name: 'Start counting' }).click();
+  await page.getByLabel('Counted Sourdough bread').fill('45');
+  await page.getByRole('button', { name: 'Save quantities' }).click();
+  await page.getByRole('button', { name: 'Review count', exact: true }).click();
+  await expect(
+    page
+      .getByRole('table', { name: 'Count quantities' })
+      .getByRole('cell', { name: '-2.000', exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Finalize count', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Confirm finalization' }).click();
+  await expect(page.getByRole('cell', { name: 'finalized', exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/stock-count-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/stock-count-mobile.png', fullPage: true });
 });

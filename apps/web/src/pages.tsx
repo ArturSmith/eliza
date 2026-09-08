@@ -52,6 +52,7 @@ const nav = [
   { to: '/', label: 'Overview', icon: LayoutDashboard, permission: 'catalog.read' },
   { to: '/products', label: 'Products', icon: Package, permission: 'catalog.read' },
   { to: '/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory.read' },
+  { to: '/stock-counts', label: 'Stock counts', icon: ClipboardList, permission: 'inventory.read' },
   { to: '/team', label: 'Team', icon: Users, permission: 'team.read' },
   { to: '/devices', label: 'Devices', icon: Monitor, permission: 'devices.manage' },
   { to: '/audit', label: 'Activity log', icon: ClipboardList, permission: 'audit.read' },

@@ -5,6 +5,8 @@ export const permissions = [
   'catalog.write',
   'inventory.read',
   'inventory.adjust',
+  'counts.manage',
+  'counts.finalize',
   'audit.read',
   'team.read',
   'team.manage',
