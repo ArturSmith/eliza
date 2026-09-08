@@ -1,0 +1,26 @@
+{
+  "name": "eliza",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "dev": "pnpm --filter @eliza/contracts build && pnpm --filter @eliza/api build && concurrently -k -n api,web \"pnpm --filter @eliza/api dev\" \"pnpm --filter @eliza/web dev\"",
+    "build": "pnpm --filter @eliza/contracts build && pnpm --filter @eliza/api build && pnpm --filter @eliza/web build",
+    "typecheck": "pnpm --filter @eliza/contracts build && pnpm -r typecheck",
+    "test": "pnpm --filter @eliza/contracts build && vitest run",
+    "test:integration": "pnpm build && vitest run --config vitest.integration.config.ts",
+    "test:e2e": "pnpm build && playwright test",
+    "db:start": "node scripts/database.mjs start",
+    "db:stop": "node scripts/database.mjs stop",
+    "db:migrate": "pnpm --filter @eliza/api migrate",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "@types/node": "^24.0.0",
+    "concurrently": "^9.2.0",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4",
+    "prettier": "^3.6.2"
+  }
+}

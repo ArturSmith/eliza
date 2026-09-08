@@ -1,0 +1,29 @@
+{
+  "name": "@eliza/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "concurrently -k \"tsc --watch --preserveWatchOutput\" \"node --watch dist/main.js\"",
+    "start": "node dist/main.js",
+    "typecheck": "tsc --noEmit",
+    "migrate": "node dist/migrate.js"
+  },
+  "dependencies": {
+    "@eliza/contracts": "workspace:*",
+    "@nestjs/common": "^11.1.6",
+    "@nestjs/core": "^11.1.6",
+    "@nestjs/platform-express": "^11.1.6",
+    "@nestjs/swagger": "^11.2.0",
+    "drizzle-orm": "^0.44.5",
+    "pg": "^8.16.3",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "zod": "^4.1.0",
+    "helmet": "^8.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.3",
+    "@types/pg": "^8.15.5"
+  }
+}
