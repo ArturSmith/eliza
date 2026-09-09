@@ -1,8 +1,14 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { supplierSchema, fromScaled, toScaled, type Supplier } from '@eliza/contracts';
+import {
+  supplierSchema,
+  fromScaled,
+  toScaled,
+  type Supplier,
+  type Product,
+} from '@eliza/contracts';
 import { api, ApiError, refresh, useProducts, useSession } from './api';
-import { Field, ErrorMessage } from './forms';
+import { Field, ErrorMessage, ProductForm } from './forms';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { formatMoney } from './receipts';
@@ -57,7 +63,7 @@ function CostComparison({
   return (
     <div className="muted" aria-live="polite">
       {changed && (
-        <p>
+        <p className="purchase-cost-change">
           <strong>Unit cost {Number(cost) > Number(previous) ? 'increased' : 'decreased'}:</strong>{' '}
           {formatMoney(previous!, currency)} to {formatMoney(cost, currency)}
           {Number(previous) > 0 &&
@@ -71,9 +77,17 @@ function CostComparison({
     </div>
   );
 }
-function Heading({ title, description }: { title: string; description: string }) {
+function Heading({
+  title,
+  description,
+  className = '',
+}: {
+  title: string;
+  description: string;
+  className?: string;
+}) {
   return (
-    <div className="page-heading">
+    <div className={'page-heading ' + className}>
       <div>
         <div className="eyebrow">PURCHASING</div>
         <h1>{title}</h1>
@@ -156,7 +170,15 @@ export function SuppliersPage() {
     </>
   );
 }
-function SupplierForm({ supplier, done }: { supplier: Supplier | null; done: () => void }) {
+function SupplierForm({
+  supplier,
+  done,
+  onCreated,
+}: {
+  supplier: Supplier | null;
+  done: () => void;
+  onCreated?: (supplier: Supplier) => void;
+}) {
   const [value, setValue] = useState(
     supplier ?? {
       ...supplierSchema.parse({ code: 'NEW', name: 'New supplier' }),
@@ -167,8 +189,9 @@ function SupplierForm({ supplier, done }: { supplier: Supplier | null; done: () 
   );
   const [requestId] = useState(() => crypto.randomUUID());
   const mutation = useMutation({
-    mutationFn: () => api('/suppliers', { ...value, requestId }),
-    onSuccess: () => {
+    mutationFn: () => api<Supplier>('/suppliers', { ...value, requestId }),
+    onSuccess: (saved) => {
+      onCreated?.(saved);
       void refresh();
       done();
     },
@@ -241,11 +264,18 @@ export function PurchasesPage() {
     <>
       <Heading
         title="Purchase orders"
+        className="purchases-heading"
         description="Order stock, then record each delivery when it arrives. Costs exclude tax."
       />
-      <Button onClick={() => setCreate(true)}>New purchase order</Button>
+      <Button className="purchase-create-button" onClick={() => setCreate(true)}>
+        New purchase order
+      </Button>
       <Field label="Order status">
-        <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+        <select
+          className="purchase-status-select"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        >
           {['all', 'draft', 'ordered', 'partially_received', 'received', 'cancelled'].map((s) => (
             <option key={s} value={s}>
               {s.replaceAll('_', ' ')}
@@ -315,6 +345,21 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
   });
   const products = useProducts();
   const [supplierId, setSupplier] = useState(order?.supplier_id ?? '');
+  const [addingSupplier, setAddingSupplier] = useState(false);
+  const [addingProduct, setAddingProduct] = useState<number | null>(null);
+  const [scanLine, setScanLine] = useState<number | null>(null);
+  const [barcode, setBarcode] = useState('');
+  const [scanError, setScanError] = useState('');
+  const [createdProducts, setCreatedProducts] = useState<Product[]>([]);
+  const [createdSuppliers, setCreatedSuppliers] = useState<Supplier[]>([]);
+  const availableProducts = [
+    ...(products.data ?? []),
+    ...createdProducts.filter((p) => !products.data?.some((item) => item.id === p.id)),
+  ];
+  const availableSuppliers = [
+    ...(suppliers.data ?? []),
+    ...createdSuppliers.filter((s) => !suppliers.data?.some((item) => item.id === s.id)),
+  ];
   const [reference, setReference] = useState(order?.supplier_reference ?? '');
   const [expectedDate, setDate] = useState(order?.expected_date?.slice(0, 10) ?? '');
   const [notes, setNotes] = useState(order?.notes ?? '');
@@ -324,9 +369,24 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
       quantity: l.ordered_quantity,
       unitCost: l.unit_cost,
       taxRate: l.tax_rate,
-      sellingPrice: l.proposed_selling_price ?? '',
+      sellingPrice:
+        l.proposed_selling_price ?? products.data?.find((p) => p.id === l.product_id)?.price ?? '',
     })) ?? [{ productId: '', quantity: '1', unitCost: '0', taxRate: '0', sellingPrice: '' }],
   );
+  function selectProduct(index: number, product: Product) {
+    setLines((current) =>
+      current.map((line, i) =>
+        i === index
+          ? {
+              ...line,
+              productId: product.id,
+              unitCost: product.cost ?? '0',
+              sellingPrice: product.price,
+            }
+          : line,
+      ),
+    );
+  }
   const [requestId] = useState(() => crypto.randomUUID());
   const mutation = useMutation({
     mutationFn: () =>
@@ -346,139 +406,225 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
     },
   });
   return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        mutation.mutate();
-      }}
-    >
-      <Field label="Supplier">
-        <select required value={supplierId} onChange={(e) => setSupplier(e.target.value)}>
-          <option value="">Choose supplier</option>
-          {suppliers.data
-            ?.filter((s) => s.active)
-            .map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-        </select>
-      </Field>
-      <Field label="Supplier reference">
-        <input value={reference} onChange={(e) => setReference(e.target.value)} />
-      </Field>
-      <Field label="Expected delivery">
-        <input type="date" value={expectedDate} onChange={(e) => setDate(e.target.value)} />
-      </Field>
-      {lines.map((line, index) => (
-        <fieldset key={index}>
-          <legend>Order line {index + 1}</legend>
-          <Field label="Product">
-            <select
-              required
-              value={line.productId}
-              onChange={(e) =>
-                setLines(
-                  lines.map((l, i) =>
-                    i === index
-                      ? {
-                          ...l,
-                          productId: e.target.value,
-                          sellingPrice: '',
-                          unitCost:
-                            products.data?.find((p) => p.id === e.target.value)?.cost ?? '0',
-                        }
-                      : l,
-                  ),
-                )
-              }
-            >
-              <option value="">Choose product</option>
-              {products.data
-                ?.filter((p) => p.active)
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} · {p.sku} ({p.unit})
-                  </option>
-                ))}
-            </select>
-          </Field>
-          {(['quantity', 'unitCost', 'taxRate'] as const).map((key) => (
-            <Field
-              key={key}
-              label={
-                {
-                  quantity: 'Quantity',
-                  unitCost: 'Unit cost excl. tax',
-                  taxRate: 'Purchase tax %',
-                }[key]
-              }
-            >
-              <input
-                required
-                inputMode="decimal"
-                value={line[key]}
-                onChange={(e) =>
-                  setLines(lines.map((l, i) => (i === index ? { ...l, [key]: e.target.value } : l)))
+    <>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          mutation.mutate();
+        }}
+      >
+        <Field label="Supplier">
+          <select
+            required
+            value={supplierId}
+            onChange={(e) => {
+              if (e.target.value === '__new') setAddingSupplier(true);
+              else setSupplier(e.target.value);
+            }}
+          >
+            <option value="" hidden disabled />
+            <option value="__new">Add new supplier</option>
+            {availableSuppliers
+              ?.filter((s) => s.active)
+              .map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+          </select>
+        </Field>
+        <Field label="Supplier reference">
+          <input value={reference} onChange={(e) => setReference(e.target.value)} />
+        </Field>
+        <Field label="Expected delivery">
+          <input type="date" value={expectedDate} onChange={(e) => setDate(e.target.value)} />
+        </Field>
+        {lines.map((line, index) => (
+          <fieldset key={index}>
+            <legend>Order line {index + 1}</legend>
+            <div className="purchase-product-picker">
+              <Field label="Product">
+                <select
+                  required
+                  value={line.productId}
+                  onChange={(e) => {
+                    if (e.target.value === '__new') setAddingProduct(index);
+                    else {
+                      const product = availableProducts.find((p) => p.id === e.target.value);
+                      if (product) selectProduct(index, product);
+                    }
+                  }}
+                >
+                  <option value="" hidden disabled />
+                  <option value="__new">Create new product</option>
+                  {availableProducts
+                    ?.filter((p) => p.active)
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} · {p.sku} ({p.unit})
+                      </option>
+                    ))}
+                </select>
+              </Field>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setBarcode('');
+                  setScanError('');
+                  setScanLine(index);
+                }}
+              >
+                Scan barcode
+              </Button>
+            </div>
+            {(['quantity', 'unitCost', 'sellingPrice', 'taxRate'] as const).map((key) => (
+              <Field
+                key={key}
+                label={
+                  {
+                    quantity: 'Quantity',
+                    unitCost: 'Unit cost excl. tax',
+                    sellingPrice: 'Proposed selling price incl. tax (optional)',
+                    taxRate: 'Purchase tax %',
+                  }[key]
                 }
-              />
-            </Field>
-          ))}
-          {line.productId && (
-            <>
-              <CostComparison
-                cost={line.unitCost}
-                previous={products.data?.find((p) => p.id === line.productId)?.cost}
-                price={products.data?.find((p) => p.id === line.productId)?.price}
-              />
-              <Field label="Proposed selling price incl. tax (optional)">
+              >
                 <input
+                  required={key !== 'sellingPrice'}
                   inputMode="decimal"
-                  value={line.sellingPrice}
+                  value={line[key]}
                   onChange={(e) =>
                     setLines(
-                      lines.map((l, i) =>
-                        i === index ? { ...l, sellingPrice: e.target.value } : l,
-                      ),
+                      lines.map((l, i) => (i === index ? { ...l, [key]: e.target.value } : l)),
                     )
                   }
                 />
               </Field>
-              <p className="muted">
-                Leave blank to keep the current selling price. Confirm any proposed price when
-                receiving the delivery. Saving this order does not change checkout prices.
-              </p>
-            </>
-          )}
-          {lines.length > 1 && (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setLines(lines.filter((_, i) => i !== index))}
-            >
-              Remove line
-            </Button>
-          )}
-        </fieldset>
-      ))}
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() =>
-          setLines([
-            ...lines,
-            { productId: '', quantity: '1', unitCost: '0', taxRate: '0', sellingPrice: '' },
-          ])
-        }
+            ))}
+            {line.productId && (
+              <>
+                <CostComparison
+                  cost={line.unitCost}
+                  previous={availableProducts.find((p) => p.id === line.productId)?.cost}
+                  price={availableProducts.find((p) => p.id === line.productId)?.price}
+                />
+                <p className="muted">
+                  Leave blank to keep the current selling price. Confirm any proposed price when
+                  receiving the delivery. Saving this order does not change checkout prices.
+                </p>
+              </>
+            )}
+            {lines.length > 1 && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setLines(lines.filter((_, i) => i !== index))}
+              >
+                Remove line
+              </Button>
+            )}
+          </fieldset>
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() =>
+            setLines([
+              ...lines,
+              { productId: '', quantity: '1', unitCost: '0', taxRate: '0', sellingPrice: '' },
+            ])
+          }
+        >
+          Add line
+        </Button>
+        <Field label="Order notes">
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </Field>
+        <ErrorMessage error={mutation.error} />
+        <Button disabled={mutation.isPending}>Save draft</Button>
+      </form>
+      <Dialog
+        elevated
+        open={addingSupplier}
+        onOpenChange={setAddingSupplier}
+        title="Add supplier"
+        description="Keep supplier details available for your team."
       >
-        Add line
-      </Button>
-      <Field label="Order notes">
-        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
-      </Field>
-      <ErrorMessage error={mutation.error} />
-      <Button disabled={mutation.isPending}>Save draft</Button>
-    </form>
+        {addingSupplier && (
+          <SupplierForm
+            supplier={null}
+            done={() => setAddingSupplier(false)}
+            onCreated={(supplier) => {
+              setCreatedSuppliers((current) => [...current, supplier]);
+              setSupplier(supplier.id);
+            }}
+          />
+        )}
+      </Dialog>
+      <Dialog
+        elevated
+        open={addingProduct !== null}
+        onOpenChange={(open) => {
+          if (!open) setAddingProduct(null);
+        }}
+        title="Add a product"
+        description="Start with the basics. Receive stock through this purchase order."
+      >
+        {addingProduct !== null && (
+          <ProductForm
+            onDone={() => setAddingProduct(null)}
+            onCreated={(product) => {
+              setCreatedProducts((current) => [...current, product]);
+              selectProduct(addingProduct, product);
+            }}
+          />
+        )}
+      </Dialog>
+      <Dialog
+        open={scanLine !== null}
+        onOpenChange={(open) => {
+          if (!open) setScanLine(null);
+        }}
+        title="Scan barcode"
+        description="Scan with your barcode reader, or type the barcode and press Enter."
+      >
+        {scanLine !== null && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const product = availableProducts.find(
+                (p) => p.active && p.barcodes.includes(barcode.trim()),
+              );
+              if (!product) {
+                setScanError(
+                  'No active product matches this barcode. Check the barcode or create a new product.',
+                );
+                return;
+              }
+              selectProduct(scanLine, product);
+              setScanLine(null);
+            }}
+          >
+            <Field label="Barcode">
+              <input
+                autoFocus
+                required
+                value={barcode}
+                onChange={(e) => {
+                  setBarcode(e.target.value);
+                  setScanError('');
+                }}
+              />
+            </Field>
+            <ErrorMessage error={scanError} />
+            <Button type="submit" disabled={products.isPending}>
+              Find product
+            </Button>
+          </form>
+        )}
+      </Dialog>
+    </>
   );
 }
 function OrderDetail({ id, close }: { id: string; close: () => void }) {

@@ -206,7 +206,15 @@ export function AuthForm({ setup }: { setup: boolean }) {
     </div>
   );
 }
-export function ProductForm({ onDone, initial }: { onDone: () => void; initial?: Product }) {
+export function ProductForm({
+  onDone,
+  initial,
+  onCreated,
+}: {
+  onDone: () => void;
+  initial?: Product;
+  onCreated?: (product: Product) => void;
+}) {
   const profile = useQuery({
     queryKey: ['store-profile'],
     queryFn: () => api<{ defaultTaxRate: string }>('/store-profile'),
@@ -215,9 +223,14 @@ export function ProductForm({ onDone, initial }: { onDone: () => void; initial?:
   const [error, setError] = useState<unknown>(null);
   const mutation = useMutation({
     mutationFn: (body: unknown) =>
-      api(initial ? `/products/${initial.id}` : '/products', body, initial ? 'PATCH' : 'POST'),
-    onSuccess: () => {
+      api<Product>(
+        initial ? `/products/${initial.id}` : '/products',
+        body,
+        initial ? 'PATCH' : 'POST',
+      ),
+    onSuccess: (product) => {
       void refresh();
+      if (!initial) onCreated?.(product);
       onDone();
     },
   });

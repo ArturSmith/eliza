@@ -306,3 +306,86 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await expect(dialog.getByLabel('Tax rate (%)')).toHaveValue('25.00');
   await dialog.getByRole('button', { name: 'Close dialog' }).click();
 });
+
+test('purchase dialog creates suppliers and products and finds barcodes without losing the draft', async ({
+  page,
+}) => {
+  await page.goto('/');
+  await page.getByRole('heading').first().waitFor();
+  if (await page.getByRole('heading', { name: 'Let’s open your store' }).isVisible()) {
+    await page.getByLabel('Store name').fill('Eliza Market');
+    await page.getByLabel('Your name').fill('Alex Morgan');
+    await page.getByLabel('Email address').fill('alex@example.test');
+    await page.getByLabel('Password', { exact: true }).fill('local-test-password-123');
+    await page.getByRole('button', { name: 'Create my store' }).click();
+  } else {
+    await page.getByLabel('Email address').fill('alex@example.test');
+    await page.getByLabel('Password', { exact: true }).fill('local-test-password-123');
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  }
+  await page.getByRole('link', { name: 'Purchases', exact: true }).click();
+  await page.getByRole('button', { name: 'New purchase order' }).click();
+  const draft = page.getByRole('dialog', { name: 'New purchase order', exact: true });
+  await draft.getByLabel('Supplier reference').fill('Keep my draft');
+  await draft.getByLabel('Supplier', { exact: true }).selectOption('__new');
+  const supplier = page.getByRole('dialog', { name: 'Add supplier', exact: true });
+  await supplier.getByLabel('Supplier code').fill('FRESH');
+  await supplier.getByLabel('Supplier name').fill('Fresh deliveries');
+  await supplier.getByRole('button', { name: 'Save supplier' }).click();
+  await expect(supplier).not.toBeVisible();
+  await expect(draft.getByLabel('Supplier', { exact: true }).locator('option:checked')).toHaveText(
+    'Fresh deliveries',
+  );
+  await expect(draft.getByLabel('Supplier reference')).toHaveValue('Keep my draft');
+
+  await draft.getByLabel('Product', { exact: true }).selectOption('__new');
+  const product = page.getByRole('dialog', { name: 'Add a product', exact: true });
+  await product.getByLabel('Product name').fill('Orange juice');
+  await product.getByLabel('SKU', { exact: true }).fill('JUICE-01');
+  await product.getByLabel('Category', { exact: true }).fill('Drinks');
+  await product.getByLabel('Selling price').fill('35');
+  await product.getByLabel('Purchase cost').fill('20');
+  await product.getByLabel('Barcodes (optional)').fill('7090123456796');
+  await product.getByRole('button', { name: 'Create product' }).click();
+  await expect(product).not.toBeVisible();
+  await expect(
+    draft.getByLabel('Product', { exact: true }).locator('option:checked'),
+  ).toContainText('Orange juice');
+  await expect(draft.getByLabel('Proposed selling price incl. tax (optional)')).toHaveValue(
+    '35.00',
+  );
+  await expect(draft.getByLabel('Unit cost excl. tax', { exact: true })).toHaveValue('20.00');
+  await draft.getByLabel('Unit cost excl. tax', { exact: true }).fill('22');
+  await expect(draft.locator('.purchase-cost-change')).toHaveCSS('color', 'rgb(180, 35, 24)');
+  await expect(
+    draft.locator('.field').filter({ hasText: 'Unit cost excl. tax' }).locator('+ .field'),
+  ).toContainText('Proposed selling price');
+
+  await draft.getByLabel('Proposed selling price incl. tax (optional)').fill('99');
+  await draft.getByRole('button', { name: 'Scan barcode', exact: true }).click();
+  const scanner = page.getByRole('dialog', { name: 'Scan barcode', exact: true });
+  await scanner.getByLabel('Barcode', { exact: true }).fill('unknown-code');
+  await scanner.getByLabel('Barcode', { exact: true }).press('Enter');
+  await expect(scanner.getByRole('alert')).toContainText('No active product matches');
+  await scanner.getByLabel('Barcode', { exact: true }).fill('7090123456796');
+  await scanner.getByLabel('Barcode', { exact: true }).press('Enter');
+  await expect(scanner).not.toBeVisible();
+  await expect(
+    draft.getByLabel('Product', { exact: true }).locator('option:checked'),
+  ).toContainText('Orange juice');
+  await expect(draft.getByLabel('Proposed selling price incl. tax (optional)')).toHaveValue(
+    '35.00',
+  );
+  await expect(draft.getByLabel('Supplier reference')).toHaveValue('Keep my draft');
+  await draft.getByLabel('Product', { exact: true }).selectOption('__new');
+  await product.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(
+    draft.getByLabel('Product', { exact: true }).locator('option:checked'),
+  ).toContainText('Orange juice');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(draft.getByRole('button', { name: 'Scan barcode', exact: true })).toBeVisible();
+  expect(await draft.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await page.screenshot({ path: 'test-results/purchase-dialog-mobile.png' });
+  await draft.getByRole('button', { name: 'Save draft', exact: true }).click();
+  await expect(draft).not.toBeVisible();
+});

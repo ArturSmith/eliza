@@ -1651,3 +1651,54 @@ tr:last-child td {
     color: #748965;
   }
 }
+
+.purchase-cost-change {
+  color: #b42318;
+}
+.purchase-product-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.purchase-product-picker > .field {
+  flex: 1;
+  min-width: 0;
+}
+.purchase-product-picker > button {
+  flex-shrink: 0;
+}
+@media (max-width: 520px) {
+  .purchase-product-picker {
+    flex-wrap: wrap;
+  }
+  .purchase-product-picker > .field {
+    flex-basis: 100%;
+  }
+}
+
+.purchases-heading h1 {
+  margin-left: -3px;
+}
+.purchase-create-button {
+  margin-bottom: 20px;
+}
+.field select.purchase-status-select {
+  appearance: none;
+  padding-right: 40px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2343583a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 16px;
+}
+
+.dialog-overlay-elevated {
+  z-index: 70;
+  background: #17271d40;
+  backdrop-filter: blur(2px);
+}
+.dialog-content-elevated {
+  z-index: 71;
+  box-shadow:
+    0 28px 80px #1525104d,
+    0 8px 24px #15251026;
+}

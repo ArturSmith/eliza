@@ -7,18 +7,24 @@ export function Dialog({
   title,
   description,
   children,
+  elevated = false,
 }: {
   open: boolean;
   onOpenChange: (value: boolean) => void;
   title: string;
   description: string;
   children: ReactNode;
+  elevated?: boolean;
 }) {
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="dialog-overlay" />
-        <DialogPrimitive.Content className="dialog-content">
+        <DialogPrimitive.Overlay
+          className={elevated ? 'dialog-overlay dialog-overlay-elevated' : 'dialog-overlay'}
+        />
+        <DialogPrimitive.Content
+          className={elevated ? 'dialog-content dialog-content-elevated' : 'dialog-content'}
+        >
           <DialogPrimitive.Title className="dialog-title">{title}</DialogPrimitive.Title>
           <DialogPrimitive.Description className="muted">{description}</DialogPrimitive.Description>
           <DialogPrimitive.Close className="dialog-close" aria-label="Close dialog">
