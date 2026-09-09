@@ -271,7 +271,7 @@ export class PurchasingController {
       }
       for (const { p: product, line, totals } of lines)
         await c.query(
-          'INSERT INTO purchase_lines(store_id,purchase_id,product_id,product_name,sku,unit,ordered_quantity,unit_cost,tax_rate,subtotal,tax,total) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
+          'INSERT INTO purchase_lines(store_id,purchase_id,product_id,product_name,sku,unit,ordered_quantity,unit_cost,tax_rate,subtotal,tax,total,proposed_selling_price) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
           [
             store,
             p.id,
@@ -285,6 +285,7 @@ export class PurchasingController {
             totals.subtotal,
             totals.tax,
             totals.total,
+            line.sellingPrice ?? null,
           ],
         );
       await audit(
@@ -393,6 +394,17 @@ export class PurchasingController {
         )
           throw new BadRequestException('Delivery exceeds the remaining order quantity.');
         const cost = entry.unitCost ?? line.unit_cost;
+        if (entry.sellingPrice !== undefined) {
+          if (!req.context.user.permissions.includes('catalog.write'))
+            throw new BadRequestException('You cannot change selling prices.');
+          if (
+            entry.expectedSellingPrice === undefined ||
+            toScaled(entry.expectedSellingPrice, 2) !== toScaled(product.price, 2)
+          )
+            throw new ConflictException(
+              'The selling price changed. Refresh the order and review the current price.',
+            );
+        }
         if (cost !== line.unit_cost && !req.context.user.permissions.includes('purchases.cost'))
           throw new BadRequestException('You cannot change receiving costs.');
         const totals = calculatePurchaseLine(cost, entry.quantity, line.tax_rate);
@@ -440,10 +452,11 @@ export class PurchasingController {
           ],
         );
         const balance = fromScaled(toScaled(product.stock, 3) + toScaled(entry.quantity, 3), 3);
-        await c.query('UPDATE products SET stock=$2,cost=$3 WHERE id=$1', [
+        await c.query('UPDATE products SET stock=$2,cost=$3,price=COALESCE($4,price) WHERE id=$1', [
           product.id,
           balance,
           cost,
+          entry.sellingPrice ?? null,
         ]);
         await c.query(
           'UPDATE purchase_lines SET received_quantity=received_quantity+$2 WHERE id=$1',
@@ -484,6 +497,8 @@ export class PurchasingController {
             previousCost: product.cost,
             cost,
             orderedCost: line.unit_cost,
+            previousSellingPrice: product.price,
+            sellingPrice: entry.sellingPrice ?? product.price,
           })),
         },
       );

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="NONE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="d50ab479-68e5-4025-8fba-d631fd0de7a9" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/apps/api/src/purchasing.ts" beforeDir="false" afterPath="$PROJECT_DIR$/apps/api/src/purchasing.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/apps/web/src/purchasing.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/apps/web/src/purchasing.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/packages/contracts/src/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/packages/contracts/src/index.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/e2e/store.spec.ts" beforeDir="false" afterPath="$PROJECT_DIR$/tests/e2e/store.spec.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/purchasing.integration.test.ts" beforeDir="false" afterPath="$PROJECT_DIR$/tests/purchasing.integration.test.ts" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="ClangdSettings">
+    <option name="formatViaClangd" value="false" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;ArturSmith&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/ArturSmith/eliza.git&quot;,
+    &quot;accountId&quot;: &quot;e74abd31-eb04-42ce-9eaf-600d7797e5d3&quot;
+  }
+}</component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 4
+}</component>
+  <component name="ProjectId" id="3J5cgrWi3ompfYwQyoPlIG0JJv3" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.readMode.enableVisualFormatting&quot;: &quot;true&quot;,
+    &quot;cf.first.check.clang-format&quot;: &quot;false&quot;,
+    &quot;cidr.known.project.marker&quot;: &quot;true&quot;,
+    &quot;dart.analysis.tool.window.visible&quot;: &quot;false&quot;,
+    &quot;kotlin-language-version-configured&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/arthur/pet_projects/eliza&quot;,
+    &quot;show.migrate.to.gradle.popup&quot;: &quot;false&quot;
+  }
+}</component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="d50ab479-68e5-4025-8fba-d631fd0de7a9" name="Changes" comment="" />
+      <created>1788954484720</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1788954484720</updated>
+    </task>
+    <servers />
+  </component>
+</project>

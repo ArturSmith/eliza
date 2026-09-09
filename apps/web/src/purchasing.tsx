@@ -38,9 +38,39 @@ type Line = {
   received_quantity: string;
   quantity: string;
   unit_cost: string;
+  proposed_selling_price?: string | null;
   tax_rate: string;
   total: string;
 };
+function CostComparison({
+  cost,
+  previous,
+  price,
+}: {
+  cost: string;
+  previous?: string | null;
+  price?: string;
+}) {
+  const currency = useSession().data?.store.currency ?? 'NOK';
+  const valid = /^\d{1,9}(\.\d{1,2})?$/.test(cost);
+  const changed = previous != null && valid && Number(cost) !== Number(previous);
+  return (
+    <div className="muted" aria-live="polite">
+      {changed && (
+        <p>
+          <strong>Unit cost {Number(cost) > Number(previous) ? 'increased' : 'decreased'}:</strong>{' '}
+          {formatMoney(previous!, currency)} to {formatMoney(cost, currency)}
+          {Number(previous) > 0 &&
+            ' (' + (((Number(cost) - Number(previous)) / Number(previous)) * 100).toFixed(1) + '%)'}
+          . Costs exclude tax.
+        </p>
+      )}
+      {price !== undefined && (
+        <p>Current selling price: {formatMoney(price, currency)} including tax.</p>
+      )}
+    </div>
+  );
+}
 function Heading({ title, description }: { title: string; description: string }) {
   return (
     <div className="page-heading">
@@ -294,7 +324,8 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
       quantity: l.ordered_quantity,
       unitCost: l.unit_cost,
       taxRate: l.tax_rate,
-    })) ?? [{ productId: '', quantity: '1', unitCost: '0', taxRate: '0' }],
+      sellingPrice: l.proposed_selling_price ?? '',
+    })) ?? [{ productId: '', quantity: '1', unitCost: '0', taxRate: '0', sellingPrice: '' }],
   );
   const [requestId] = useState(() => crypto.randomUUID());
   const mutation = useMutation({
@@ -307,7 +338,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
         supplierReference: reference,
         expectedDate,
         notes,
-        lines,
+        lines: lines.map((line) => ({ ...line, sellingPrice: line.sellingPrice || undefined })),
       }),
     onSuccess: (p) => {
       void refresh();
@@ -353,6 +384,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
                       ? {
                           ...l,
                           productId: e.target.value,
+                          sellingPrice: '',
                           unitCost:
                             products.data?.find((p) => p.id === e.target.value)?.cost ?? '0',
                         }
@@ -392,6 +424,32 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
               />
             </Field>
           ))}
+          {line.productId && (
+            <>
+              <CostComparison
+                cost={line.unitCost}
+                previous={products.data?.find((p) => p.id === line.productId)?.cost}
+                price={products.data?.find((p) => p.id === line.productId)?.price}
+              />
+              <Field label="Proposed selling price incl. tax (optional)">
+                <input
+                  inputMode="decimal"
+                  value={line.sellingPrice}
+                  onChange={(e) =>
+                    setLines(
+                      lines.map((l, i) =>
+                        i === index ? { ...l, sellingPrice: e.target.value } : l,
+                      ),
+                    )
+                  }
+                />
+              </Field>
+              <p className="muted">
+                Leave blank to keep the current selling price. Confirm any proposed price when
+                receiving the delivery. Saving this order does not change checkout prices.
+              </p>
+            </>
+          )}
           {lines.length > 1 && (
             <Button
               type="button"
@@ -407,7 +465,10 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
         type="button"
         variant="outline"
         onClick={() =>
-          setLines([...lines, { productId: '', quantity: '1', unitCost: '0', taxRate: '0' }])
+          setLines([
+            ...lines,
+            { productId: '', quantity: '1', unitCost: '0', taxRate: '0', sellingPrice: '' },
+          ])
         }
       >
         Add line
@@ -558,6 +619,14 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
   );
 }
 function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
+  const products = useProducts();
+  const session = useSession();
+  const canPrice = session.data?.user.permissions.includes('catalog.write');
+  const canCost = session.data?.user.permissions.includes('purchases.cost');
+  const [costs, setCosts] = useState<Record<string, string>>({});
+  const [prices, setPrices] = useState<Record<string, string>>(
+    Object.fromEntries(order.lines.map((l) => [l.id, l.proposed_selling_price ?? ''])),
+  );
   const [quantities, setQuantities] = useState<Record<string, string>>({});
   const [reference, setReference] = useState('');
   const [payload, setPayload] = useState<unknown>();
@@ -570,7 +639,16 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
       deliveryReference: reference,
       lines: order.lines
         .filter((l) => Number(quantities[l.id] ?? 0) > 0)
-        .map((l) => ({ purchaseLineId: l.id, quantity: quantities[l.id] })),
+        .map((l) => ({
+          purchaseLineId: l.id,
+          quantity: quantities[l.id],
+          unitCost: canCost ? (costs[l.id] ?? l.unit_cost) : undefined,
+          sellingPrice: canPrice && prices[l.id] ? prices[l.id] : undefined,
+          expectedSellingPrice:
+            canPrice && prices[l.id]
+              ? products.data?.find((p) => p.id === l.product_id)?.price
+              : undefined,
+        })),
     };
     setPayload(body);
     setPending(true);
@@ -599,16 +677,53 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
         {order.lines
           .filter((l) => toScaled(l.ordered_quantity, 3) > toScaled(l.received_quantity, 3))
           .map((l) => (
-            <Field
-              key={l.id}
-              label={`${l.product_name} — ${fromScaled(toScaled(l.ordered_quantity, 3) - toScaled(l.received_quantity, 3), 3)} ${l.unit} remaining`}
-            >
-              <input
-                inputMode="decimal"
-                value={quantities[l.id] ?? '0'}
-                onChange={(e) => setQuantities({ ...quantities, [l.id]: e.target.value })}
+            <div key={l.id}>
+              <Field
+                label={`${l.product_name} — ${fromScaled(toScaled(l.ordered_quantity, 3) - toScaled(l.received_quantity, 3), 3)} ${l.unit} remaining`}
+              >
+                <input
+                  inputMode="decimal"
+                  value={quantities[l.id] ?? '0'}
+                  onChange={(e) => setQuantities({ ...quantities, [l.id]: e.target.value })}
+                />
+              </Field>
+              <Field label={'Unit cost excl. tax for ' + l.product_name}>
+                <input
+                  inputMode="decimal"
+                  required
+                  disabled={!canCost}
+                  value={costs[l.id] ?? l.unit_cost}
+                  onChange={(e) => setCosts({ ...costs, [l.id]: e.target.value })}
+                />
+              </Field>
+              <CostComparison
+                cost={costs[l.id] ?? l.unit_cost}
+                previous={products.data?.find((p) => p.id === l.product_id)?.cost}
+                price={products.data?.find((p) => p.id === l.product_id)?.price}
               />
-            </Field>
+              {canPrice && (
+                <Field label={'New selling price incl. tax for ' + l.product_name + ' (optional)'}>
+                  <input
+                    inputMode="decimal"
+                    value={prices[l.id] ?? ''}
+                    onChange={(e) => setPrices({ ...prices, [l.id]: e.target.value })}
+                  />
+                </Field>
+              )}
+              {canPrice && prices[l.id] && Number(quantities[l.id] ?? 0) > 0 && (
+                <label>
+                  <input
+                    key={
+                      prices[l.id] + '-' + products.data?.find((p) => p.id === l.product_id)?.price
+                    }
+                    type="checkbox"
+                    required
+                  />
+                  Apply this selling price to all stock of {l.product_name}, including older items.
+                  Update the shelf label.
+                </label>
+              )}
+            </div>
           ))}
       </fieldset>
       <ErrorMessage error={error} />

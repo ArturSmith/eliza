@@ -234,19 +234,34 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
     .selectOption({ label: 'Sourdough bread · BREAD-01 (piece)' });
   await dialog.getByLabel('Quantity', { exact: true }).fill('24');
   await dialog.getByLabel('Purchase tax %').fill('15');
+  await dialog.getByLabel('Unit cost excl. tax', { exact: true }).fill('21');
+  await expect(dialog.getByText('Unit cost increased:', { exact: true })).toBeVisible();
+  await dialog.getByLabel('Proposed selling price incl. tax (optional)').fill('54.90');
   await dialog.getByRole('button', { name: 'Save draft' }).click();
   await page.getByRole('button', { name: 'Edit draft' }).click();
+  await expect(dialog.getByLabel('Proposed selling price incl. tax (optional)')).toHaveValue(
+    '54.90',
+  );
   await dialog.getByLabel('Order notes').fill('Two deliveries expected');
   await dialog.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Two deliveries expected', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Place order' }).click();
   await page.getByRole('button', { name: 'Receive delivery' }).click();
   await dialog.getByLabel('Delivery reference').fill('DEL-1');
-  await dialog.getByLabel(/Sourdough bread/).fill('18');
+  await dialog.getByLabel(/Sourdough bread —/).fill('18');
+  await expect(
+    dialog.getByLabel('New selling price incl. tax for Sourdough bread (optional)'),
+  ).toHaveValue('54.90');
+  await expect(dialog.getByText('Current selling price: NOK 49.90 including tax.')).toBeVisible();
+  await dialog.getByRole('button', { name: 'Record delivery' }).click();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('checkbox').check();
   await dialog.getByRole('button', { name: 'Record delivery' }).click();
   await expect(page.getByRole('cell', { name: 'partially received', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Receive delivery' }).click();
-  await dialog.getByLabel(/Sourdough bread/).fill('6');
+  await dialog.getByLabel(/Sourdough bread —/).fill('6');
+  await expect(dialog.getByText('Current selling price: NOK 54.90 including tax.')).toBeVisible();
+  await dialog.getByLabel('New selling price incl. tax for Sourdough bread (optional)').fill('');
   await dialog.getByRole('button', { name: 'Record delivery' }).click();
   await expect(page.getByRole('cell', { name: 'received', exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/purchasing-desktop.png', fullPage: true });

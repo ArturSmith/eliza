@@ -402,6 +402,7 @@ export const purchaseDraftSchema = z.object({
         quantity: positiveQuantity,
         unitCost: money,
         taxRate: purchaseTax,
+        sellingPrice: money.optional(),
       }),
     )
     .min(1)
@@ -422,6 +423,8 @@ export const receiptInputSchema = z.object({
         purchaseLineId: z.uuid(),
         quantity: positiveQuantity,
         unitCost: money.optional(),
+        sellingPrice: money.optional(),
+        expectedSellingPrice: money.optional(),
       }),
     )
     .min(1)

@@ -83,12 +83,16 @@ describe.sequential('purchasing and receiving', () => {
     const draft = await manager.request('/purchases', {
       requestId: requestId(),
       supplierId: supplier.id,
-      lines: [{ productId, quantity: '24', unitCost: '8', taxRate: '15' }],
+      lines: [{ productId, quantity: '24', unitCost: '8', taxRate: '15', sellingPrice: '19' }],
     });
     expect(draft.status).toBe(201);
     order = draft.body;
     expect(order.total).toBe('220.80');
     expect(order.status).toBe('draft');
+    expect(order.lines[0].proposed_selling_price).toBe('19.00');
+    expect(
+      (await db.pool.query('SELECT price FROM products WHERE id=$1', [productId])).rows[0].price,
+    ).toBe('15.00');
     expect(
       (await db.pool.query('SELECT stock FROM products WHERE id=$1', [productId])).rows[0].stock,
     ).toBe('0.000');
@@ -110,12 +114,71 @@ describe.sequential('purchasing and receiving', () => {
     ).toBe(409);
     order = response.body;
   });
+  it('rejects stale and missing selling-price confirmation without receiving stock', async () => {
+    for (const expectedSellingPrice of [undefined, '14']) {
+      const result = await manager.request('/purchases/' + order.id + '/receipts', {
+        requestId: requestId(),
+        version: order.version,
+        lines: [
+          {
+            purchaseLineId: order.lines[0].id,
+            quantity: '1',
+            sellingPrice: '19',
+            expectedSellingPrice,
+          },
+        ],
+      });
+      expect(result.status).toBe(409);
+    }
+    expect(
+      (await db.pool.query('SELECT stock,price FROM products WHERE id=$1', [productId])).rows[0],
+    ).toEqual({ stock: '0.000', price: '15.00' });
+  });
+  it('requires catalog permission to change a selling price while receiving', async () => {
+    const role = (await db.pool.query("SELECT id,permissions FROM roles WHERE name='Owner'"))
+      .rows[0];
+    await db.pool.query('UPDATE roles SET permissions=$2 WHERE id=$1', [
+      role.id,
+      JSON.stringify(role.permissions.filter((p: string) => p !== 'catalog.write')),
+    ]);
+    try {
+      const result = await manager.request('/purchases/' + order.id + '/receipts', {
+        requestId: requestId(),
+        version: order.version,
+        lines: [
+          {
+            purchaseLineId: order.lines[0].id,
+            quantity: '1',
+            sellingPrice: '19',
+            expectedSellingPrice: '15',
+          },
+        ],
+      });
+      expect(result.status).toBe(400);
+      expect(
+        (await db.pool.query('SELECT stock,price FROM products WHERE id=$1', [productId])).rows[0],
+      ).toEqual({ stock: '0.000', price: '15.00' });
+    } finally {
+      await db.pool.query('UPDATE roles SET permissions=$2 WHERE id=$1', [
+        role.id,
+        JSON.stringify(role.permissions),
+      ]);
+    }
+  });
   it('receives a partial delivery exactly once and preserves cost snapshots', async () => {
     const body = {
       requestId: requestId(),
       version: order.version,
       deliveryReference: 'Delivery 1',
-      lines: [{ purchaseLineId: order.lines[0].id, quantity: '18', unitCost: '9' }],
+      lines: [
+        {
+          purchaseLineId: order.lines[0].id,
+          quantity: '18',
+          unitCost: '9',
+          sellingPrice: '19',
+          expectedSellingPrice: '15',
+        },
+      ],
     };
     const [a, b] = await Promise.all([
       manager.request('/purchases/' + order.id + '/receipts', body),
@@ -129,8 +192,9 @@ describe.sequential('purchasing and receiving', () => {
     expect(order.lines[0].unit_cost).toBe('8.00');
     expect(order.receipts[0].lines[0].unit_cost).toBe('9.00');
     expect(
-      (await db.pool.query('SELECT stock,cost FROM products WHERE id=$1', [productId])).rows[0],
-    ).toEqual({ stock: '18.000', cost: '9.00' });
+      (await db.pool.query('SELECT stock,cost,price FROM products WHERE id=$1', [productId]))
+        .rows[0],
+    ).toEqual({ stock: '18.000', cost: '9.00', price: '19.00' });
     expect(
       (
         await manager.request('/purchases/' + order.id + '/receipts', {
@@ -181,8 +245,9 @@ describe.sequential('purchasing and receiving', () => {
     expect(order.status).toBe('received');
     expect(order.receipts).toHaveLength(2);
     expect(
-      (await db.pool.query('SELECT stock,cost FROM products WHERE id=$1', [productId])).rows[0],
-    ).toEqual({ stock: '24.000', cost: '8.00' });
+      (await db.pool.query('SELECT stock,cost,price FROM products WHERE id=$1', [productId]))
+        .rows[0],
+    ).toEqual({ stock: '24.000', cost: '8.00', price: '19.00' });
     await expect(db.pool.query("UPDATE goods_receipts SET notes='changed'")).rejects.toThrow();
     expect(
       (await db.pool.query('SELECT count(*) FROM movements WHERE purchase_id=$1', [order.id]))
