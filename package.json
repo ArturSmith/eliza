@@ -3,6 +3,7 @@
   "private": true,
   "packageManager": "pnpm@11.19.0",
   "scripts": {
+    "start": "node apps/api/dist/main.js",
     "dev": "pnpm --filter @eliza/contracts build && pnpm --filter @eliza/api build && concurrently -k -n api,web \"pnpm --filter @eliza/api dev\" \"pnpm --filter @eliza/web dev\"",
     "build": "pnpm --filter @eliza/contracts build && pnpm --filter @eliza/api build && pnpm --filter @eliza/web build",
     "typecheck": "pnpm --filter @eliza/contracts build && pnpm -r typecheck",

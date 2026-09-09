@@ -1,5 +1,9 @@
 # Eliza
 
+## Cloud deployment
+
+Railway deployment configuration is included. Follow [the deployment guide](docs/deployment.md) for production variables, first-owner setup, migrations, database permissions, backups and release verification.
+
 Local supermarket management software. React + Vite + TypeScript, NestJS, PostgreSQL, Drizzle, TanStack Router/Query, Zod, Tailwind, and shadcn-style Radix UI components. No external accounts, API keys, analytics, or hosted authentication are required.
 
 ## Run locally

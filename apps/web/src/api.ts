@@ -15,13 +15,14 @@ export async function api<T>(
   path: string,
   body?: unknown,
   method = body === undefined ? 'GET' : 'POST',
+  headers: Record<string, string> = {},
 ): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`/api${path}`, {
       method,
       credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', 'X-Eliza-Request': '1' },
+      headers: { 'Content-Type': 'application/json', 'X-Eliza-Request': '1', ...headers },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
   } catch {

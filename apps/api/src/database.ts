@@ -10,7 +10,11 @@ export const databaseUrl = () =>
   process.env.DATABASE_URL ?? 'postgresql://eliza:eliza_local@127.0.0.1:54329/eliza';
 @Injectable()
 export class Database implements OnModuleDestroy {
-  readonly pool = new pg.Pool({ connectionString: databaseUrl(), max: 10 });
+  readonly pool = new pg.Pool({
+    connectionString: databaseUrl(),
+    max: 10,
+    connectionTimeoutMillis: 10000,
+  });
   readonly db = drizzle(this.pool, { schema });
   async onModuleDestroy() {
     await this.pool.end();

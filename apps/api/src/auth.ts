@@ -1,6 +1,7 @@
 import {
   Body,
   ConflictException,
+  ForbiddenException,
   Controller,
   Get,
   HttpCode,
@@ -17,6 +18,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { Request, Response } from 'express';
 import { loginSchema, permissions, setupSchema, cashierPermissions } from '@eliza/contracts';
 import { Database } from './database.js';
+import { setupAuthorized } from './production.js';
 import {
   AccessGuard,
   type AuthRequest,
@@ -31,14 +33,18 @@ import { audits, devices, employees, organizations, roles, sessions, stores } fr
 @Injectable()
 export class AuthService {
   constructor(private database: Database) {}
-  private attempts = new Map<string, { count: number; until: number }>();
-  limit(ip: string) {
-    const now = Date.now();
-    for (const [key, value] of this.attempts) if (value.until < now) this.attempts.delete(key);
-    const attempt = this.attempts.get(ip) ?? { count: 0, until: now + 600_000 };
-    if (++attempt.count > 20)
+  async limit(ip: string) {
+    await this.database.pool.query('DELETE FROM auth_attempts WHERE expires_at < now()');
+    const result = await this.database.pool.query(
+      `INSERT INTO auth_attempts(key,count,expires_at) VALUES($1,1,now()+interval '10 minutes')
+       ON CONFLICT(key) DO UPDATE SET
+         count=CASE WHEN auth_attempts.expires_at < now() THEN 1 ELSE auth_attempts.count+1 END,
+         expires_at=CASE WHEN auth_attempts.expires_at < now() THEN now()+interval '10 minutes' ELSE auth_attempts.expires_at END
+       RETURNING count`,
+      [hash(ip)],
+    );
+    if (result.rows[0].count > 20)
       throw new HttpException('Too many attempts. Try again in ten minutes.', 429);
-    this.attempts.set(ip, attempt);
   }
   async setup(input: unknown) {
     const body = parse(setupSchema, input);
@@ -172,7 +178,11 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    this.auth.limit(req.ip ?? 'local');
+    await this.auth.limit(req.ip ?? 'local');
+    if (!setupAuthorized(req.headers['x-eliza-setup-token']))
+      throw new ForbiddenException(
+        'A valid setup token is required. Contact the deployment administrator.',
+      );
     const user = await this.auth.setup(body);
     return this.auth.issue(user, req, res);
   }
@@ -181,7 +191,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    this.auth.limit(req.ip ?? 'local');
+    await this.auth.limit(req.ip ?? 'local');
     return this.auth.issue(await this.auth.login(body), req, res);
   }
   @Get('session') @UseGuards(AccessGuard) session(@Req() req: AuthRequest) {

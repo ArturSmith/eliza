@@ -59,9 +59,16 @@ function values(e: FormEvent<HTMLFormElement>) {
   return Object.fromEntries(new FormData(e.currentTarget));
 }
 export function AuthForm({ setup }: { setup: boolean }) {
+  const [setupToken, setSetupToken] = useState('');
   const [error, setError] = useState<unknown>(null);
   const mutation = useMutation({
-    mutationFn: (body: unknown) => api(`/auth/${setup ? 'setup' : 'login'}`, body),
+    mutationFn: (body: unknown) =>
+      api(
+        `/auth/${setup ? 'setup' : 'login'}`,
+        body,
+        'POST',
+        setup ? { 'X-Eliza-Setup-Token': setupToken } : {},
+      ),
     onSuccess: () => {
       queryClient.clear();
       window.location.assign('/');
@@ -116,7 +123,7 @@ export function AuthForm({ setup }: { setup: boolean }) {
             <span className="illustration-label">Good things in store.</span>
           </div>
         </div>
-        <small>Local software. Your store’s data stays with you.</small>
+        <small>Your store. Your workspace.</small>
       </section>
       <section className="auth-panel">
         <div className="auth-card">
@@ -125,13 +132,22 @@ export function AuthForm({ setup }: { setup: boolean }) {
           </div>
           <h2>{setup ? 'Let’s open your store' : 'Welcome back'}</h2>
           <p className="muted">
-            {setup
-              ? 'Create your local owner account. No external registration needed.'
-              : 'Sign in to your store workspace.'}
+            {setup ? 'Create your store owner account.' : 'Sign in to your store workspace.'}
           </p>
           <form onSubmit={submit}>
             {setup && (
               <>
+                <Field
+                  label="Setup token"
+                  hint="For a hosted installation, enter the token supplied by your administrator. Leave blank for local development."
+                >
+                  <input
+                    type="password"
+                    value={setupToken}
+                    onChange={(event) => setSetupToken(event.target.value)}
+                    autoComplete="off"
+                  />
+                </Field>
                 <Field label="Store name">
                   <input
                     name="storeName"

@@ -10,6 +10,10 @@ import {
   Module,
 } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+import { validateProduction } from './production.js';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import type { Request, Response, NextFunction } from 'express';
@@ -107,7 +111,17 @@ class HealthController {
 })
 class AppModule {}
 export async function createApp() {
-  const app = await NestFactory.create(AppModule, { logger: ['error', 'warn', 'log'] });
+  validateProduction();
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    logger: ['error', 'warn', 'log'],
+  });
+  // Only opt in behind a controlled ingress. Never trust arbitrary forwarded headers.
+  const proxy = process.env.TRUST_PROXY;
+  if (proxy)
+    app.set(
+      'trust proxy',
+      /^\d+$/.test(proxy) ? Number(proxy) : proxy.split(',').map((v) => v.trim()),
+    );
   app.setGlobalPrefix('api');
   app.use(helmet());
   app.use((req: Request, res: Response, next: NextFunction) => {
@@ -137,6 +151,22 @@ export async function createApp() {
     next();
   });
   app.useGlobalFilters(new Errors());
+  if (process.env.SERVE_WEB === 'true') {
+    const root = fileURLToPath(new URL('../../web/dist/', import.meta.url));
+    if (!existsSync(root + 'index.html'))
+      throw new Error('Build the web application before startup.');
+    app.useStaticAssets(root, { index: false, fallthrough: true });
+    app.use((req: Request, res: Response, next: NextFunction) => {
+      if (
+        !['GET', 'HEAD'].includes(req.method) ||
+        /^\/api(?:\/|$)/i.test(req.path) ||
+        req.path.startsWith('/assets/') ||
+        !req.accepts('html')
+      )
+        return next();
+      res.sendFile(root + 'index.html');
+    });
+  }
   if (process.env.NODE_ENV !== 'production') {
     const config = new DocumentBuilder()
       .setTitle('Eliza API')
