@@ -190,13 +190,15 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
       .getByRole('cell', { name: 'NOK 0.00', exact: true }),
   ).toBeVisible();
 
+  await expect(page.getByRole('region', { name: 'Sales summary' })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Analytics', exact: true }).click();
   const summary = page.getByRole('region', { name: 'Sales summary' });
   await expect(summary).toContainText('NOK 89.82');
   await expect(page.getByRole('region', { name: 'Gross profit', exact: true })).toContainText(
     'NOK 16.21',
   );
   await summary.getByLabel('Group sales by').selectOption('month');
-  await summary.getByRole('button', { name: 'Apply dates' }).click();
+  await summary.getByRole('button', { name: 'Apply filters' }).click();
   await expect(summary.getByRole('columnheader', { name: 'Month', exact: true })).toBeVisible();
   for (const [group, heading] of [
     ['week', 'Week starting Monday'],
@@ -207,17 +209,32 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
     ['payment', 'Payment method'],
   ]) {
     await summary.getByLabel('Group sales by').selectOption(group);
-    await summary.getByRole('button', { name: 'Apply dates' }).click();
+    await summary.getByRole('button', { name: 'Apply filters' }).click();
     await expect(summary.getByRole('columnheader', { name: heading, exact: true })).toBeVisible();
     await expect(summary).toContainText('NOK 89.82');
   }
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/report-breakdowns-mobile.png', fullPage: true });
+  await summary.getByLabel('Product filter').selectOption({ label: 'Sourdough bread · BREAD-01' });
+  const shiftOption = await summary
+    .getByLabel('Shift filter')
+    .locator('option')
+    .nth(1)
+    .getAttribute('value');
+  await summary.getByLabel('Shift filter').selectOption(shiftOption!);
+  await summary.getByLabel('Group sales by').selectOption('product');
+  await summary.getByRole('button', { name: 'Apply filters' }).click();
+  await expect(summary.getByRole('region', { name: 'Sales over time', exact: true })).toBeVisible();
+  await expect(summary).toContainText('NOK 89.82');
+  await expect(summary).toContainText('Average per matching receipt');
+  await summary.getByLabel('Product filter').selectOption('');
+  await summary.getByLabel('Shift filter').selectOption('');
+  await summary.getByRole('button', { name: 'Apply filters' }).click();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await summary.getByLabel('From date').fill('2000-01-01');
   await summary.getByLabel('To date').fill('2000-01-31');
-  await summary.getByRole('button', { name: 'Apply dates' }).click();
+  await summary.getByRole('button', { name: 'Apply filters' }).click();
   await expect(summary).toContainText('No completed sales in this date range.');
   await page.screenshot({ path: 'test-results/sales-summary.png', fullPage: true });
   await page.getByRole('link', { name: 'Suppliers', exact: true }).click();
@@ -388,4 +405,129 @@ test('purchase dialog creates suppliers and products and finds barcodes without 
   await page.screenshot({ path: 'test-results/purchase-dialog-mobile.png' });
   await draft.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(draft).not.toBeVisible();
+});
+
+test('analytics combines dates, product and shift filters with charts', async ({
+  page,
+  playwright,
+}) => {
+  const headers = { Origin: 'http://localhost:5174', 'X-Eliza-Request': '1' };
+  async function call(client: any, path: string, body?: unknown, method?: string) {
+    const response = await client.fetch('http://localhost:5174/api' + path, {
+      method: method ?? (body === undefined ? 'GET' : 'POST'),
+      headers,
+      data: body,
+    });
+    const result = await response.json();
+    expect(response.ok(), JSON.stringify(result)).toBe(true);
+    return result;
+  }
+  const account = {
+    storeName: 'Eliza Market',
+    ownerName: 'Alex Morgan',
+    email: 'alex@example.test',
+    password: 'local-test-password-123',
+    currency: 'NOK',
+    timezone: 'Europe/Oslo',
+  };
+  const status = await call(page.request, '/auth/status');
+  await call(page.request, status.needsSetup ? '/auth/setup' : '/auth/login', account);
+  const session = await call(page.request, '/auth/session');
+  const roles = await call(page.request, '/team/roles');
+  await call(
+    page.request,
+    '/team/' + session.user.id,
+    {
+      name: 'Alex Morgan',
+      employeeCode: 'OWNER',
+      roleId: roles.find((r: any) => r.name === 'Owner').id,
+      active: true,
+      pin: '654321',
+    },
+    'PATCH',
+  );
+  const ids = [];
+  for (const [name, sku, price] of [
+    ['Analytics tea', 'AN-TEA', '100'],
+    ['Analytics cup', 'AN-CUP', '50'],
+  ]) {
+    const p = await call(page.request, '/products', {
+      name,
+      sku,
+      category: 'Analytics demo',
+      unit: 'piece',
+      price,
+      cost: '10',
+      taxRate: '0',
+      minStock: '0',
+      plu: '',
+      barcodes: [],
+    });
+    ids.push(p.id);
+    await call(page.request, '/inventory/adjustments', {
+      productId: p.id,
+      quantity: '10',
+      reason: 'opening_balance',
+      notes: 'Analytics fixture',
+      requestId: crypto.randomUUID(),
+    });
+  }
+  const register = await playwright.request.newContext();
+  try {
+    await call(register, '/auth/login', account);
+    await call(register, '/pos/enroll', { name: 'Analytics register' });
+    await call(register, '/pos/login', { employeeCode: 'OWNER', pin: '654321' });
+    const shift = await call(register, '/pos/shifts', {
+      openingCash: '0',
+      requestId: crypto.randomUUID(),
+    });
+    await call(register, '/pos/sales', {
+      requestId: crypto.randomUUID(),
+      shiftId: shift.id,
+      lines: ids.map((id, i) => ({
+        productId: id,
+        quantity: '1',
+        expectedPrice: i ? '50.00' : '100.00',
+        expectedTaxRate: '0.00',
+      })),
+      discountPercent: '0',
+      payment: { method: 'cash', tendered: '150' },
+    });
+    await page.goto('/analytics');
+    await expect(page.getByRole('heading', { name: 'Analytics', exact: true })).toBeVisible();
+    const summary = page.getByRole('region', { name: 'Sales summary', exact: true });
+    await summary.getByLabel('Product filter').selectOption(ids[0]);
+    await summary.getByLabel('Shift filter').selectOption(shift.id);
+    await summary.getByRole('button', { name: 'Apply filters' }).click();
+    await expect(summary).toContainText('NOK 100.00');
+    await expect(page.getByRole('region', { name: 'Gross profit', exact: true })).toContainText(
+      'NOK 90.00',
+    );
+    await expect(summary.getByRole('region', { name: 'Best products', exact: true })).toContainText(
+      'Analytics tea',
+    );
+    await expect(
+      summary.getByRole('region', { name: 'Best products', exact: true }),
+    ).not.toContainText('Analytics cup');
+    await expect(summary.getByRole('img', { name: 'Sales by Day', exact: true })).toBeVisible();
+    await summary.getByLabel('Compare periods').selectOption('dayOfMonth');
+    await expect(summary.getByRole('region', { name: 'Best periods', exact: true })).toContainText(
+      'Day ',
+    );
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.screenshot({ path: 'test-results/analytics-desktop.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await page.screenshot({ path: 'test-results/analytics-mobile.png', fullPage: true });
+    await page.goto('/sales');
+    await expect(page.getByRole('heading', { name: 'Sales', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Sales summary', exact: true })).toHaveCount(0);
+    await page.goto('/shifts');
+    await expect(page.getByRole('heading', { name: 'Shifts', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Sales summary', exact: true })).toHaveCount(0);
+  } finally {
+    await register.dispose();
+  }
 });

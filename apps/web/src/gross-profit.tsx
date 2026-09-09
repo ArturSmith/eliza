@@ -14,14 +14,25 @@ type Profit = {
   missingCostRecords: string;
   currency: string;
 };
-export function GrossProfit({ from, to }: { from: string; to: string }) {
+export function GrossProfit({
+  from,
+  to,
+  productId = '',
+  shiftId = '',
+}: {
+  from: string;
+  to: string;
+  productId?: string;
+  shiftId?: string;
+}) {
   const session = useSession().data!;
   const allowed =
     session.user.permissions.includes('costs.read') &&
     session.user.permissions.includes('sales.read');
   const q = useQuery({
-    queryKey: ['gross-profit', session.store.id, session.user.id, from, to],
-    queryFn: () => api<Profit>('/reports/gross-profit?' + new URLSearchParams({ from, to })),
+    queryKey: ['gross-profit', session.store.id, session.user.id, from, to, productId, shiftId],
+    queryFn: () =>
+      api<Profit>('/reports/gross-profit?' + new URLSearchParams({ from, to, productId, shiftId })),
     enabled: allowed,
   });
   if (!allowed) return null;
@@ -34,7 +45,8 @@ export function GrossProfit({ from, to }: { from: string; to: string }) {
       <h3>Gross profit</h3>
       <p className="muted">
         {from} through {to}. Revenue excludes tax and refunds. Costs use the purchase cost saved at
-        each sale, not today’s product cost. This is gross profit before operating expenses.
+        each sale, not today’s product cost. Product and original-sale shift filters apply here too.
+        This is gross profit before operating expenses.
       </p>
       <ErrorMessage error={q.error} />
       {q.isFetching ? (

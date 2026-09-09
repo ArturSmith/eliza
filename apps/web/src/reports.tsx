@@ -1,5 +1,4 @@
 import { ReceiptSearch } from './refunds';
-import { SalesSummary } from './sales-summary';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { Receipt, Shift } from '@eliza/contracts';
@@ -22,7 +21,6 @@ export function SalesPage() {
           </p>
         </div>
       </div>
-      <SalesSummary />
       <ReceiptSearch />
       <h2>Recent receipts</h2>
       <ErrorMessage error={query.error} />
@@ -120,7 +118,6 @@ export function ShiftsPage() {
           </p>
         </div>
       </div>
-      <SalesSummary initialGroup="shift" />
       <h2>Drawer reconciliation</h2>
       <ErrorMessage error={query.error} />
       <section className="panel">

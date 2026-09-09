@@ -1,3 +1,4 @@
+import { AnalyticsCharts } from './analytics';
 import { GrossProfit } from './gross-profit';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -5,7 +6,12 @@ import { api, useSession } from './api';
 import { Field, ErrorMessage } from './forms';
 import { Button } from './components/ui/button';
 import { formatMoney } from './receipts';
-const groups = {
+export const groups = {
+  dayOfMonth: 'Day of month',
+  hour: 'Hour of day',
+  weekday: 'Day of week',
+  monthOfYear: 'Month of year',
+  year: 'Year',
   day: 'Day',
   week: 'Week starting Monday',
   month: 'Month',
@@ -16,8 +22,8 @@ const groups = {
   category: 'Category',
   payment: 'Payment method',
 };
-type Group = keyof typeof groups;
-type Totals = {
+export type Group = keyof typeof groups;
+export type Totals = {
   refunds: string;
   net: string;
   label: string | null;
@@ -28,14 +34,54 @@ type Totals = {
   total: string;
   tax: string;
   discount: string;
-  cash: string;
-  card: string;
+  cash: string | null;
+  card: string | null;
   average: string;
   cashier: string | null;
   register: string | null;
   openedAt: string | null;
 };
-type Summary = { currency: string; timezone: string; totals: Totals; rows: Totals[] };
+export type Summary = {
+  currency: string;
+  timezone: string;
+  totals: Totals;
+  groups: Record<string, Totals[]>;
+  rows: Totals[];
+  options: {
+    products: { id: string; label: string; active: boolean }[];
+    shifts: { id: string; cashier: string; register: string; openedAt: string }[];
+  };
+};
+export function rowLabel(row: Totals, group: Group, timezone: string) {
+  if (group === 'dayOfMonth') return 'Day ' + Number(row.bucket);
+  if (group === 'hour') return row.bucket + ':00–' + row.bucket + ':59';
+  if (group === 'weekday')
+    return ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][
+      Number(row.bucket) - 1
+    ];
+  if (group === 'monthOfYear')
+    return [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ][Number(row.bucket) - 1];
+  if (group === 'shift')
+    return (
+      (row.label ?? row.cashier) +
+      ' · ' +
+      new Date(row.openedAt!).toLocaleString('en-GB', { timeZone: timezone })
+    );
+  return row.label ?? row.bucket;
+}
 export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group }) {
   const store = useSession().data!.store;
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -50,13 +96,18 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
     from: today.slice(0, 7) + '-01',
     to: today,
     group: initialGroup,
+    productId: '',
+    shiftId: '',
   });
   const [filter, setFilter] = useState(draft);
+  const [page, setPage] = useState(0);
   const query = useQuery({
-    queryKey: ['sales-summary', store.id, filter],
-    queryFn: () => api<Summary>('/reports/sales-summary?' + new URLSearchParams(filter)),
+    queryKey: ['analytics', store.id, filter],
+    queryFn: () => api<Summary>('/reports/analytics?' + new URLSearchParams(filter)),
   });
-  const data = query.data;
+  const data = query.data
+    ? { ...query.data, rows: query.data.groups[filter.group] ?? [] }
+    : undefined;
   return (
     <section
       className="panel panel-padding"
@@ -67,12 +118,37 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
       <p className="muted">
         All completed sales in the selected dates, using {store.timezone}. Sales include tax and are
         after discounts. Refunds are counted on the date issued; breakdown rows show original sales
-        before refunds. Opening float and cash in/out are excluded.
+        before refunds. Product filters count only that product’s lines. Refunds follow the original
+        sale’s shift. Opening float and cash in/out are excluded.
       </p>
+      <div className="analytics-presets" aria-label="Quick date ranges">
+        {['Today', 'This week', 'This month', 'This year'].map((label) => (
+          <Button
+            key={label}
+            type="button"
+            variant="outline"
+            onClick={() => {
+              const date = new Date(today + 'T00:00:00Z');
+              if (label === 'This week')
+                date.setUTCDate(date.getUTCDate() - ((date.getUTCDay() + 6) % 7));
+              const from =
+                label === 'This year'
+                  ? today.slice(0, 4) + '-01-01'
+                  : label === 'This month'
+                    ? today.slice(0, 7) + '-01'
+                    : date.toISOString().slice(0, 10);
+              setDraft({ ...draft, from, to: today });
+            }}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
       <form
         className="form-grid"
         onSubmit={(e) => {
           e.preventDefault();
+          setPage(0);
           setFilter({ ...draft });
         }}
       >
@@ -93,6 +169,37 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
             onChange={(e) => setDraft({ ...draft, to: e.target.value })}
           />
         </Field>
+        <Field label="Product filter">
+          <select
+            value={draft.productId}
+            onChange={(e) => setDraft({ ...draft, productId: e.target.value })}
+          >
+            <option value="">All products</option>
+            {data?.options.products.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+                {p.active ? '' : ' (inactive)'}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Shift filter">
+          <select
+            value={draft.shiftId}
+            onChange={(e) => setDraft({ ...draft, shiftId: e.target.value })}
+          >
+            <option value="">All shifts</option>
+            {data?.options.shifts.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.cashier} · {s.register} ·{' '}
+                {new Date(s.openedAt).toLocaleString('en-GB', { timeZone: store.timezone })}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <p className="muted">
+          Filters combine. Apply a new date range first to load its available shifts and products.
+        </p>
         <Field label="Group sales by">
           <select
             value={draft.group}
@@ -109,7 +216,7 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
           style={{ alignSelf: 'end', justifySelf: 'start', marginBottom: 16 }}
           disabled={query.isFetching}
         >
-          Apply dates
+          Apply filters
         </Button>
       </form>
       <ErrorMessage error={query.error} />
@@ -145,12 +252,15 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                 ['Card sales', data.totals.card],
                 ['Tax included', data.totals.tax],
                 ['Discounts', data.totals.discount],
-                ['Average basket', data.totals.average],
+                [
+                  filter.productId ? 'Average per matching receipt' : 'Average basket',
+                  data.totals.average,
+                ],
               ].map(([label, value]) => (
                 <div key={label}>
                   <small>{label}</small>
                   <strong style={{ display: 'block', fontSize: 20 }}>
-                    {formatMoney(value, data.currency)}
+                    {value === null ? 'Not allocated' : formatMoney(value, data.currency)}
                   </strong>
                 </div>
               ))}
@@ -161,6 +271,14 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                 </strong>
               </div>
             </div>
+            <AnalyticsCharts data={data} />
+            <h3>Detailed breakdown</h3>
+            {filter.productId && (
+              <p className="muted">
+                Payment methods are not allocated to individual products. Clear the product filter
+                to compare payments.
+              </p>
+            )}
             <div className="table-scroll">
               <table>
                 <thead>
@@ -185,7 +303,7 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                   </tr>
                 </thead>
                 <tbody>
-                  {data.rows.map((r) => (
+                  {data.rows.slice(page * 25, (page + 1) * 25).map((r) => (
                     <tr key={r.bucket}>
                       <td>
                         {filter.group === 'shift' ? (
@@ -199,7 +317,7 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                             </small>
                           </>
                         ) : (
-                          (r.label ?? r.bucket)
+                          rowLabel(r, filter.group, data.timezone)
                         )}
                       </td>
                       <td>{r.transactions}</td>
@@ -218,11 +336,35 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                 </tbody>
               </table>
             </div>
-            {!data.rows.length && <p className="muted">No completed sales in this date range.</p>}
+            {data.rows.length > 25 && (
+              <div className="analytics-pagination">
+                <Button variant="outline" disabled={page === 0} onClick={() => setPage(page - 1)}>
+                  Previous
+                </Button>
+                <span>
+                  Page {page + 1} of {Math.ceil(data.rows.length / 25)}
+                </span>
+                <Button
+                  variant="outline"
+                  disabled={(page + 1) * 25 >= data.rows.length}
+                  onClick={() => setPage(page + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            )}
+            {!data.rows.length && !(filter.group === 'payment' && filter.productId) && (
+              <p className="muted">No completed sales in this date range.</p>
+            )}
           </>
         )
       )}
-      <GrossProfit from={filter.from} to={filter.to} />
+      <GrossProfit
+        from={filter.from}
+        to={filter.to}
+        productId={filter.productId}
+        shiftId={filter.shiftId}
+      />
     </section>
   );
 }

@@ -53,6 +53,7 @@ const navGroups = [
     items: [
       { to: '/pos', label: 'Checkout', icon: Monitor, permission: 'pos.access' },
       { to: '/sales', label: 'Sales', icon: ClipboardList, permission: 'sales.read' },
+      { to: '/analytics', label: 'Analytics', icon: Activity, permission: 'sales.read' },
       { to: '/shifts', label: 'Shifts', icon: Clock3, permission: 'sales.read' },
     ],
   },

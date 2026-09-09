@@ -25,6 +25,7 @@ import { StoreSettingsPage } from './store-settings';
 import { StockCountsPage } from './stock-counts';
 import { SuppliersPage, PurchasesPage } from './purchasing';
 import { TeamManagementPage } from './team';
+import { AnalyticsPage } from './analytics';
 import { SalesPage, ShiftsPage } from './reports';
 function Root() {
   const location = useLocation();
@@ -44,6 +45,7 @@ const routes = [
   createRoute({ getParentRoute: () => root, path: '/suppliers', component: SuppliersPage }),
   createRoute({ getParentRoute: () => root, path: '/purchases', component: PurchasesPage }),
   createRoute({ getParentRoute: () => root, path: '/pos', component: CheckoutRoute }),
+  createRoute({ getParentRoute: () => root, path: '/analytics', component: AnalyticsPage }),
   createRoute({ getParentRoute: () => root, path: '/sales', component: SalesPage }),
   createRoute({ getParentRoute: () => root, path: '/shifts', component: ShiftsPage }),
   createRoute({ getParentRoute: () => root, path: '/', component: Overview }),
