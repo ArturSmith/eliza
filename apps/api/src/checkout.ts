@@ -339,11 +339,21 @@ export class CheckoutController {
       const receiptId = randomUUID();
       const sequence = (await client.query("SELECT nextval('receipt_sequence')::text AS n")).rows[0]
         .n;
+      const profile = (
+        await client.query(
+          'SELECT name,address,phone,business_number,receipt_footer FROM stores WHERE id=$1',
+          [actor.storeId],
+        )
+      ).rows[0];
       const receipt: Receipt = {
         id: receiptId,
         receiptNumber: `E-${sequence.padStart(7, '0')}`,
         createdAt: new Date().toISOString(),
-        storeName: actor.storeName,
+        storeName: profile.name,
+        storeAddress: profile.address,
+        storePhone: profile.phone,
+        businessNumber: profile.business_number,
+        receiptFooter: profile.receipt_footer,
         currency: actor.currency,
         timezone: actor.timezone,
         cashierName: actor.name,

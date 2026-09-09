@@ -192,6 +192,9 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
 
   const summary = page.getByRole('region', { name: 'Sales summary' });
   await expect(summary).toContainText('NOK 89.82');
+  await expect(page.getByRole('region', { name: 'Gross profit', exact: true })).toContainText(
+    'NOK 16.21',
+  );
   await summary.getByLabel('Group sales by').selectOption('month');
   await summary.getByRole('button', { name: 'Apply dates' }).click();
   await expect(summary.getByRole('columnheader', { name: 'Month', exact: true })).toBeVisible();
@@ -273,4 +276,18 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/stock-count-mobile.png', fullPage: true });
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole('link', { name: 'Store settings', exact: true }).click();
+  await page.getByLabel('Business address').fill('Market street 12');
+  await page.getByLabel('Business / tax registration number').fill('ORG-123');
+  await page.getByLabel('Receipt footer').fill('See you again!');
+  await page.getByLabel('Default tax rate (%)').fill('25');
+  await page.getByRole('button', { name: 'Save store settings' }).click();
+  await page.reload();
+  await expect(page.getByLabel('Business address')).toHaveValue('Market street 12');
+  await page.getByRole('link', { name: 'Products', exact: true }).click();
+  await page.getByRole('button', { name: 'Add product' }).first().click();
+  await expect(dialog.getByLabel('Tax rate (%)')).toHaveValue('25.00');
+  await dialog.getByRole('button', { name: 'Close dialog' }).click();
 });

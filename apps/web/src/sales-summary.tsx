@@ -1,3 +1,4 @@
+import { GrossProfit } from './gross-profit';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, useSession } from './api';
@@ -221,6 +222,7 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
           </>
         )
       )}
+      <GrossProfit from={filter.from} to={filter.to} />
     </section>
   );
 }

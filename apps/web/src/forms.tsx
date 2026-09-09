@@ -8,7 +8,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { Plus, ArrowRight, Store, PackagePlus } from 'lucide-react';
 import {
   productSchema,
@@ -207,6 +207,11 @@ export function AuthForm({ setup }: { setup: boolean }) {
   );
 }
 export function ProductForm({ onDone, initial }: { onDone: () => void; initial?: Product }) {
+  const profile = useQuery({
+    queryKey: ['store-profile'],
+    queryFn: () => api<{ defaultTaxRate: string }>('/store-profile'),
+    enabled: !initial,
+  });
   const [error, setError] = useState<unknown>(null);
   const mutation = useMutation({
     mutationFn: (body: unknown) =>
@@ -232,6 +237,8 @@ export function ProductForm({ onDone, initial }: { onDone: () => void; initial?:
     }
     mutation.mutate(result.data);
   }
+  if (!initial && profile.isPending) return <p>Loading product defaults…</p>;
+  if (!initial && profile.error) return <ErrorMessage error={profile.error} />;
   return (
     <form onSubmit={submit}>
       <Field label="Product name">
@@ -286,7 +293,7 @@ export function ProductForm({ onDone, initial }: { onDone: () => void; initial?:
           <input
             name="taxRate"
             inputMode="decimal"
-            defaultValue={initial?.taxRate ?? '0'}
+            defaultValue={initial?.taxRate ?? profile.data?.defaultTaxRate ?? '0'}
             required
           />
         </Field>

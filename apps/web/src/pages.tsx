@@ -43,21 +43,45 @@ import {
 import { AuthForm, AddProduct, ProductForm, AdjustmentForm, ErrorMessage, Field } from './forms';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
-const nav = [
-  { to: '/purchases', label: 'Purchases', icon: ClipboardList, permission: 'purchases.read' },
-  { to: '/suppliers', label: 'Suppliers', icon: Store, permission: 'suppliers.read' },
-  { to: '/pos', label: 'Checkout', icon: Monitor, permission: 'pos.access' },
-  { to: '/sales', label: 'Sales', icon: ClipboardList, permission: 'sales.read' },
-  { to: '/shifts', label: 'Shifts', icon: Clock3, permission: 'sales.read' },
-  { to: '/', label: 'Overview', icon: LayoutDashboard, permission: 'catalog.read' },
-  { to: '/products', label: 'Products', icon: Package, permission: 'catalog.read' },
-  { to: '/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory.read' },
-  { to: '/stock-counts', label: 'Stock counts', icon: ClipboardList, permission: 'inventory.read' },
-  { to: '/team', label: 'Team', icon: Users, permission: 'team.read' },
-  { to: '/devices', label: 'Devices', icon: Monitor, permission: 'devices.manage' },
-  { to: '/audit', label: 'Activity log', icon: ClipboardList, permission: 'audit.read' },
-  { to: '/settings', label: 'Store settings', icon: Settings, permission: 'settings.manage' },
+const navGroups = [
+  {
+    label: 'Workspace',
+    items: [{ to: '/', label: 'Overview', icon: LayoutDashboard, permission: 'catalog.read' }],
+  },
+  {
+    label: 'Sales',
+    items: [
+      { to: '/pos', label: 'Checkout', icon: Monitor, permission: 'pos.access' },
+      { to: '/sales', label: 'Sales', icon: ClipboardList, permission: 'sales.read' },
+      { to: '/shifts', label: 'Shifts', icon: Clock3, permission: 'sales.read' },
+    ],
+  },
+  {
+    label: 'Stock & purchasing',
+    items: [
+      { to: '/products', label: 'Products', icon: Package, permission: 'catalog.read' },
+      { to: '/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory.read' },
+      {
+        to: '/stock-counts',
+        label: 'Stock counts',
+        icon: ClipboardList,
+        permission: 'inventory.read',
+      },
+      { to: '/purchases', label: 'Purchases', icon: ClipboardList, permission: 'purchases.read' },
+      { to: '/suppliers', label: 'Suppliers', icon: Store, permission: 'suppliers.read' },
+    ],
+  },
+  {
+    label: 'Administration',
+    items: [
+      { to: '/team', label: 'Team', icon: Users, permission: 'team.read' },
+      { to: '/devices', label: 'Devices', icon: Monitor, permission: 'devices.manage' },
+      { to: '/audit', label: 'Activity log', icon: ClipboardList, permission: 'audit.read' },
+      { to: '/settings', label: 'Store settings', icon: Settings, permission: 'settings.manage' },
+    ],
+  },
 ] as const;
+const nav = navGroups.flatMap((group) => [...group.items]);
 function money(value: string | number, currency = 'NOK') {
   return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(Number(value));
 }
@@ -140,6 +164,7 @@ export function Shell() {
   });
   const session = useSession();
   const [mobile, setMobile] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<string[]>([]);
   const location = useLocation();
   const logout = useMutation({
     mutationFn: () => api('/auth/logout', {}),
@@ -197,35 +222,50 @@ export function Shell() {
           </div>
           <ShieldCheck size={17} />
         </div>
-        <span className="nav-caption">WORKSPACE</span>
-        <nav>
-          {nav
-            .filter((n) => user.permissions.includes(n.permission))
-            .map(({ to, label, icon: Icon }) => (
-              <Link
-                key={to}
-                to={to}
-                activeOptions={{ exact: true }}
-                activeProps={{ className: 'nav-link active' }}
-                className="nav-link"
-                onClick={() => setMobile(false)}
-              >
-                <Icon size={19} />
-                {label}
-                {to === location.pathname && <span className="nav-dot" />}
-              </Link>
-            ))}
+        <nav aria-label="Main navigation">
+          {navGroups.map((group) => {
+            const items = group.items.filter((item) => user.permissions.includes(item.permission));
+            if (!items.length) return null;
+            const expanded = !collapsedGroups.includes(group.label);
+            const groupId = `nav-${group.label.toLowerCase().replace(/[^a-z]+/g, '-')}`;
+            return (
+              <div className="nav-group" key={group.label}>
+                <button
+                  type="button"
+                  className="nav-caption nav-group-toggle"
+                  aria-expanded={expanded}
+                  aria-controls={groupId}
+                  onClick={() =>
+                    setCollapsedGroups((groups) =>
+                      expanded
+                        ? [...groups, group.label]
+                        : groups.filter((label) => label !== group.label),
+                    )
+                  }
+                >
+                  {group.label}
+                  <ChevronRight size={13} className={expanded ? 'expanded' : ''} />
+                </button>
+                <div id={groupId} className="nav-group-links" hidden={!expanded}>
+                  {items.map(({ to, label, icon: Icon }) => (
+                    <Link
+                      key={to}
+                      to={to}
+                      activeOptions={{ exact: true }}
+                      activeProps={{ className: 'nav-link active' }}
+                      className="nav-link"
+                      onClick={() => setMobile(false)}
+                    >
+                      <Icon size={19} />
+                      {label}
+                      {to === location.pathname && <span className="nav-dot" />}
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </nav>
-        <div className="sidebar-note">
-          <span className="note-icon">
-            <Store size={19} />
-          </span>
-          <strong>Your store, taking shape.</strong>
-          <p>Build your catalog and get your opening stock in order.</p>
-          <Link to="/inventory">
-            Go to inventory <ArrowRight size={14} />
-          </Link>
-        </div>
         <div className="sidebar-bottom">
           <span className="status-dot" />
           Local workspace <span>v0.1</span>

@@ -39,6 +39,9 @@ export function ReceiptView({
         <div className="receipt-top">
           <CheckCircle2 size={30} />
           <h2>{receipt.storeName}</h2>
+          {receipt.storeAddress && <p style={{ whiteSpace: 'pre-wrap' }}>{receipt.storeAddress}</p>}
+          {receipt.storePhone && <p>{receipt.storePhone}</p>}
+          {receipt.businessNumber && <p>{receipt.businessNumber}</p>}
           <p>
             {reprint ? 'REPRINT · ' : ''}
             {receipt.receiptNumber}
@@ -95,7 +98,9 @@ export function ReceiptView({
           )}
         </dl>
         {receipt.approverName && <p className="muted">Approved by {receipt.approverName}</p>}
-        <p className="receipt-thanks">Thank you for shopping with us.</p>
+        <p className="receipt-thanks" style={{ whiteSpace: 'pre-wrap' }}>
+          {receipt.receiptFooter ?? 'Thank you for shopping with us.'}
+        </p>
       </article>
       <ErrorMessage error={error} />
       <Button

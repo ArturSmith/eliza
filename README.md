@@ -120,3 +120,19 @@ Pending refund requests are saved without PINs in this browser tab, scoped to op
 Open **Stock counts** and create a draft with up to 500 selected products (including inactive products if needed). Only one count can be open per store. Start counting to capture system quantities, enter and save every physical quantity including zero, then choose Review count. Owner and Manager can finalize the reviewed differences. Finalization creates stock movements only for nonzero differences and retains who counted and finalized the operation. Finalized and cancelled counts remain in history.
 
 Perform counts while selected stock is not moving. Any sale, delivery, return, or adjustment after the snapshot blocks finalization, even if the resulting balance is unchanged. Restart count captures current balances and clears all quantities; physically recount the selected products before reviewing again. Cancelling requires a reason and never changes inventory. Counts list the latest 100 operations. Retry a pending command in the same screen; after reloading, open the count and check its saved state before continuing.
+
+### Basic gross profit
+
+Sales and Shifts show a Gross profit section using the same selected dates. Viewing it requires both sales-report and cost permissions. Net revenue is completed sales minus included tax and refunds excluding tax. Goods cost uses each immutable sale-item purchase-cost snapshot multiplied by its quantity and rounded per line, independently of current product costs. Profit equals net revenue minus goods cost, adjusted for saleable returns. Margin is profit divided by positive net revenue; otherwise it is unavailable.
+
+Refunds affect the date issued, even when the original sale falls outside the selected dates. Restocked quantities reverse a cumulative proportional share of the original rounded cost; non-saleable returns leave goods cost in the result. This preserves full-return rounding and reflects damaged-return losses. Zero recorded costs are treated as zero; entirely missing historical cost records make the profit result unavailable. This is a basic historical-cost estimate, not FIFO valuation or net profit. Operating expenses, inventory write-offs and count differences are excluded. Expense tracking is deferred.
+
+### Store and receipt settings
+
+Owners can edit Store settings: store name, business address, phone, business/tax registration number, receipt footer, and the default tax rate for newly created products. Each save is version-checked and audited. Currency and timezone remain fixed in this MVP to preserve reporting consistency. Default tax does not change existing product rates; explicit per-product rates still take precedence.
+
+New checkout receipts snapshot the store header details and footer. Subsequent settings changes do not alter historical receipts or reprints. Older receipts retain their original basic layout and thank-you text. Tax and receipt content must be configured for the store; no jurisdiction-specific fiscal certification is implied.
+
+### Local operational tools
+
+Use `pnpm ops:check`, `pnpm db:backup`, and `pnpm db:verify-backup <dump>` for diagnostics and backup verification. `pnpm db:restore-new <dump>` restores into a separate database; owner recovery is an explicit local-administrator command. See [the operations runbook](docs/operations.md) for exact recovery steps and remaining deployment requirements. Backups are private but unencrypted; off-device copies and scheduling remain operator responsibilities.

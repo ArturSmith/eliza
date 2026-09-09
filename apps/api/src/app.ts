@@ -6,12 +6,14 @@ import {
   ArgumentsHost,
   Get,
   HttpException,
+  ServiceUnavailableException,
   Module,
 } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import type { Request, Response, NextFunction } from 'express';
+import { expectedMigrations } from './migration-health.js';
 import { randomUUID } from 'node:crypto';
 import { Database, DatabaseModule } from './database.js';
 import { AuthModule } from './auth.js';
@@ -22,6 +24,8 @@ import { ManagementModule } from './management.js';
 import { TeamModule } from './team.js';
 import { RegisterModule } from './register.js';
 import { RefundModule } from './refunds.js';
+import { StoreSettingsModule } from './store-settings.js';
+import { GrossProfitModule } from './gross-profit.js';
 import { SalesSummaryModule } from './sales-summary.js';
 import { PurchasingModule } from './purchasing.js';
 import { CheckoutModule } from './checkout.js';
@@ -62,7 +66,21 @@ class Errors implements ExceptionFilter {
 class HealthController {
   constructor(private database: Database) {}
   @Get() async health() {
-    await this.database.pool.query('SELECT 1');
+    try {
+      const applied = (
+        await this.database.pool.query('SELECT name,checksum FROM schema_migrations')
+      ).rows;
+      if (
+        !expectedMigrations.every((m) =>
+          applied.some((r) => r.name === m.name && r.checksum === m.checksum),
+        )
+      )
+        throw new Error('Migrations pending');
+    } catch {
+      throw new ServiceUnavailableException(
+        'Database is unavailable or migrations need attention. Run the operational check.',
+      );
+    }
     return { status: 'ok' };
   }
 }
@@ -79,6 +97,8 @@ class HealthController {
     CheckoutModule,
     PurchasingModule,
     SalesSummaryModule,
+    GrossProfitModule,
+    StoreSettingsModule,
     RefundModule,
   ],
   controllers: [HealthController],

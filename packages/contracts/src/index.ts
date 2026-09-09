@@ -320,6 +320,10 @@ export type PosContext = {
   employees?: { name: string; employeeCode: string }[];
 };
 export type Receipt = {
+  storeAddress?: string;
+  storePhone?: string;
+  businessNumber?: string;
+  receiptFooter?: string;
   id: string;
   receiptNumber: string;
   createdAt: string;

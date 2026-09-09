@@ -246,15 +246,49 @@ textarea:focus {
   letter-spacing: 1.5px;
   color: #929b8c;
   font-weight: 600;
-  margin: 0 12px 13px;
+  margin: 0 12px 6px;
+  text-transform: uppercase;
 }
 .sidebar > * {
   flex-shrink: 0;
 }
 .sidebar nav {
+  padding-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+}
+.nav-group {
+  padding-bottom: 7px;
+}
+.nav-group-links {
   display: flex;
   flex-direction: column;
   gap: 7px;
+}
+.nav-group-links[hidden] {
+  display: none;
+}
+.nav-group-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: calc(100% - 24px);
+  padding: 6px 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+.nav-group-toggle:hover {
+  color: #365637;
+}
+.nav-group-toggle:focus-visible {
+  outline: 2px solid #70865f;
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+.nav-group-toggle svg.expanded {
+  transform: rotate(90deg);
 }
 .nav-link {
   display: flex;
@@ -281,37 +315,8 @@ textarea:focus {
   background: #70865f;
   margin-left: auto;
 }
-.sidebar-note {
-  margin-top: auto;
-  background: #f1f4e9;
-  border: 1px solid #e9edde;
-  border-radius: 10px;
-  padding: 17px 15px;
-  margin-bottom: 25px;
-}
-.note-icon {
-  display: block;
-  color: #6d8159;
-  margin-bottom: 10px;
-}
-.sidebar-note strong {
-  font-size: 11px;
-}
-.sidebar-note p {
-  font-size: 11px;
-  line-height: 1.8;
-  color: #8b9482;
-  margin: 8px 0 15px;
-}
-.sidebar-note a {
-  font-size: 11px;
-  font-weight: 600;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  color: #62794e;
-}
 .sidebar-bottom {
+  margin-top: auto;
   display: flex;
   gap: 8px;
   align-items: center;

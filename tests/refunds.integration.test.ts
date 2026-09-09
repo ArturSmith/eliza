@@ -261,4 +261,175 @@ describe.sequential('receipt search and refunds', () => {
     expect(report.totals.refunds).toBe('0.18');
     expect(report.totals.net).toBe('0.00');
   });
+
+  it('uses historical costs and retains losses on non-saleable returns', async () => {
+    const day = (
+      await db.pool.query("SELECT to_char(now() AT TIME ZONE 'Europe/Oslo','YYYY-MM-DD') AS day")
+    ).rows[0].day;
+    const path = `/reports/gross-profit?from=${day}&to=${day}`;
+    const before = await manager.request(path);
+    expect(before.status).toBe(200);
+    expect(before.body).toMatchObject({
+      salesExTax: '0.18',
+      refundsExTax: '0.18',
+      netRevenue: '0.00',
+      soldCost: '200.00',
+      restoredCost: '150.00',
+      costOfGoodsSold: '50.00',
+      grossProfit: '-50.00',
+      marginPercent: null,
+      missingCostRecords: '0',
+    });
+    await db.pool.query('UPDATE products SET cost=999 WHERE id=$1', [productId]);
+    expect((await manager.request(path)).body).toEqual(before.body);
+    expect((await register.request(path)).status).toBe(401);
+    const role = (await manager.request('/team/roles')).body.find((r: any) => r.name === 'Cashier');
+    await manager.request('/team', {
+      name: 'Limited',
+      employeeCode: 'LIMITED',
+      roleId: role.id,
+      pin: '234567',
+      email: 'limited@profit.test',
+      password: 'limited-password-123',
+    });
+    const limited = new Client();
+    await limited.request('/auth/login', {
+      email: 'limited@profit.test',
+      password: 'limited-password-123',
+    });
+    expect((await limited.request(path)).status).toBe(403);
+    expect(
+      (await manager.request('/reports/gross-profit?from=2026-02-30&to=2026-03-01')).status,
+    ).toBe(400);
+    const empty = (await manager.request('/reports/gross-profit?from=2000-01-01&to=2000-01-01'))
+      .body;
+    expect(Number(empty.grossProfit)).toBe(0);
+    expect(empty.marginPercent).toBeNull();
+  });
+  it('allocates rounded historical cost across partial restocks on their refund dates', async () => {
+    const seed = (await db.pool.query('SELECT * FROM sales LIMIT 1')).rows[0];
+    const sold = (
+      await db.pool.query(
+        `INSERT INTO sales(store_id,device_id,employee_id,shift_id,request_id,request_hash,receipt_number,total,tax,discount,receipt,created_at) VALUES($1,$2,$3,$4,gen_random_uuid(),'profit-fixture',gen_random_uuid()::text,0.03,0,0,$5,'2020-01-01T12:00:00Z') RETURNING id`,
+        [seed.store_id, seed.device_id, seed.employee_id, seed.shift_id, seed.receipt],
+      )
+    ).rows[0].id;
+    await db.pool.query(
+      'INSERT INTO sale_items(store_id,sale_id,product_id,quantity,price,cost,tax_rate,total) VALUES($1,$2,$3,1.5,0.02,0.01,0,0.03)',
+      [seed.store_id, sold, productId],
+    );
+    for (const day of [2, 3, 4]) {
+      const r = (
+        await db.pool.query(
+          `INSERT INTO refunds(store_id,sale_id,shift_id,employee_id,device_id,approver_id,request_id,request_hash,number,method,reason,total,tax,receipt,created_at) VALUES($1,$2,$3,$4,$5,$4,gen_random_uuid(),'fixture',gen_random_uuid()::text,'cash','Fixture',0.01,0,'{}',$6) RETURNING id`,
+          [
+            seed.store_id,
+            sold,
+            seed.shift_id,
+            seed.employee_id,
+            seed.device_id,
+            `2020-01-0${day}T12:00:00Z`,
+          ],
+        )
+      ).rows[0].id;
+      await db.pool.query(
+        'INSERT INTO refund_lines(store_id,refund_id,sale_id,product_id,quantity,restock,total,tax) VALUES($1,$2,$3,$4,0.5,true,0.01,0)',
+        [seed.store_id, r, sold, productId],
+      );
+    }
+    for (const [day, cost] of [
+      [2, '0.01'],
+      [3, '0.00'],
+      [4, '0.01'],
+    ]) {
+      const r = (
+        await manager.request(`/reports/gross-profit?from=2020-01-0${day}&to=2020-01-0${day}`)
+      ).body;
+      expect(r.restoredCost).toBe(cost);
+      expect(r.netRevenue).toBe('-0.01');
+    }
+    const total = (await manager.request('/reports/gross-profit?from=2020-01-01&to=2020-01-04'))
+      .body;
+    expect(total.soldCost).toBe('0.02');
+    expect(total.restoredCost).toBe('0.02');
+    expect(total.grossProfit).toBe('0.00');
+  });
+
+  it('withholds profit when historical cost records are missing', async () => {
+    const seed = (await db.pool.query('SELECT * FROM sales LIMIT 1')).rows[0];
+    await db.pool.query(
+      `INSERT INTO sales(store_id,device_id,employee_id,shift_id,request_id,request_hash,receipt_number,total,tax,discount,receipt,created_at) VALUES($1,$2,$3,$4,gen_random_uuid(),'missing-cost',gen_random_uuid()::text,100,20,0,$5,'2002-01-01T12:00:00Z')`,
+      [seed.store_id, seed.device_id, seed.employee_id, seed.shift_id, seed.receipt],
+    );
+    const r = (await manager.request('/reports/gross-profit?from=2002-01-01&to=2002-01-01')).body;
+    expect(r.salesExTax).toBe('80.00');
+    expect(r.grossProfit).toBeNull();
+    expect(r.costOfGoodsSold).toBeNull();
+    expect(r.missingCostRecords).toBe('1');
+  });
+
+  it('updates store settings, defaults new product tax, and preserves original receipt details', async () => {
+    const profile = (await manager.request('/store-profile')).body;
+    const settings = {
+      ...profile,
+      name: 'Updated Market',
+      address: 'Main street 1',
+      phone: '12345',
+      businessNumber: 'ORG-1',
+      receiptFooter: 'Come again!',
+      defaultTaxRate: '25',
+    };
+    expect((await manager.request('/store-profile', settings)).status).toBe(201);
+    expect((await manager.request('/store-profile', settings)).status).toBe(409);
+    const current = (await manager.request('/store-profile')).body;
+    expect(
+      (await manager.request('/store-profile', { ...current, defaultTaxRate: '101' })).status,
+    ).toBe(400);
+    const { taxRate, ...base } = product;
+    const p = await manager.request('/products', {
+      ...base,
+      name: 'New taxed item',
+      sku: 'SETTINGS',
+      plu: '',
+      barcodes: [],
+      price: '11.50',
+    });
+    expect(p.status).toBe(201);
+    expect(p.body.taxRate).toBe('25.00');
+    expect(
+      (await db.pool.query('SELECT tax_rate FROM products WHERE id=$1', [productId])).rows[0]
+        .tax_rate,
+    ).toBe('0.00');
+    await manager.request('/inventory/adjustments', {
+      requestId: crypto.randomUUID(),
+      productId: p.body.id,
+      quantity: '1',
+      reason: 'opening_balance',
+    });
+    const r = await register.request(
+      '/pos/sales',
+      sale({
+        lines: [
+          { productId: p.body.id, quantity: '1', expectedPrice: '11.50', expectedTaxRate: '25' },
+        ],
+        payment: { method: 'cash', tendered: '11.50' },
+      }),
+    );
+    expect(r.status).toBe(201);
+    expect(r.body).toMatchObject({
+      storeName: 'Updated Market',
+      storeAddress: 'Main street 1',
+      receiptFooter: 'Come again!',
+      businessNumber: 'ORG-1',
+    });
+    await manager.request('/store-profile', {
+      ...current,
+      name: 'Changed again',
+      receiptFooter: 'New footer',
+    });
+    const stored = (await manager.request('/reports/receipt-search/' + r.body.id)).body.receipt;
+    expect(stored.storeName).toBe('Updated Market');
+    expect(stored.receiptFooter).toBe('Come again!');
+    expect((await register.request('/store-profile', current)).status).toBe(401);
+  });
 });

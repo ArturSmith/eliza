@@ -10,15 +10,7 @@ import {
   useLocation,
 } from '@tanstack/react-router';
 import { queryClient } from './api';
-import {
-  Shell,
-  Overview,
-  ProductsPage,
-  InventoryPage,
-  AuditPage,
-  DevicesPage,
-  SettingsPage,
-} from './pages';
+import { Shell, Overview, ProductsPage, InventoryPage, AuditPage, DevicesPage } from './pages';
 import './styles.css';
 import './pos.css';
 const PosPage = lazy(() => import('./pos').then((module) => ({ default: module.PosPage })));
@@ -29,6 +21,7 @@ function CheckoutRoute() {
     </Suspense>
   );
 }
+import { StoreSettingsPage } from './store-settings';
 import { StockCountsPage } from './stock-counts';
 import { SuppliersPage, PurchasesPage } from './purchasing';
 import { TeamManagementPage } from './team';
@@ -59,7 +52,7 @@ const routes = [
   createRoute({ getParentRoute: () => root, path: '/audit', component: AuditPage }),
   createRoute({ getParentRoute: () => root, path: '/team', component: TeamManagementPage }),
   createRoute({ getParentRoute: () => root, path: '/devices', component: DevicesPage }),
-  createRoute({ getParentRoute: () => root, path: '/settings', component: SettingsPage }),
+  createRoute({ getParentRoute: () => root, path: '/settings', component: StoreSettingsPage }),
 ];
 const router = createRouter({ routeTree: root.addChildren(routes) });
 declare module '@tanstack/react-router' {

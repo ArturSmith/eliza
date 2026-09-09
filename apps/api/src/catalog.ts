@@ -41,7 +41,21 @@ export class CatalogController {
     }));
   }
   @Post() @Require('catalog.write') async create(@Body() input: unknown, @Req() req: AuthRequest) {
-    const { barcodes: values, plu, ...body } = parse(productSchema, input);
+    const defaults = (
+      await this.database.pool.query('SELECT default_tax_rate FROM stores WHERE id=$1', [
+        req.context.store.id,
+      ])
+    ).rows[0];
+    const {
+      barcodes: values,
+      plu,
+      ...body
+    } = parse(
+      productSchema,
+      typeof input === 'object' && input !== null
+        ? { taxRate: defaults.default_tax_rate, ...input }
+        : input,
+    );
     const { store, user, device } = req.context;
     return this.database.db.transaction(async (tx) => {
       const [product] = await tx

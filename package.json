@@ -13,7 +13,12 @@
     "db:stop": "node scripts/database.mjs stop",
     "db:migrate": "pnpm --filter @eliza/api migrate",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "db:backup": "node scripts/backup.mjs create",
+    "db:verify-backup": "node scripts/backup.mjs verify",
+    "ops:check": "node scripts/readiness.mjs",
+    "account:recover": "node scripts/recover-owner.mjs",
+    "db:restore-new": "node scripts/backup.mjs restore-new"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",
