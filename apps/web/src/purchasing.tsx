@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
+import { Search } from 'lucide-react';
 import {
   supplierSchema,
   fromScaled,
@@ -8,7 +9,7 @@ import {
   type Product,
 } from '@eliza/contracts';
 import { api, ApiError, refresh, useProducts, useSession } from './api';
-import { Field, ErrorMessage, ProductForm } from './forms';
+import { Field, ErrorMessage, ProductForm, SearchSelect } from './forms';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { formatMoney } from './receipts';
@@ -77,14 +78,49 @@ function CostComparison({
     </div>
   );
 }
+function SupplierSummary({ supplier }: { supplier: Supplier }) {
+  const details: [string, string][] = [
+    ['Code', supplier.code],
+    ['Contact', supplier.contactName],
+    ['Email', supplier.email],
+    ['Phone', supplier.phone],
+    ['Address', supplier.address],
+    ['Company number', supplier.companyNumber],
+    ['Payment terms', supplier.paymentTerms],
+  ];
+  const shown = details.filter(([, value]) => value);
+  return (
+    <div className="supplier-summary">
+      <div className="supplier-summary-head">
+        <strong>{supplier.name}</strong>
+        {!supplier.active && <span className="supplier-summary-flag">Inactive</span>}
+      </div>
+      {shown.length ? (
+        <dl>
+          {shown.map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd>{value}</dd>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="muted">No contact details recorded for this supplier.</p>
+      )}
+      {supplier.notes && <p className="supplier-summary-notes">{supplier.notes}</p>}
+    </div>
+  );
+}
 function Heading({
   title,
   description,
   className = '',
+  action,
 }: {
   title: string;
   description: string;
   className?: string;
+  action?: ReactNode;
 }) {
   return (
     <div className={'page-heading ' + className}>
@@ -93,6 +129,7 @@ function Heading({
         <h1>{title}</h1>
         <p className="muted">{description}</p>
       </div>
+      {action}
     </div>
   );
 }
@@ -100,57 +137,83 @@ export function SuppliersPage() {
   const q = useQuery({ queryKey: ['suppliers'], queryFn: () => api<Supplier[]>('/suppliers') });
   const [editing, setEditing] = useState<Supplier | null | undefined>();
   const [search, setSearch] = useState('');
+  const rows = (q.data ?? []).filter((s) =>
+    [s.name, s.code, s.contactName, s.email, s.phone].some((v) =>
+      (v ?? '').toLowerCase().includes(search.trim().toLowerCase()),
+    ),
+  );
   return (
     <>
-      <Heading title="Suppliers" description="Supplier contacts and ordering details." />
-      <Button onClick={() => setEditing(null)}>Add supplier</Button>
-      <Field label="Search suppliers">
-        <input value={search} onChange={(e) => setSearch(e.target.value)} />
-      </Field>
-      <ErrorMessage error={q.error} />
-      <section className="panel table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Supplier</th>
-              <th>Contact</th>
-              <th>Terms</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {q.data
-              ?.filter((s) => (s.name + s.code).toLowerCase().includes(search.toLowerCase()))
-              .map((s) => (
-                <tr key={s.id}>
-                  <td>
-                    <strong>{s.name}</strong>
-                    <small>{s.code}</small>
-                  </td>
-                  <td>
-                    {s.contactName}
-                    <small>
-                      {s.email} {s.phone}
-                    </small>
-                  </td>
-                  <td>{s.paymentTerms || '—'}</td>
-                  <td>{s.active ? 'Active' : 'Inactive'}</td>
-                  <td>
-                    <Button variant="ghost" onClick={() => setEditing(s)}>
-                      Edit supplier
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+      <Heading
+        title="Suppliers"
+        description="Supplier contacts and ordering details."
+        action={<Button onClick={() => setEditing(null)}>Add supplier</Button>}
+      />
+      <section className="panel">
+        <div className="table-toolbar">
+          <div className="search-box">
+            <Search size={18} />
+            <input
+              aria-label="Search suppliers"
+              placeholder="Search name, code, contact, email, or phone…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <span className="muted">
+            {rows.length} {rows.length === 1 ? 'supplier' : 'suppliers'}
+          </span>
+        </div>
+        <ErrorMessage error={q.error} />
         {q.isPending ? (
           <p className="panel-padding">Loading suppliers…</p>
+        ) : rows.length ? (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Supplier</th>
+                  <th>Contact</th>
+                  <th>Terms</th>
+                  <th>Status</th>
+                  <th className="table-actions-column">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((s) => (
+                  <tr key={s.id}>
+                    <td>
+                      <strong>{s.name}</strong>
+                      <small>{s.code}</small>
+                    </td>
+                    <td>
+                      {s.contactName || '—'}
+                      {(s.email || s.phone) && (
+                        <small>{[s.email, s.phone].filter(Boolean).join(' · ')}</small>
+                      )}
+                    </td>
+                    <td>{s.paymentTerms || '—'}</td>
+                    <td>
+                      <span className={`badge badge-${s.active ? 'green' : 'gray'}`}>
+                        {s.active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="table-actions-column">
+                      <Button variant="ghost" onClick={() => setEditing(s)}>
+                        Edit
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
-          !q.data?.length && (
-            <p className="panel-padding">Add your first supplier to start purchasing.</p>
-          )
+          <p className="panel-padding">
+            {q.data?.length
+              ? `No suppliers match “${search.trim()}”.`
+              : 'Add your first supplier to start purchasing.'}
+          </p>
         )}
       </section>
       <Dialog
@@ -242,81 +305,122 @@ function SupplierForm({
           </Field>
         ))}
       </div>
-      <label>
+      <label className="checkbox-field">
         <input
           type="checkbox"
           checked={value.active}
           onChange={(e) => setValue({ ...value, active: e.target.checked })}
-        />{' '}
+        />
         Active supplier
       </label>
       <ErrorMessage error={mutation.error} />
-      <Button disabled={mutation.isPending}>Save supplier</Button>
+      <div className="form-actions">
+        <Button disabled={mutation.isPending}>
+          {mutation.isPending ? 'Saving…' : 'Save supplier'}
+        </Button>
+      </div>
     </form>
   );
 }
+const statusTone: Record<string, string> = {
+  draft: 'gray',
+  ordered: 'amber',
+  partially_received: 'amber',
+  received: 'green',
+  cancelled: 'gray',
+};
 export function PurchasesPage() {
   const q = useQuery({ queryKey: ['purchases'], queryFn: () => api<Order[]>('/purchases') });
+  const currency = useSession().data?.store.currency ?? 'NOK';
   const [selected, setSelected] = useState<string>();
   const [create, setCreate] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const terms = search.trim().toLowerCase();
+  const rows = (q.data ?? []).filter(
+    (p) =>
+      (filter === 'all' || p.status === filter) &&
+      [p.number, p.supplierName, p.supplier_reference].some((v) =>
+        (v ?? '').toLowerCase().includes(terms),
+      ),
+  );
   return (
     <>
       <Heading
         title="Purchase orders"
         className="purchases-heading"
         description="Order stock, then record each delivery when it arrives. Costs exclude tax."
+        action={<Button onClick={() => setCreate(true)}>New purchase order</Button>}
       />
-      <Button className="purchase-create-button" onClick={() => setCreate(true)}>
-        New purchase order
-      </Button>
-      <Field label="Order status">
-        <select
-          className="purchase-status-select"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        >
-          {['all', 'draft', 'ordered', 'partially_received', 'received', 'cancelled'].map((s) => (
-            <option key={s} value={s}>
-              {s.replaceAll('_', ' ')}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <ErrorMessage error={q.error} />
-      <section className="panel table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Order</th>
-              <th>Supplier</th>
-              <th>Status</th>
-              <th>Total incl. tax</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {q.data
-              ?.filter((p) => filter === 'all' || p.status === filter)
-              .map((p) => (
-                <tr key={p.id}>
-                  <td>{p.number}</td>
-                  <td>{p.supplierName}</td>
-                  <td>{p.status.replaceAll('_', ' ')}</td>
-                  <td>{p.total}</td>
-                  <td>
-                    <Button variant="ghost" onClick={() => setSelected(p.id)}>
-                      View order
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+      <section className="panel">
+        <div className="table-toolbar">
+          <div className="search-box">
+            <Search size={18} />
+            <input
+              aria-label="Search purchase orders"
+              placeholder="Search order number, supplier, or reference…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <select
+            aria-label="Filter order status"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          >
+            {['all', 'draft', 'ordered', 'partially_received', 'received', 'cancelled'].map((s) => (
+              <option key={s} value={s}>
+                {s === 'all' ? 'All statuses' : s.replaceAll('_', ' ')}
+              </option>
+            ))}
+          </select>
+          <span className="muted">
+            {rows.length} {rows.length === 1 ? 'order' : 'orders'}
+          </span>
+        </div>
+        <ErrorMessage error={q.error} />
         {q.isPending ? (
           <p className="panel-padding">Loading orders…</p>
+        ) : rows.length ? (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Order</th>
+                  <th>Supplier</th>
+                  <th>Status</th>
+                  <th className="table-number-column">Total incl. tax</th>
+                  <th className="table-actions-column">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((p) => (
+                  <tr key={p.id}>
+                    <td>
+                      <strong>{p.number}</strong>
+                      {p.supplier_reference && <small>{p.supplier_reference}</small>}
+                    </td>
+                    <td>{p.supplierName}</td>
+                    <td>
+                      <span className={`badge badge-${statusTone[p.status] ?? 'gray'}`}>
+                        {p.status.replaceAll('_', ' ')}
+                      </span>
+                    </td>
+                    <td className="table-number-column">{formatMoney(p.total, currency)}</td>
+                    <td className="table-actions-column">
+                      <Button variant="ghost" onClick={() => setSelected(p.id)}>
+                        View
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
-          !q.data?.length && <p className="panel-padding">No purchase orders yet.</p>
+          <p className="panel-padding">
+            {q.data?.length ? 'No orders match this search or filter.' : 'No purchase orders yet.'}
+          </p>
         )}
       </section>
       {selected && <OrderDetail id={selected} close={() => setSelected(undefined)} />}
@@ -344,6 +448,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
     queryFn: () => api<Supplier[]>('/suppliers'),
   });
   const products = useProducts();
+  const currency = useSession().data?.store.currency ?? 'NOK';
   const [supplierId, setSupplier] = useState(order?.supplier_id ?? '');
   const [addingSupplier, setAddingSupplier] = useState(false);
   const [addingProduct, setAddingProduct] = useState<number | null>(null);
@@ -360,6 +465,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
     ...(suppliers.data ?? []),
     ...createdSuppliers.filter((s) => !suppliers.data?.some((item) => item.id === s.id)),
   ];
+  const selectedSupplier = availableSuppliers.find((s) => s.id === supplierId);
   const [reference, setReference] = useState(order?.supplier_reference ?? '');
   const [expectedDate, setDate] = useState(order?.expected_date?.slice(0, 10) ?? '');
   const [notes, setNotes] = useState(order?.notes ?? '');
@@ -387,6 +493,38 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
       ),
     );
   }
+  const [activeIndex, setActiveIndex] = useState(lines.length - 1);
+  const [lineError, setLineError] = useState('');
+  const decimal = /^\d{1,9}(\.\d{1,3})?$/;
+  function lineComplete(line: (typeof lines)[number]) {
+    return (
+      !!line.productId &&
+      decimal.test(line.quantity.trim()) &&
+      Number(line.quantity) > 0 &&
+      decimal.test(line.unitCost.trim()) &&
+      decimal.test(line.taxRate.trim())
+    );
+  }
+  function nextProduct() {
+    const current = lines[activeIndex];
+    if (!current || !lineComplete(current)) {
+      setLineError('Choose a product and enter a valid quantity, unit cost, and tax rate first.');
+      return;
+    }
+    setLineError('');
+    setLines([
+      ...lines,
+      { productId: '', quantity: '1', unitCost: '0', taxRate: '0', sellingPrice: '' },
+    ]);
+    setActiveIndex(lines.length);
+  }
+  function removeLine(index: number) {
+    setLines(lines.filter((_, i) => i !== index));
+    setActiveIndex((current) => {
+      if (index === current) return -1;
+      return index < current ? current - 1 : current;
+    });
+  }
   const [requestId] = useState(() => crypto.randomUUID());
   const mutation = useMutation({
     mutationFn: () =>
@@ -398,7 +536,9 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
         supplierReference: reference,
         expectedDate,
         notes,
-        lines: lines.map((line) => ({ ...line, sellingPrice: line.sellingPrice || undefined })),
+        lines: lines
+          .filter((line) => line.productId)
+          .map((line) => ({ ...line, sellingPrice: line.sellingPrice || undefined })),
       }),
     onSuccess: (p) => {
       void refresh();
@@ -410,139 +550,204 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          if (!lines.some((line) => line.productId)) {
+            setLineError('Add at least one product to this order.');
+            return;
+          }
+          setLineError('');
           mutation.mutate();
         }}
       >
-        <Field label="Supplier">
-          <select
-            required
-            value={supplierId}
-            onChange={(e) => {
-              if (e.target.value === '__new') setAddingSupplier(true);
-              else setSupplier(e.target.value);
-            }}
-          >
-            <option value="" hidden disabled />
-            <option value="__new">Add new supplier</option>
-            {availableSuppliers
-              ?.filter((s) => s.active)
-              .map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-          </select>
-        </Field>
+        <SearchSelect
+          label="Supplier"
+          placeholder="Select a supplier"
+          value={
+            selectedSupplier && { title: selectedSupplier.name, subtitle: selectedSupplier.code }
+          }
+          options={(availableSuppliers ?? [])
+            .filter((s) => s.active)
+            .map((s) => ({
+              id: s.id,
+              title: s.name,
+              subtitle: [s.code, s.contactName, s.phone].filter(Boolean).join(' · '),
+              keywords: [s.name, s.code, s.contactName, s.email, s.phone, s.companyNumber],
+            }))}
+          createLabel="Add new supplier"
+          onCreate={() => setAddingSupplier(true)}
+          onSelect={setSupplier}
+        />
+        {selectedSupplier && <SupplierSummary supplier={selectedSupplier} />}
         <Field label="Supplier reference">
           <input value={reference} onChange={(e) => setReference(e.target.value)} />
         </Field>
         <Field label="Expected delivery">
           <input type="date" value={expectedDate} onChange={(e) => setDate(e.target.value)} />
         </Field>
-        {lines.map((line, index) => (
-          <fieldset key={index}>
-            <legend>Order line {index + 1}</legend>
-            <div className="purchase-product-picker">
-              <Field label="Product">
-                <select
-                  required
-                  value={line.productId}
-                  onChange={(e) => {
-                    if (e.target.value === '__new') setAddingProduct(index);
-                    else {
-                      const product = availableProducts.find((p) => p.id === e.target.value);
-                      if (product) selectProduct(index, product);
-                    }
+        {lines.map((line, index) => {
+          const product = availableProducts.find((p) => p.id === line.productId);
+          if (index !== activeIndex)
+            return (
+              <div key={index} className="purchase-line-summary">
+                <div className="purchase-line-summary-text">
+                  <strong>{product ? product.name : 'Product not selected'}</strong>
+                  <span className="muted">
+                    {product
+                      ? `${line.quantity} ${product.unit} · ${formatMoney(line.unitCost || '0', currency)} excl. tax`
+                      : 'Incomplete line'}
+                  </span>
+                </div>
+                <div className="purchase-line-summary-actions">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setLineError('');
+                      setActiveIndex(index);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => removeLine(index)}>
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            );
+          return (
+            <fieldset key={index} className="purchase-line">
+              <div className="purchase-product-picker">
+                <SearchSelect
+                  label="Product"
+                  placeholder="Select a product"
+                  value={
+                    product && { title: product.name, subtitle: `${product.sku} (${product.unit})` }
+                  }
+                  options={availableProducts
+                    .filter((p) => p.active)
+                    .map((p) => ({
+                      id: p.id,
+                      title: p.name,
+                      subtitle: `${p.sku} · ${p.unit}`,
+                      keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
+                    }))}
+                  createLabel="Create new product"
+                  onCreate={() => setAddingProduct(index)}
+                  onSelect={(id) => {
+                    const selected = availableProducts.find((p) => p.id === id);
+                    if (selected) selectProduct(index, selected);
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setBarcode('');
+                    setScanError('');
+                    setScanLine(index);
                   }}
                 >
-                  <option value="" hidden disabled />
-                  <option value="__new">Create new product</option>
-                  {availableProducts
-                    ?.filter((p) => p.active)
-                    .map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} · {p.sku} ({p.unit})
-                      </option>
-                    ))}
-                </select>
-              </Field>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setBarcode('');
-                  setScanError('');
-                  setScanLine(index);
-                }}
-              >
-                Scan barcode
-              </Button>
-            </div>
-            {(['quantity', 'unitCost', 'sellingPrice', 'taxRate'] as const).map((key) => (
-              <Field
-                key={key}
-                label={
-                  {
-                    quantity: 'Quantity',
-                    unitCost: 'Unit cost excl. tax',
-                    sellingPrice: 'Proposed selling price incl. tax (optional)',
-                    taxRate: 'Purchase tax %',
-                  }[key]
-                }
-              >
+                  Scan barcode
+                </Button>
+              </div>
+              <Field label="Quantity">
                 <input
-                  required={key !== 'sellingPrice'}
+                  required
                   inputMode="decimal"
-                  value={line[key]}
+                  value={line.quantity}
                   onChange={(e) =>
                     setLines(
-                      lines.map((l, i) => (i === index ? { ...l, [key]: e.target.value } : l)),
+                      lines.map((l, i) => (i === index ? { ...l, quantity: e.target.value } : l)),
                     )
                   }
                 />
               </Field>
-            ))}
-            {line.productId && (
-              <>
+              <Field label="Unit cost excl. tax">
+                <input
+                  required
+                  inputMode="decimal"
+                  value={line.unitCost}
+                  onChange={(e) =>
+                    setLines(
+                      lines.map((l, i) => (i === index ? { ...l, unitCost: e.target.value } : l)),
+                    )
+                  }
+                />
+              </Field>
+              {line.productId && (
                 <CostComparison
                   cost={line.unitCost}
-                  previous={availableProducts.find((p) => p.id === line.productId)?.cost}
-                  price={availableProducts.find((p) => p.id === line.productId)?.price}
+                  previous={product?.cost}
+                  price={product?.price}
                 />
-                <p className="muted">
-                  Leave blank to keep the current selling price. Confirm any proposed price when
-                  receiving the delivery. Saving this order does not change checkout prices.
-                </p>
-              </>
-            )}
-            {lines.length > 1 && (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setLines(lines.filter((_, i) => i !== index))}
+              )}
+              <Field
+                label="Proposed selling price incl. tax (optional)"
+                hint="Leave blank to keep the current selling price. Confirm any proposed price when receiving the delivery. Saving this order does not change checkout prices."
               >
-                Remove line
-              </Button>
-            )}
-          </fieldset>
-        ))}
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() =>
-            setLines([
-              ...lines,
-              { productId: '', quantity: '1', unitCost: '0', taxRate: '0', sellingPrice: '' },
-            ])
-          }
-        >
-          Add line
-        </Button>
+                <input
+                  inputMode="decimal"
+                  value={line.sellingPrice}
+                  onChange={(e) =>
+                    setLines(
+                      lines.map((l, i) =>
+                        i === index ? { ...l, sellingPrice: e.target.value } : l,
+                      ),
+                    )
+                  }
+                />
+              </Field>
+              <Field label="Purchase tax %">
+                <input
+                  required
+                  inputMode="decimal"
+                  value={line.taxRate}
+                  onChange={(e) =>
+                    setLines(
+                      lines.map((l, i) => (i === index ? { ...l, taxRate: e.target.value } : l)),
+                    )
+                  }
+                />
+              </Field>
+              {lines.length > 1 && (
+                <Button type="button" variant="ghost" onClick={() => removeLine(index)}>
+                  Remove line
+                </Button>
+              )}
+            </fieldset>
+          );
+        })}
+        {lineError && <p className="field-error">{lineError}</p>}
+        <div className="purchase-line-controls">
+          {activeIndex === -1 ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setLineError('');
+                setLines([
+                  ...lines,
+                  { productId: '', quantity: '1', unitCost: '0', taxRate: '0', sellingPrice: '' },
+                ]);
+                setActiveIndex(lines.length);
+              }}
+            >
+              Add product
+            </Button>
+          ) : (
+            <Button type="button" variant="outline" onClick={nextProduct}>
+              Next product
+            </Button>
+          )}
+        </div>
         <Field label="Order notes">
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
         <ErrorMessage error={mutation.error} />
-        <Button disabled={mutation.isPending}>Save draft</Button>
+        <div className="form-actions">
+          <Button disabled={mutation.isPending}>
+            {mutation.isPending ? 'Saving…' : 'Save draft'}
+          </Button>
+        </div>
       </form>
       <Dialog
         elevated

@@ -1,6 +1,8 @@
 import {
   useState,
   useId,
+  useRef,
+  useEffect,
   Children,
   cloneElement,
   isValidElement,
@@ -9,7 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Plus, ArrowRight, Store, PackagePlus } from 'lucide-react';
+import { Plus, ArrowRight, Store, PackagePlus, ChevronDown } from 'lucide-react';
 import {
   productSchema,
   setupSchema,
@@ -385,9 +387,120 @@ export function AddProduct() {
     </>
   );
 }
+export function SearchSelect({
+  label,
+  placeholder,
+  value,
+  options,
+  createLabel,
+  onCreate,
+  onSelect,
+}: {
+  label: string;
+  placeholder: string;
+  value?: { title: string; subtitle?: string };
+  options: { id: string; title: string; subtitle?: string; keywords: string[] }[];
+  createLabel?: string;
+  onCreate?: () => void;
+  onSelect: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const container = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!container.current?.contains(event.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [open]);
+  const terms = query.trim().toLowerCase();
+  const matches = terms
+    ? options.filter((option) => option.keywords.some((k) => k.toLowerCase().includes(terms)))
+    : options;
+  return (
+    <div className="search-select" ref={container}>
+      <span className="search-select-label">{label}</span>
+      <button
+        type="button"
+        className="search-select-trigger"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => {
+          setQuery('');
+          setOpen((current) => !current);
+        }}
+      >
+        <span className={value ? 'search-select-value' : 'search-select-placeholder'}>
+          {value ? value.title : placeholder}
+          {value?.subtitle && <small>{value.subtitle}</small>}
+        </span>
+        <ChevronDown size={16} />
+      </button>
+      {open && (
+        <div className="search-select-panel">
+          <input
+            autoFocus
+            className="search-select-search"
+            placeholder="Search…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setOpen(false);
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                if (matches.length === 1) {
+                  onSelect(matches[0].id);
+                  setOpen(false);
+                }
+              }
+            }}
+          />
+          <div className="search-select-options" role="listbox">
+            {createLabel && onCreate && (
+              <button
+                type="button"
+                className="search-select-option search-select-create"
+                onClick={() => {
+                  setOpen(false);
+                  onCreate();
+                }}
+              >
+                <Plus size={15} />
+                {createLabel}
+              </button>
+            )}
+            {matches.length ? (
+              matches.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="option"
+                  className="search-select-option"
+                  onClick={() => {
+                    onSelect(option.id);
+                    setOpen(false);
+                  }}
+                >
+                  <span>{option.title}</span>
+                  {option.subtitle && <small>{option.subtitle}</small>}
+                </button>
+              ))
+            ) : (
+              <p className="search-select-empty">No matches for “{query.trim()}”.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 export function AdjustmentForm({ products, onDone }: { products: Product[]; onDone: () => void }) {
   const [error, setError] = useState<unknown>(null);
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const [productId, setProductId] = useState('');
+  const selected = products.find((p) => p.id === productId);
   const mutation = useMutation({
     mutationFn: (body: unknown) => api('/inventory/adjustments', body),
     onSuccess: () => {
@@ -398,7 +511,7 @@ export function AdjustmentForm({ products, onDone }: { products: Product[]; onDo
   function submit(e: FormEvent<HTMLFormElement>) {
     setError(null);
     const data = values(e);
-    const result = adjustmentSchema.safeParse({ ...data, requestId });
+    const result = adjustmentSchema.safeParse({ ...data, productId, requestId });
     if (!result.success) {
       setError(result.error.issues.map((i) => i.message).join('. '));
       return;
@@ -413,20 +526,29 @@ export function AdjustmentForm({ products, onDone }: { products: Product[]; onDo
         mutation.reset();
       }}
     >
-      <Field label="Product">
-        <select name="productId" required defaultValue="">
-          <option value="" disabled>
-            Select a product
-          </option>
-          {products
-            .filter((p) => p.active)
-            .map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} · {Number(p.stock)} {p.unit} on hand
-              </option>
-            ))}
-        </select>
-      </Field>
+      <SearchSelect
+        label="Product"
+        placeholder="Select a product"
+        value={
+          selected && {
+            title: selected.name,
+            subtitle: `${Number(selected.stock)} ${selected.unit} on hand`,
+          }
+        }
+        options={products
+          .filter((p) => p.active)
+          .map((p) => ({
+            id: p.id,
+            title: p.name,
+            subtitle: `${p.sku} · ${Number(p.stock)} ${p.unit} on hand`,
+            keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
+          }))}
+        onSelect={(id) => {
+          setProductId(id);
+          setRequestId(crypto.randomUUID());
+          mutation.reset();
+        }}
+      />
       <Field
         label="Quantity change"
         hint="Use a positive quantity to add stock or a negative quantity to remove it."
@@ -460,7 +582,7 @@ export function AdjustmentForm({ products, onDone }: { products: Product[]; onDo
         <Button type="button" variant="outline" onClick={onDone}>
           Cancel
         </Button>
-        <Button disabled={mutation.isPending}>
+        <Button disabled={mutation.isPending || !productId}>
           {mutation.isPending ? 'Recording…' : 'Record adjustment'}
         </Button>
       </div>

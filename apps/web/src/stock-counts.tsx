@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Search } from 'lucide-react';
 import { api, ApiError, refresh, useProducts, useSession } from './api';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
@@ -27,6 +28,13 @@ type Count = {
   lines: Line[];
 };
 type Command = { path: string; body: Record<string, unknown> };
+const countStatusTone: Record<string, string> = {
+  draft: 'gray',
+  counting: 'amber',
+  review: 'amber',
+  finalized: 'green',
+  cancelled: 'gray',
+};
 export function StockCountsPage() {
   const list = useQuery({
     queryKey: ['stock-counts'],
@@ -34,8 +42,16 @@ export function StockCountsPage() {
   });
   const [selected, setSelected] = useState<string>();
   const [creating, setCreating] = useState(false);
+  const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState('all');
   const session = useSession().data!;
   const manage = session.user.permissions.includes('counts.manage');
+  const terms = search.trim().toLowerCase();
+  const rows = (list.data ?? []).filter(
+    (c) =>
+      (filter === 'all' || c.status === filter) &&
+      [c.name, c.creator, c.notes].some((v) => (v ?? '').toLowerCase().includes(terms)),
+  );
   return (
     <>
       <div className="page-heading">
@@ -53,38 +69,78 @@ export function StockCountsPage() {
         Count when stock is not moving. Sales, deliveries, or adjustments after the count starts
         require a fresh count before finalization.
       </p>
-      <ErrorMessage error={list.error} />
-      <section className="panel table-scroll">
-        <table>
-          <thead>
-            <tr>
-              <th>Count</th>
-              <th>Status</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.data?.map((c) => (
-              <tr key={c.id}>
-                <td>{c.name}</td>
-                <td>{c.status}</td>
-                <td>
-                  <Button variant="ghost" onClick={() => setSelected(c.id)}>
-                    Open count
-                  </Button>
-                </td>
-              </tr>
+      <section className="panel">
+        <div className="table-toolbar">
+          <div className="search-box">
+            <Search size={18} />
+            <input
+              aria-label="Search stock counts"
+              placeholder="Search count name, creator, or notes…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+          <select
+            aria-label="Filter count status"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          >
+            {['all', 'draft', 'counting', 'review', 'finalized', 'cancelled'].map((s) => (
+              <option key={s} value={s}>
+                {s === 'all' ? 'All statuses' : s}
+              </option>
             ))}
-          </tbody>
-        </table>
+          </select>
+          <span className="muted">
+            {rows.length} {rows.length === 1 ? 'count' : 'counts'}
+          </span>
+        </div>
+        <ErrorMessage error={list.error} />
         {list.isPending ? (
           <p className="panel-padding">Loading counts…</p>
+        ) : rows.length ? (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Count</th>
+                  <th>Status</th>
+                  <th className="table-number-column">Products</th>
+                  <th className="table-actions-column">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      <strong>{c.name}</strong>
+                      <small>
+                        {c.creator}
+                        {c.finalizer ? ` · finalized by ${c.finalizer}` : ''}
+                      </small>
+                    </td>
+                    <td>
+                      <span className={`badge badge-${countStatusTone[c.status] ?? 'gray'}`}>
+                        {c.status}
+                      </span>
+                    </td>
+                    <td className="table-number-column">{c.lines.length}</td>
+                    <td className="table-actions-column">
+                      <Button variant="ghost" onClick={() => setSelected(c.id)}>
+                        Open
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         ) : (
-          !list.data?.length && (
-            <p className="panel-padding">
-              No stock counts yet. Create one for the products you want to count.
-            </p>
-          )
+          <p className="panel-padding">
+            {list.data?.length
+              ? 'No counts match this search or filter.'
+              : 'No stock counts yet. Create one for the products you want to count.'}
+          </p>
         )}
       </section>
       {selected && <CountDetail id={selected} />}
@@ -115,6 +171,10 @@ function CreateCount({ done }: { done: (id: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
   const [payload, setPayload] = useState<Record<string, unknown>>();
+  const terms = search.trim().toLowerCase();
+  const matches = (products.data ?? []).filter((p) =>
+    [p.name, p.sku].some((v) => v.toLowerCase().includes(terms)),
+  );
   async function submit() {
     setBusy(true);
     try {
@@ -144,48 +204,72 @@ function CreateCount({ done }: { done: (id: string) => void }) {
         <Field label="Count notes">
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
-        <Field label="Find products">
-          <input value={search} onChange={(e) => setSearch(e.target.value)} />
-        </Field>
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() =>
-            setIds(
-              (products.data ?? [])
-                .filter((p) => p.active)
-                .slice(0, 500)
-                .map((p) => p.id),
-            )
-          }
-        >
-          Select active products (up to 500)
-        </Button>
-        <Button type="button" variant="ghost" onClick={() => setIds([])}>
-          Clear selection
-        </Button>
-        <p>{ids.length} products selected</p>
-        <div style={{ maxHeight: 260, overflow: 'auto' }}>
-          {products.data
-            ?.filter((p) => (p.name + ' ' + p.sku).toLowerCase().includes(search.toLowerCase()))
-            .map((p) => (
-              <label key={p.id} style={{ display: 'block', padding: 8 }}>
-                <input
-                  type="checkbox"
-                  checked={ids.includes(p.id)}
-                  onChange={(e) =>
-                    setIds(e.target.checked ? [...ids, p.id] : ids.filter((id) => id !== p.id))
-                  }
-                />{' '}
-                {p.name} · {p.sku} ({p.unit}){!p.active ? ' · Inactive' : ''}
-              </label>
-            ))}
+        <div className="count-picker">
+          <div className="count-picker-toolbar">
+            <div className="search-box">
+              <Search size={17} />
+              <input
+                aria-label="Find products"
+                placeholder="Search name or SKU…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                setIds(
+                  (products.data ?? [])
+                    .filter((p) => p.active)
+                    .slice(0, 500)
+                    .map((p) => p.id),
+                )
+              }
+            >
+              Select all active
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => setIds([])} disabled={!ids.length}>
+              Clear
+            </Button>
+          </div>
+          <div className="count-picker-status">
+            <span className={ids.length > 500 ? 'count-picker-over' : 'muted'}>
+              {ids.length} of 500 products selected
+            </span>
+          </div>
+          <div className="count-picker-list">
+            {matches.length ? (
+              matches.map((p) => (
+                <label key={p.id} className="count-picker-option">
+                  <input
+                    type="checkbox"
+                    checked={ids.includes(p.id)}
+                    onChange={(e) =>
+                      setIds(e.target.checked ? [...ids, p.id] : ids.filter((id) => id !== p.id))
+                    }
+                  />
+                  <span className="count-picker-option-text">
+                    <strong>{p.name}</strong>
+                    <small>
+                      {p.sku} · {p.unit}
+                      {!p.active ? ' · Inactive' : ''}
+                    </small>
+                  </span>
+                </label>
+              ))
+            ) : (
+              <p className="count-picker-empty">No products match “{search.trim()}”.</p>
+            )}
+          </div>
         </div>
       </fieldset>
       <ErrorMessage error={products.error ?? error} />
-      <Button disabled={busy || !ids.length || ids.length > 500}>
-        {payload ? 'Retry creation' : 'Create draft'}
-      </Button>
+      <div className="form-actions">
+        <Button disabled={busy || !ids.length || ids.length > 500}>
+          {busy ? 'Creating…' : payload ? 'Retry creation' : 'Create draft'}
+        </Button>
+      </div>
     </form>
   );
 }
