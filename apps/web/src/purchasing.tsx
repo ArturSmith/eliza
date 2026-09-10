@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Search } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import {
   supplierSchema,
   fromScaled,
@@ -854,68 +854,136 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
   });
   const p = q.data;
   return (
-    <section className="panel panel-padding" style={{ marginTop: 24 }}>
-      <Button variant="ghost" onClick={close}>
-        Close order
-      </Button>
-      <ErrorMessage error={q.error} />
+    <section className="panel order-detail">
+      <div className="order-detail-head">
+        <div className="order-detail-title">
+          <div className="order-detail-number">
+            <h2>{p ? p.number : 'Order'}</h2>
+            {p && (
+              <span className={`badge badge-${statusTone[p.status] ?? 'gray'}`}>
+                {p.status.replaceAll('_', ' ')}
+              </span>
+            )}
+          </div>
+          {p && (
+            <p className="muted">
+              {p.supplierName}
+              {p.supplier_reference ? ` · ${p.supplier_reference}` : ''} ·{' '}
+              {formatMoney(p.total, currency)} incl. tax
+            </p>
+          )}
+        </div>
+        <Button variant="ghost" onClick={close}>
+          <X size={16} />
+          Close
+        </Button>
+      </div>
+      {q.error && (
+        <div className="panel-padding">
+          <ErrorMessage error={q.error} />
+        </div>
+      )}
       {p && (
         <>
-          <h2>
-            {p.number} · {p.supplierName}
-          </h2>
-          <p>
-            {p.status.replaceAll('_', ' ')} · {formatMoney(p.total, currency)}
-          </p>
-          <p>{p.notes}</p>
+          {p.notes && <p className="order-detail-notes">{p.notes}</p>}
           <div className="table-scroll">
             <table>
               <thead>
                 <tr>
                   <th>Product</th>
-                  <th>Ordered</th>
-                  <th>Received</th>
-                  <th>Cost excl. tax</th>
-                  <th>Tax %</th>
+                  <th className="table-number-column">Ordered</th>
+                  <th className="table-number-column">Received</th>
+                  <th className="table-number-column">Cost excl. tax</th>
+                  <th className="table-number-column">Tax %</th>
                 </tr>
               </thead>
               <tbody>
                 {p.lines.map((l) => (
                   <tr key={l.id}>
                     <td>
-                      {l.product_name}
+                      <strong>{l.product_name}</strong>
                       <small>{l.sku}</small>
                     </td>
-                    <td>
-                      {l.ordered_quantity} {l.unit}
+                    <td className="table-number-column">
+                      {Number(l.ordered_quantity)} {l.unit}
                     </td>
-                    <td>{l.received_quantity}</td>
-                    <td>{formatMoney(l.unit_cost, currency)}</td>
-                    <td>{l.tax_rate}</td>
+                    <td className="table-number-column">
+                      {Number(l.received_quantity)} {l.unit}
+                    </td>
+                    <td className="table-number-column">{formatMoney(l.unit_cost, currency)}</td>
+                    <td className="table-number-column">{Number(l.tax_rate)}%</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          {p.status === 'draft' && (
-            <Button variant="outline" onClick={() => setEditing(true)}>
-              Edit draft
-            </Button>
+          <div className="order-detail-actions">
+            {p.status === 'draft' && (
+              <Button disabled={status.isPending} onClick={() => status.mutate('ordered')}>
+                {status.isPending ? 'Placing…' : 'Place order'}
+              </Button>
+            )}
+            {['ordered', 'partially_received'].includes(p.status) && (
+              <Button onClick={() => setReceiving(true)}>Receive delivery</Button>
+            )}
+            {p.status === 'draft' && (
+              <Button variant="outline" onClick={() => setEditing(true)}>
+                Edit draft
+              </Button>
+            )}
+            {['draft', 'ordered'].includes(p.status) && (
+              <Button variant="ghost" onClick={() => setCancel(true)}>
+                Cancel order
+              </Button>
+            )}
+          </div>
+          {status.error && (
+            <div className="panel-padding">
+              <ErrorMessage error={status.error} />
+            </div>
           )}
-          {p.status === 'draft' && (
-            <Button disabled={status.isPending} onClick={() => status.mutate('ordered')}>
-              Place order
-            </Button>
-          )}
-          {['ordered', 'partially_received'].includes(p.status) && (
-            <Button onClick={() => setReceiving(true)}>Receive delivery</Button>
-          )}
-          {['draft', 'ordered'].includes(p.status) && (
-            <Button variant="outline" onClick={() => setCancel(true)}>
-              Cancel order
-            </Button>
-          )}
-          {cancel && (
+          <div className="order-detail-section">
+            <h3>Delivery history</h3>
+            {p.receipts.length ? (
+              <div className="delivery-list">
+                {p.receipts.map((r) => (
+                  <details key={r.id} className="delivery-entry">
+                    <summary>
+                      <span className="delivery-entry-summary">
+                        <strong>{r.number}</strong>
+                        <small>{r.delivery_reference || 'No delivery reference'}</small>
+                      </span>
+                      <span className="delivery-entry-total">{formatMoney(r.total, currency)}</span>
+                    </summary>
+                    <div className="delivery-entry-body">
+                      <p className="muted">
+                        Received by {r.actor} on {r.device}
+                      </p>
+                      <ul>
+                        {r.lines.map((l) => (
+                          <li key={l.id}>
+                            <span>{l.product_name}</span>
+                            <span className="muted">
+                              {Number(l.quantity)} {l.unit} × {formatMoney(l.unit_cost, currency)}{' '}
+                              excl. tax
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </details>
+                ))}
+              </div>
+            ) : (
+              <p className="muted">No deliveries recorded yet.</p>
+            )}
+          </div>
+          <Dialog
+            open={cancel}
+            onOpenChange={setCancel}
+            title="Cancel this order"
+            description="Cancelling is permanent and does not change stock. Partly received orders cannot be cancelled."
+          >
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -923,31 +991,25 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
               }}
             >
               <Field label="Cancellation reason">
-                <input required value={reason} onChange={(e) => setReason(e.target.value)} />
+                <input
+                  autoFocus
+                  required
+                  maxLength={300}
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
               </Field>
-              <Button disabled={status.isPending}>Confirm cancellation</Button>
+              <ErrorMessage error={status.error} />
+              <div className="form-actions">
+                <Button type="button" variant="outline" onClick={() => setCancel(false)}>
+                  Keep order
+                </Button>
+                <Button disabled={status.isPending}>
+                  {status.isPending ? 'Cancelling…' : 'Confirm cancellation'}
+                </Button>
+              </div>
             </form>
-          )}
-          <ErrorMessage error={status.error} />
-          <h3>Delivery history</h3>
-          {!p.receipts.length && <p className="muted">No deliveries recorded.</p>}
-          {p.receipts.map((r) => (
-            <details key={r.id}>
-              <summary>
-                {r.number} · {r.delivery_reference || 'No delivery reference'} ·{' '}
-                {formatMoney(r.total, currency)}
-              </summary>
-              <p>
-                Received by {r.actor} on {r.device}
-              </p>
-              {r.lines.map((l) => (
-                <p key={l.id}>
-                  {l.product_name}: {l.quantity} {l.unit} × {formatMoney(l.unit_cost, currency)}{' '}
-                  excl. tax
-                </p>
-              ))}
-            </details>
-          ))}
+          </Dialog>
           <Dialog
             open={editing}
             onOpenChange={setEditing}
