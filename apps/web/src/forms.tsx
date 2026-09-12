@@ -23,6 +23,7 @@ import { api, queryClient, refresh } from './api';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { prepareProductImage } from './product-image';
+import { BarcodeLookup } from './barcode-lookup';
 export function ErrorMessage({ error }: { error: unknown }) {
   return error ? (
     <p className="error" role="alert">
@@ -234,6 +235,21 @@ export function ProductForm({
   initial?: Product;
   onCreated?: (product: Product) => void;
 }) {
+  const formRef = useRef<HTMLFormElement>(null);
+  const [source, setSource] = useState(initial?.source ?? null);
+  const [existingProduct, setExistingProduct] = useState<Product>();
+  function fillField(name: string, value: string, append = false) {
+    const field = formRef.current?.elements.namedItem(name) as
+      HTMLInputElement | HTMLTextAreaElement | null;
+    if (!field) return;
+    if (append) {
+      const codes = field.value
+        .split(/[\n,]/)
+        .map((v) => v.trim())
+        .filter(Boolean);
+      if (!codes.includes(value)) field.value = [...codes, value].join('\n');
+    } else if (!field.value.trim()) field.value = value;
+  }
   const [image, setImage] = useState(initial?.image ?? '');
   const [imageBusy, setImageBusy] = useState(false);
   const [imageError, setImageError] = useState<unknown>(null);
@@ -262,6 +278,7 @@ export function ProductForm({
     const result = productSchema.safeParse({
       ...data,
       image,
+      source,
       barcodes: String(data.barcodes)
         .split(/[\n,]/)
         .map((s) => s.trim())
@@ -273,10 +290,80 @@ export function ProductForm({
     }
     mutation.mutate(result.data);
   }
+  if (existingProduct) return <ProductForm initial={existingProduct} onDone={onDone} />;
   if (!initial && profile.isPending) return <p>Loading product defaults…</p>;
   if (!initial && profile.error) return <ErrorMessage error={profile.error} />;
   return (
-    <form onSubmit={submit}>
+    <form ref={formRef} onSubmit={submit}>
+      {!initial && (
+        <BarcodeLookup
+          onBarcode={(barcode) => fillField('barcodes', barcode, true)}
+          onExisting={setExistingProduct}
+          onUse={async (suggestion) => {
+            fillField('name', suggestion.name);
+            fillField('category', suggestion.category);
+            fillField('barcodes', suggestion.barcode, true);
+            let imageImported = false;
+            if (!image && suggestion.image) {
+              setImageBusy(true);
+              try {
+                const blob = await (await fetch(suggestion.image)).blob();
+                setImage(
+                  await prepareProductImage(
+                    new File([blob], 'product.jpg', { type: 'image/jpeg' }),
+                  ),
+                );
+                imageImported = true;
+              } catch {
+                setImageError(
+                  new Error(
+                    'Details imported, but the photo could not be read. You can upload one manually.',
+                  ),
+                );
+              } finally {
+                setImageBusy(false);
+              }
+            }
+            setSource({
+              barcode: suggestion.barcode,
+              brand: suggestion.brand,
+              quantity: suggestion.quantity,
+              imageImported,
+            });
+          }}
+        />
+      )}
+      {source && (
+        <p className="muted">
+          Source:{' '}
+          <a
+            href={'https://world.openfoodfacts.org/product/' + source.barcode}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open Food Facts contributors
+          </a>{' '}
+          ·{' '}
+          <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noreferrer">
+            ODbL
+          </a>
+          {source.imageImported && (
+            <>
+              {' '}
+              · Photo resized from source,{' '}
+              <a
+                href="https://creativecommons.org/licenses/by-sa/3.0/"
+                target="_blank"
+                rel="noreferrer"
+              >
+                CC BY-SA 3.0
+              </a>
+            </>
+          )}
+          {source.brand && <> · {source.brand}</>}
+          {source.quantity && <> · Package: {source.quantity}</>}
+        </p>
+      )}
       <Field
         label="Product photo"
         hint="Optional. JPEG, PNG, or WebP up to 10 MB. Photos are resized automatically."
@@ -293,6 +380,7 @@ export function ProductForm({
             setImageError(null);
             try {
               setImage(await prepareProductImage(file));
+              setSource((value) => (value ? { ...value, imageImported: false } : null));
             } catch (error) {
               setImageError(
                 error instanceof Error ? error : new Error('Unable to read this image.'),
@@ -312,7 +400,10 @@ export function ProductForm({
             type="button"
             variant="ghost"
             disabled={imageBusy || mutation.isPending}
-            onClick={() => setImage('')}
+            onClick={() => {
+              setImage('');
+              setSource((value) => (value ? { ...value, imageImported: false } : null));
+            }}
           >
             Remove photo
           </Button>
@@ -325,6 +416,15 @@ export function ProductForm({
           defaultValue={initial?.name}
           required
           maxLength={120}
+        />
+      </Field>
+      <Field label="Description (optional)">
+        <textarea
+          name="description"
+          defaultValue={initial?.description ?? ''}
+          maxLength={2000}
+          rows={3}
+          placeholder="Additional details about this product"
         />
       </Field>
       <div className="form-grid">

@@ -39,3 +39,11 @@ New installations should start with an empty database. Moving existing local dat
 `pnpm install --frozen-lockfile` followed by `pnpm build` creates the production files. Run migrations explicitly before starting. `pnpm start` starts Node; set SERVE_WEB=true to serve the frontend. Production also needs the variables above and an HTTPS proxy. Use `docker build -t eliza .` to build the deployment image; it runs as the non-root node user. Do not use `pnpm dev` or Vite preview as the production server.
 
 The deployment remains online-only: completing sales requires connectivity to this server. Hosting does not add offline checkout or direct card-terminal integration.
+
+## Optional barcode lookup
+
+New-product forms can query Open Food Facts. Read lookups need no paid key. Set OFF_CONTACT to an administrator contact email or application URL for provider identification. For live provider testing use OFF_ENV=staging (the public staging Basic Auth is applied automatically); omit it for normal use. Automated tests mock provider responses and never contribute data.
+
+Only the scanned barcode is sent; prices, employee details and stock are not uploaded. Outbound HTTPS access to world.openfoodfacts.org and images.openfoodfacts.org is needed. Requests have timeouts and response-size limits, a bounded process cache and a PostgreSQL-shared budget of 12 uncached product requests per minute. Multiple independent databases behind one public IP must share an additional provider budget. Errors leave manual product creation available.
+
+Imported fields retain source barcode, brand, package size and image provenance. Data is attributed to Open Food Facts contributors (ODbL / Database Contents License); imported photos are resized and credited under CC BY-SA 3.0. Preserve attribution in exports and follow the provider's database reuse terms when distributing derived catalogs; importing does not upload private inventory to Open Food Facts. Before public rollout review https://openfoodfacts.github.io/openfoodfacts-server/api/ and complete its API usage form.

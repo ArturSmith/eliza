@@ -2295,3 +2295,38 @@ select {
   border-radius: 12px;
   background: white;
 }
+
+.barcode-lookup {
+  border: 1px solid #dfe5da;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+.barcode-suggestion {
+  margin-top: 16px;
+}
+.barcode-suggestion img {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.delivery-price-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 16px;
+  line-height: 1.5;
+}
+.delivery-price-confirmation input[type='checkbox'] {
+  flex: 0 0 auto;
+  margin: 0.25em 0 0;
+}
+.delivery-price-confirmation span {
+  min-width: 0;
+}
+.delivery-submit {
+  margin-top: 24px;
+}

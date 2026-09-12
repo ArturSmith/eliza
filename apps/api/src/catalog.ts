@@ -19,10 +19,23 @@ import { Database } from './database.js';
 import { AccessGuard, type AuthRequest, parse, Require } from './security.js';
 import { AuthModule } from './auth.js';
 import { products, barcodes, audits } from './schema.js';
+import { lookupBarcode } from './barcode-lookup.js';
 @Controller('products')
 @UseGuards(AccessGuard)
 export class CatalogController {
   constructor(private database: Database) {}
+  @Get('lookup/:barcode') @Require('catalog.write') async lookup(
+    @Param('barcode') barcode: string,
+    @Req() req: AuthRequest,
+  ) {
+    if (!barcode || barcode.length > 100) throw new BadRequestException('Enter a barcode.');
+    const existing = await this.database.pool.query(
+      'SELECT p.id,p.name FROM products p JOIN barcodes b ON b.product_id=p.id AND b.store_id=p.store_id WHERE p.store_id=$1 AND b.value=$2',
+      [req.context.store.id, barcode],
+    );
+    if (existing.rows.length) return { existing: existing.rows[0] };
+    return { suggestion: await lookupBarcode(barcode, this.database) };
+  }
   @Get() @Require('catalog.read') async list(@Req() req: AuthRequest) {
     const rows = await this.database.db
       .select()

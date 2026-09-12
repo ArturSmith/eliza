@@ -714,6 +714,18 @@ export function ProductsPage() {
                         <div>
                           <strong>{p.name}</strong>
                           <small>{p.sku}</small>
+                          {p.source && (
+                            <small>
+                              <a
+                                href={'https://world.openfoodfacts.org/product/' + p.source.barcode}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Open Food Facts contributors
+                              </a>{' '}
+                              · ODbL{p.source.imageImported && ' · Photo resized, CC BY-SA 3.0'}
+                            </small>
+                          )}
                         </div>
                       </div>
                     </td>

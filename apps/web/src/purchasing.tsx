@@ -1124,7 +1124,7 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
                 </Field>
               )}
               {canPrice && prices[l.id] && Number(quantities[l.id] ?? 0) > 0 && (
-                <label>
+                <label className="delivery-price-confirmation">
                   <input
                     key={
                       prices[l.id] + '-' + products.data?.find((p) => p.id === l.product_id)?.price
@@ -1132,15 +1132,19 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
                     type="checkbox"
                     required
                   />
-                  Apply this selling price to all stock of {l.product_name}, including older items.
-                  Update the shelf label.
+                  <span>
+                    Apply this selling price to all stock of {l.product_name}, including older
+                    items. Update the shelf label.
+                  </span>
                 </label>
               )}
             </div>
           ))}
       </fieldset>
       <ErrorMessage error={error} />
-      <Button disabled={pending}>{payload ? 'Retry same delivery' : 'Record delivery'}</Button>
+      <div className="delivery-submit">
+        <Button disabled={pending}>{payload ? 'Retry same delivery' : 'Record delivery'}</Button>
+      </div>
       {!!payload && !pending && (
         <p className="muted">
           The delivery details are locked for a safe retry. Refresh the order before starting a

@@ -64,7 +64,7 @@ export class CheckoutController {
       const actor = await this.registers.operator(client, req);
       return (
         await client.query(
-          `SELECT p.id,p.image,p.name,p.sku,p.category,p.unit,p.price,p.tax_rate AS "taxRate",p.stock,COALESCE(p.plu,'') AS plu,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id),'[]'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active ORDER BY p.name`,
+          `SELECT p.id,p.image,p.source,p.name,p.sku,p.category,p.unit,p.price,p.tax_rate AS "taxRate",p.stock,COALESCE(p.plu,'') AS plu,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id),'[]'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active ORDER BY p.name`,
           [actor.storeId],
         )
       ).rows;

@@ -72,6 +72,16 @@ export const loginSchema = z.object({
   password: z.string().min(1).max(128),
 });
 export const productSchema = z.object({
+  description: z.string().trim().max(2000).optional(),
+  source: z
+    .object({
+      barcode: z.string().regex(/^\d{8,14}$/),
+      brand: z.string().max(120),
+      quantity: z.string().max(120),
+      imageImported: z.boolean(),
+    })
+    .nullable()
+    .optional(),
   image: z
     .string()
     .max(60000)
@@ -307,6 +317,7 @@ export type Shift = {
   cashierId: string;
 };
 export type PosProduct = {
+  source?: ProductInput['source'];
   image?: string;
   id: string;
   name: string;

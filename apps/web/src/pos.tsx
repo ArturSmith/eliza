@@ -481,7 +481,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         );
         return { ...d, lines };
       }
-      const { image: _image, ...cartProduct } = product;
+      const { image: _image, source: _source, ...cartProduct } = product;
       return { ...d, lines: [...d.lines, { product: cartProduct, quantity: amount }] };
     });
     setSearch('');

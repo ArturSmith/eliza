@@ -73,6 +73,13 @@ export const products = pgTable(
   'products',
   {
     image: text('image').notNull().default(''),
+    description: text('description').notNull().default(''),
+    source: jsonb('source').$type<{
+      barcode: string;
+      brand: string;
+      quantity: string;
+      imageImported: boolean;
+    } | null>(),
     id: id(),
     storeId: uuid('store_id')
       .notNull()
