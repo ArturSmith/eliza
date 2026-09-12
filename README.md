@@ -2,6 +2,8 @@
 
 ## Cloud deployment
 
+Product forms support an optional JPEG, PNG, or WebP photo (up to 10 MB input). The browser converts it to a compact JPEG thumbnail, up to 480 pixels and 60 KB of encoded data. Photos appear in the catalog and checkout, can be replaced or removed, and are stored in PostgreSQL so database backups include them. No object-storage account is required. For much larger catalogs, move thumbnails to separately fetched object storage to reduce catalog response sizes.
+
 Railway deployment configuration is included. Follow [the deployment guide](docs/deployment.md) for production variables, first-owner setup, migrations, database permissions, backups and release verification.
 
 Local supermarket management software. React + Vite + TypeScript, NestJS, PostgreSQL, Drizzle, TanStack Router/Query, Zod, Tailwind, and shadcn-style Radix UI components. No external accounts, API keys, analytics, or hosted authentication are required.

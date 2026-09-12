@@ -72,6 +72,7 @@ export const sessions = pgTable('sessions', {
 export const products = pgTable(
   'products',
   {
+    image: text('image').notNull().default(''),
     id: id(),
     storeId: uuid('store_id')
       .notNull()

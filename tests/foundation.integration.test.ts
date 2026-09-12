@@ -114,6 +114,37 @@ describe.sequential('foundation against real PostgreSQL', () => {
       ).status,
     ).toBe(201);
   });
+  it('saves, preserves, and removes product photos and rejects unsafe image inputs', async () => {
+    const image = 'data:image/jpeg;base64,/9j/2Q==';
+    expect(
+      (await request('/products/' + productId, { ...product, image }, ownerCookie, 'PATCH')).status,
+    ).toBe(200);
+    expect((await request('/products')).body.find((p: any) => p.id === productId).image).toBe(
+      image,
+    );
+    await request('/products/' + productId, product, ownerCookie, 'PATCH');
+    expect((await request('/products')).body.find((p: any) => p.id === productId).image).toBe(
+      image,
+    );
+    for (const invalid of [
+      'https://external.test/photo.jpg',
+      'data:image/svg+xml;base64,PHN2Zz4=',
+      image + 'A'.repeat(60000),
+    ]) {
+      expect(
+        (
+          await request(
+            '/products/' + productId,
+            { ...product, image: invalid },
+            ownerCookie,
+            'PATCH',
+          )
+        ).status,
+      ).toBe(400);
+    }
+    await request('/products/' + productId, { ...product, image: '' }, ownerCookie, 'PATCH');
+    expect((await request('/products')).body.find((p: any) => p.id === productId).image).toBe('');
+  });
   it('rolls back a product when a barcode conflicts', async () => {
     const result = await request('/products', { ...product, sku: 'FAILED', plu: '102' });
     expect(result.status).toBe(409);

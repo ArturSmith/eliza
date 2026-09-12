@@ -481,7 +481,8 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         );
         return { ...d, lines };
       }
-      return { ...d, lines: [...d.lines, { product, quantity: amount }] };
+      const { image: _image, ...cartProduct } = product;
+      return { ...d, lines: [...d.lines, { product: cartProduct, quantity: amount }] };
     });
     setSearch('');
     setWeighted(null);
@@ -671,7 +672,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                 disabled={frozen || Number(p.stock) <= 0}
               >
                 <span className={`product-icon color-${p.category.length % 4}`}>
-                  <Package size={25} />
+                  {p.image ? <img src={p.image} alt="" loading="lazy" /> : <Package size={25} />}
                 </span>
                 <small>{p.category}</small>
                 <strong>{p.name}</strong>

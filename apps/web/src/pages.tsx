@@ -464,7 +464,7 @@ export function Overview() {
             <div className="attention-list">
               {low.slice(0, 5).map((p) => (
                 <div className="attention-row" key={p.id}>
-                  <ProductIcon category={p.category} />
+                  <ProductIcon category={p.category} image={p.image} />
                   <div>
                     <strong>{p.name}</strong>
                     <small>
@@ -594,10 +594,10 @@ function Checklist({
     </div>
   );
 }
-function ProductIcon({ category }: { category: string }) {
+function ProductIcon({ category, image }: { category: string; image?: string }) {
   return (
     <span className={`product-icon color-${category.length % 4}`}>
-      <Package size={20} />
+      {image ? <img src={image} alt="" loading="lazy" /> : <Package size={20} />}
     </span>
   );
 }
@@ -710,7 +710,7 @@ export function ProductsPage() {
                   <tr key={p.id}>
                     <td>
                       <div className="product-cell">
-                        <ProductIcon category={p.category} />
+                        <ProductIcon category={p.category} image={p.image} />
                         <div>
                           <strong>{p.name}</strong>
                           <small>{p.sku}</small>

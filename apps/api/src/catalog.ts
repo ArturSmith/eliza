@@ -72,7 +72,7 @@ export class CatalogController {
         deviceId: device.id,
         action: 'Product created',
         entityId: product.id,
-        details: { ...body, plu, barcodes: values },
+        details: { ...body, image: body.image ? '[photo added]' : '', plu, barcodes: values },
       });
       return { ...product, plu: plu ?? '', barcodes: values };
     });
@@ -119,8 +119,18 @@ export class CatalogController {
         action: 'Product updated',
         entityId: id,
         details: {
-          before: { ...old, barcodes: previousCodes.map((b) => b.value) },
-          after: { ...body, plu, barcodes: values },
+          before: {
+            ...old,
+            image: old.image ? '[photo present]' : '',
+            barcodes: previousCodes.map((b) => b.value),
+          },
+          after: {
+            ...body,
+            image: (body.image ?? old.image) ? '[photo present]' : '',
+            photoChanged: body.image !== undefined && body.image !== old.image,
+            plu,
+            barcodes: values,
+          },
         },
       });
       return { ...product, plu: plu ?? '', barcodes: values };

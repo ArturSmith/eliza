@@ -72,6 +72,14 @@ export const loginSchema = z.object({
   password: z.string().min(1).max(128),
 });
 export const productSchema = z.object({
+  image: z
+    .string()
+    .max(60000)
+    .refine(
+      (v) => v === '' || /^data:image\/jpeg;base64,\/9j\/[A-Za-z0-9+/]*={0,2}$/.test(v),
+      'Choose a valid product photo',
+    )
+    .optional(),
   name: short,
   sku: short,
   category: short,
@@ -299,6 +307,7 @@ export type Shift = {
   cashierId: string;
 };
 export type PosProduct = {
+  image?: string;
   id: string;
   name: string;
   sku: string;

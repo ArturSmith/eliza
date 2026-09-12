@@ -22,6 +22,7 @@ import {
 import { api, queryClient, refresh } from './api';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
+import { prepareProductImage } from './product-image';
 export function ErrorMessage({ error }: { error: unknown }) {
   return error ? (
     <p className="error" role="alert">
@@ -233,6 +234,9 @@ export function ProductForm({
   initial?: Product;
   onCreated?: (product: Product) => void;
 }) {
+  const [image, setImage] = useState(initial?.image ?? '');
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageError, setImageError] = useState<unknown>(null);
   const profile = useQuery({
     queryKey: ['store-profile'],
     queryFn: () => api<{ defaultTaxRate: string }>('/store-profile'),
@@ -257,6 +261,7 @@ export function ProductForm({
     const data = values(e);
     const result = productSchema.safeParse({
       ...data,
+      image,
       barcodes: String(data.barcodes)
         .split(/[\n,]/)
         .map((s) => s.trim())
@@ -272,6 +277,47 @@ export function ProductForm({
   if (!initial && profile.error) return <ErrorMessage error={profile.error} />;
   return (
     <form onSubmit={submit}>
+      <Field
+        label="Product photo"
+        hint="Optional. JPEG, PNG, or WebP up to 10 MB. Photos are resized automatically."
+      >
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          disabled={imageBusy || mutation.isPending}
+          onChange={async (event) => {
+            const file = event.target.files?.[0];
+            event.target.value = '';
+            if (!file) return;
+            setImageBusy(true);
+            setImageError(null);
+            try {
+              setImage(await prepareProductImage(file));
+            } catch (error) {
+              setImageError(
+                error instanceof Error ? error : new Error('Unable to read this image.'),
+              );
+            } finally {
+              setImageBusy(false);
+            }
+          }}
+        />
+      </Field>
+      {imageBusy && <p role="status">Preparing photo…</p>}
+      <ErrorMessage error={imageError} />
+      {image && (
+        <div className="product-photo-preview">
+          <img src={image} alt="Product photo preview" />
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={imageBusy || mutation.isPending}
+            onClick={() => setImage('')}
+          >
+            Remove photo
+          </Button>
+        </div>
+      )}
       <Field label="Product name">
         <input
           name="name"
@@ -376,7 +422,7 @@ export function ProductForm({
         <Button type="button" variant="outline" onClick={onDone}>
           Cancel
         </Button>
-        <Button disabled={mutation.isPending}>
+        <Button disabled={mutation.isPending || imageBusy}>
           <PackagePlus size={17} />
           {mutation.isPending ? 'Saving…' : initial ? 'Save changes' : 'Create product'}
         </Button>
