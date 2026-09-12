@@ -22,7 +22,7 @@ export function SalesPage() {
         </div>
       </div>
       <ReceiptSearch />
-      <h2>Recent receipts</h2>
+      <h2 style={{ marginTop: 24, marginBottom: 16 }}>Recent receipts</h2>
       <ErrorMessage error={query.error} />
       <section className="panel">
         {query.isPending ? (
