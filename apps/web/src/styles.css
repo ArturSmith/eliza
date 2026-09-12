@@ -1127,7 +1127,8 @@ tr:last-child td {
   margin-bottom: 16px;
   min-width: 0;
 }
-.field > span {
+.field > span,
+.barcode-lookup legend {
   font-size: 11px;
   font-weight: 550;
   color: #637359;
@@ -2329,4 +2330,11 @@ select {
 }
 .delivery-submit {
   margin-top: 24px;
+}
+
+.barcode-import-note {
+  margin: 20px 0 24px;
+  color: #637359;
+  font-size: 12px;
+  line-height: 1.6;
 }

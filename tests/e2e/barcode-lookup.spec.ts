@@ -23,6 +23,7 @@ test('barcode creation reviews suggestions, saves attribution, and falls back to
         suggestion: {
           barcode: '3017620422003',
           name: 'Chocolate spread',
+          description: 'Hazelnut spread with cocoa',
           brand: 'Example brand',
           quantity: '500 g',
           category: 'Spreads',
@@ -37,6 +38,9 @@ test('barcode creation reviews suggestions, saves attribution, and falls back to
   await expect(dialog.getByLabel('Product name')).toHaveValue('');
   await dialog.getByRole('button', { name: 'Use these details' }).click();
   await expect(dialog.getByLabel('Product name')).toHaveValue('Chocolate spread');
+  await expect(dialog.getByLabel('Description (optional)')).toHaveValue(
+    'Hazelnut spread with cocoa',
+  );
   await expect(dialog.getByAltText('Product photo preview')).toBeVisible();
   await expect(dialog.getByLabel('Selling price')).toHaveValue('');
   await expect(dialog.getByLabel('Unit', { exact: true })).toHaveValue('piece');
@@ -48,6 +52,9 @@ test('barcode creation reviews suggestions, saves attribution, and falls back to
   await page.reload();
   await page.getByRole('button', { name: 'Edit Chocolate spread' }).click();
   await expect(dialog.getByText('Package: 500 g', { exact: false })).toBeVisible();
+  await expect(dialog.getByLabel('Description (optional)')).toHaveValue(
+    'Hazelnut spread with cocoa',
+  );
   await expect(dialog.getByLabel('Scan or enter barcode')).toHaveCount(0);
   await dialog.getByRole('button', { name: 'Save changes' }).click();
   await expect(dialog).not.toBeVisible();

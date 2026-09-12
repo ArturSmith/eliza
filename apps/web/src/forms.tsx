@@ -301,6 +301,7 @@ export function ProductForm({
           onExisting={setExistingProduct}
           onUse={async (suggestion) => {
             fillField('name', suggestion.name);
+            fillField('description', suggestion.description ?? '');
             fillField('category', suggestion.category);
             fillField('barcodes', suggestion.barcode, true);
             let imageImported = false;

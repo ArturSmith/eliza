@@ -6,6 +6,7 @@ import { Field, ErrorMessage } from './forms';
 type Suggestion = {
   barcode: string;
   name: string;
+  description?: string;
   brand: string;
   quantity: string;
   category: string;
@@ -113,20 +114,23 @@ export function BarcodeLookup({
               .filter(Boolean)
               .join(' · ')}
           </p>
-          <p>
-            Check the package and details. Existing fields and your uploaded photo will be kept.
-            Package size does not change the selling unit.
-          </p>
-          <p>
-            <a
-              href={'https://world.openfoodfacts.org/product/' + result.suggestion.barcode}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open Food Facts contributors
-            </a>{' '}
-            · Data: ODbL · Photo: CC BY-SA 3.0
-          </p>
+          {result.suggestion.description && <p>{result.suggestion.description}</p>}
+          <div className="barcode-import-note">
+            <p>
+              (Check the package and details. Existing fields and your uploaded photo will be kept.
+              Package size does not change the selling unit.
+            </p>
+            <p>
+              <a
+                href={'https://world.openfoodfacts.org/product/' + result.suggestion.barcode}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Open Food Facts contributors
+              </a>{' '}
+              · Data: ODbL · Photo: CC BY-SA 3.0.)
+            </p>
+          </div>
           <Button
             type="button"
             onClick={async () => {

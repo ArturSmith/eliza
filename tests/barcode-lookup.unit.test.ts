@@ -18,6 +18,7 @@ it('maps suggestions, bounds strings, caches reads and ignores untrusted image h
         JSON.stringify({
           product: {
             product_name: 'Food',
+            generic_name: 'Hazelnut spread with cocoa',
             brands: 'Brand',
             quantity: '500 g',
             categories: 'Foods, Spreads',
@@ -28,7 +29,13 @@ it('maps suggestions, bounds strings, caches reads and ignores untrusted image h
   );
   vi.stubGlobal('fetch', fetcher);
   const result = await lookupBarcode('3017620422003', database);
-  expect(result).toMatchObject({ name: 'Food', category: 'Spreads', quantity: '500 g', image: '' });
+  expect(result).toMatchObject({
+    name: 'Food',
+    description: 'Hazelnut spread with cocoa',
+    category: 'Spreads',
+    quantity: '500 g',
+    image: '',
+  });
   expect(fetcher).toHaveBeenCalledTimes(1);
   await lookupBarcode('3017620422003', database);
   expect(fetcher).toHaveBeenCalledTimes(1);

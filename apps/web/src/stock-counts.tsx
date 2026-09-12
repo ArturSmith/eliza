@@ -65,7 +65,7 @@ export function StockCountsPage() {
         </div>
         {manage && <Button onClick={() => setCreating(true)}>New stock count</Button>}
       </div>
-      <p className="notice">
+      <p className="notice" style={{ marginBottom: 24 }}>
         Count when stock is not moving. Sales, deliveries, or adjustments after the count starts
         require a fresh count before finalization.
       </p>

@@ -3,6 +3,7 @@ import type { Database } from './database.js';
 export type Suggestion = {
   barcode: string;
   name: string;
+  description: string;
   brand: string;
   quantity: string;
   category: string;
@@ -67,7 +68,7 @@ export async function lookupBarcode(
         (staging ? 'net' : 'org') +
         '/api/v3/product/' +
         barcode +
-        '?fields=product_name,product_name_en,brands,quantity,categories,image_front_small_url',
+        '?fields=product_name,product_name_en,generic_name,generic_name_en,brands,quantity,categories,image_front_small_url',
       { headers, signal: AbortSignal.timeout(7000), redirect: 'error' },
     );
     const data =
@@ -79,6 +80,11 @@ export async function lookupBarcode(
       result = {
         barcode,
         name: text(p.product_name || p.product_name_en),
+        description:
+          [p.generic_name, p.generic_name_en]
+            .find((v) => typeof v === 'string' && v.trim())
+            ?.trim()
+            .slice(0, 2000) ?? '',
         brand: text(p.brands),
         quantity: text(p.quantity),
         category: text(typeof p.categories === 'string' ? p.categories.split(',').pop() : ''),
