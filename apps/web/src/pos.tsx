@@ -468,8 +468,14 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     },
   });
   const frozen = !!draft.pending || checkout.isPending;
+  const noShift = !context.shift;
   function add(product: PosProduct, amount = '1') {
     if (frozen) return;
+    if (noShift) {
+      setWeighted(null);
+      setMessage('Start your shift before adding items to the cart.');
+      return;
+    }
     setMessage('');
     setDraft((d) => {
       const index = d.lines.findIndex((l) => l.product.id === product.id);
@@ -490,11 +496,19 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   }
   function choose(p: PosProduct) {
     if (frozen) return;
+    if (noShift) {
+      setMessage('Start your shift before adding items to the cart.');
+      return;
+    }
     if (['piece', 'pack', 'box'].includes(p.unit)) add(p);
     else setWeighted(p);
   }
   function scanItem(e: FormEvent) {
     e.preventDefault();
+    if (noShift) {
+      setMessage('Start your shift before adding items to the cart.');
+      return;
+    }
     const term = search.trim();
     const exact =
       catalog.data?.filter((p) => p.barcodes.includes(term) || p.sku === term || p.plu === term) ??
@@ -636,13 +650,17 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
               ref={scan}
               autoFocus
               aria-label="Scan or search products"
-              placeholder="Scan a barcode, enter a PLU, or search products…"
+              placeholder={
+                noShift
+                  ? 'Start your shift to begin selling…'
+                  : 'Scan a barcode, enter a PLU, or search products…'
+              }
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setMessage('');
               }}
-              disabled={frozen}
+              disabled={frozen || noShift}
             />
             <kbd>Enter</kbd>
           </form>
@@ -669,7 +687,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                 className="pos-product"
                 key={p.id}
                 onClick={() => choose(p)}
-                disabled={frozen || Number(p.stock) <= 0}
+                disabled={frozen || noShift || Number(p.stock) <= 0}
               >
                 <span className={`product-icon color-${p.category.length % 4}`}>
                   {p.image ? <img src={p.image} alt="" loading="lazy" /> : <Package size={25} />}
