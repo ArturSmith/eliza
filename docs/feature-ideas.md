@@ -106,3 +106,42 @@ Proposed workflow:
 Dependencies: external supplier accounts, access controls, product–supplier mapping, and verified supplier participation. This is a collaboration workflow, not automatic supplier ordering.
 
 Recommended sequence: **shopping list → supplier comparison → scheduled reports → supplier portal**.
+
+## AI feature ideas — 13 September 2026
+
+Exploratory proposals, not implementation commitments. This order ranks AI ideas relative to one another; it does not replace the main MVP backlog. Focus on reducing manual entry and explaining useful information inside existing workflows.
+
+| Order | Feature | Example experience | AI contribution |
+| ---: | --- | --- | --- |
+| 1 | Purchase drafts from invoices or delivery notes | Upload a photo/PDF, review supplier and product lines, then save a draft. | Extract quantities, costs, and tax; suggest matches to existing products. |
+| 2 | Natural-language Analytics | Ask “How much Coca-Cola did Anna sell last week?” | Translate questions into supported report filters and explain verified results. |
+| 3 | Shopping-list explanations | Ask “Why should I order 24 bottles?” | Explain stock, incoming orders, targets, and demand assumptions; help refine drafts conversationally. |
+| 4 | Product creation from packaging photos | Photograph a package and review suggested name, description, brand, size, and category. | Extract details when barcode lookup has no match or incomplete information. |
+| 5 | End-of-period business summaries | Read a short explanation of sales and margin changes, linked to supporting reports. | Summarize calculated results and identify contributors without inventing causes. |
+| 6 | Supplier-option explanations | Understand why a higher unit price might still produce a cheaper small order after delivery charges. | Explain comparable costs, terms, lead times, and missing or stale information. |
+| 7 | Unusual-activity review | Review unusually high refunds and the affected receipts. | Highlight evidence for investigation; do not accuse employees or automatically restrict them. |
+| 8 | Contextual workflow help | Ask what to enter when only half a delivery arrives. | Explain the current screen and actual workflow using maintained Eliza documentation. |
+
+### Shared design rules
+
+- Eliza calculates; AI explains. Use validated application logic for sales, taxes, stock, margins, and reorder quantities.
+- Keep suggestions reviewable. AI may prepare drafts or propose matches; users confirm changes to stock, prices, purchases, or money through normal authorized workflows.
+- Show evidence: dates, filters, source records, assumptions, and missing information. Distinguish observations from possible explanations.
+- Enforce existing permissions on the server. AI must not expose costs, profit, or other stores' records to unauthorized users.
+- Keep manual workflows available when AI is unavailable.
+- Treat uploaded documents and external product text as untrusted data, not instructions or authority to execute actions.
+- Decide which shop data may leave the application before choosing a provider. Hosted AI requires provider configuration, credentials, and usage budgeting. Avoid sending unnecessary personal information or secrets.
+
+### First candidate: document-to-purchase drafts
+
+1. Manager uploads a supplier invoice or delivery note.
+2. AI extracts lines and proposes product matches.
+3. Eliza highlights uncertain matches and validates quantities, costs, tax, and totals.
+4. Manager corrects the suggestions and saves a purchase draft.
+5. The existing receiving workflow records the goods that actually arrive.
+
+Uploading a document must not automatically receive stock or mark the supplier as paid. Preserve the document reference and accepted values for review; detect likely duplicate documents before suggesting another purchase.
+
+### Recommended sequence
+
+Start with **document-to-purchase drafts** and **natural-language Analytics**. Build reliable shopping-list calculations using stock, incoming orders, targets, and sales history before adding AI explanations. Scheduled summaries depend on the reporting schedule and delivery-channel work proposed above.
