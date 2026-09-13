@@ -115,14 +115,14 @@ export class PurchasingController {
   private async shoppingDetail(c: PoolClient, id: string, store: string): Promise<ShoppingList> {
     const list = (
       await c.query(
-        'SELECT id,name,notes,version,created_at AS "createdAt" FROM shopping_lists WHERE id=$1 AND store_id=$2',
+        'SELECT id,name,notes,sections,version,created_at AS "createdAt" FROM shopping_lists WHERE id=$1 AND store_id=$2',
         [id, store],
       )
     ).rows[0];
     if (!list) throw new NotFoundException('Shopping list not found.');
     const lines = (
       await c.query(
-        `SELECT l.id,l.product_id AS "productId",l.label,l.target_stock AS target,
+        `SELECT l.id,l.section_id AS "sectionId",l.product_id AS "productId",l.label,l.target_stock AS target,
       l.quantity,l.unit_cost AS "unitCost",l.tax_rate AS "taxRate",l.supplier_id AS "supplierId",l.notes,
       l.purchase_id AS "purchaseId",s.name AS "supplierName",s.active AS "supplierActive",
       p.number AS "purchaseNumber",p.status AS "purchaseStatus"
@@ -238,6 +238,13 @@ export class PurchasingController {
       const store = req.context.store.id;
       await this.lockShopping(c, id, store, b.version);
       const old = await this.shoppingDetail(c, id, store);
+      const sectionIds = new Set(b.sections.map((section) => section.id));
+      if (b.lines.some((line) => line.sectionId && !sectionIds.has(line.sectionId)))
+        throw new BadRequestException('Choose a section from this shopping list.');
+      await c.query(
+        'UPDATE shopping_list_lines SET section_id=NULL WHERE list_id=$1 AND section_id IS NOT NULL AND NOT (section_id=ANY($2::uuid[]))',
+        [id, [...sectionIds]],
+      );
       const converted = new Set(
         old.lines.filter((l) => l.purchaseId && l.productId).map((l) => l.productId),
       );
@@ -249,8 +256,8 @@ export class PurchasingController {
       for (const [index, line] of b.lines.entries()) {
         if (line.productId === null) {
           await c.query(
-            'INSERT INTO shopping_list_lines(store_id,list_id,label,target_stock,quantity,unit_cost,tax_rate,supplier_id,notes,position) VALUES($1,$2,$3,0,$4,0,0,NULL,$5,$6)',
-            [store, id, line.label, line.quantity, line.notes, index],
+            'INSERT INTO shopping_list_lines(store_id,list_id,label,target_stock,quantity,unit_cost,tax_rate,supplier_id,notes,position,section_id) VALUES($1,$2,$3,0,$4,0,0,NULL,$5,$6,$7)',
+            [store, id, line.label, line.quantity, line.notes, index, line.sectionId],
           );
           continue;
         }
@@ -278,7 +285,7 @@ export class PurchasingController {
         )
           throw new BadRequestException('Choose an active supplier.');
         await c.query(
-          'INSERT INTO shopping_list_lines(store_id,list_id,product_id,target_stock,quantity,unit_cost,tax_rate,supplier_id,notes,position) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+          'INSERT INTO shopping_list_lines(store_id,list_id,product_id,target_stock,quantity,unit_cost,tax_rate,supplier_id,notes,position,section_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
           [
             store,
             id,
@@ -290,6 +297,7 @@ export class PurchasingController {
             line.supplierId,
             line.notes,
             index,
+            line.sectionId,
           ],
         );
         await c.query(
@@ -298,11 +306,10 @@ export class PurchasingController {
           [line.productId, store, line.target, line.supplierId],
         );
       }
-      await c.query('UPDATE shopping_lists SET name=$2,notes=$3,version=version+1 WHERE id=$1', [
-        id,
-        b.name,
-        b.notes,
-      ]);
+      await c.query(
+        'UPDATE shopping_lists SET name=$2,notes=$3,sections=$4::jsonb,version=version+1 WHERE id=$1',
+        [id, b.name, b.notes, JSON.stringify(b.sections)],
+      );
       await audit(
         c,
         { storeId: store, employeeId: req.context.user.id, deviceId: req.context.device.id },

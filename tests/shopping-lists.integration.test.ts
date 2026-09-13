@@ -327,4 +327,50 @@ describe.sequential('shopping-list planning and conversion', () => {
       ).status,
     ).toBe(404);
   });
+  it('persists sections, keeps assignments on rename and rejects unknown sections', async () => {
+    const created = await manager.request('/shopping-lists', {
+      requestId: requestId(),
+      name: 'Sections',
+    });
+    expect(created.status).toBe(201);
+    let current = created.body;
+    const sectionId = requestId();
+    const sections = [{ id: sectionId, name: 'Cleaning' }];
+    const lines = [
+      {
+        productId: null,
+        label: 'Bin bags',
+        target: '0',
+        quantity: '2',
+        unitCost: '0',
+        taxRate: '0',
+        supplierId: null,
+        notes: '',
+        sectionId,
+      },
+    ];
+    const update = (sectionRows: any[], itemRows: any[]) =>
+      manager.request('/shopping-lists/' + current.id, {
+        requestId: requestId(),
+        version: current.version,
+        name: current.name,
+        notes: '',
+        sections: sectionRows,
+        lines: itemRows,
+      });
+    let result = await update(sections, lines);
+    expect(result.status).toBe(201);
+    current = result.body;
+    expect(current.lines[0].sectionId).toBe(sectionId);
+    result = await update([{ id: sectionId, name: 'Supplies' }], lines);
+    expect(result.status).toBe(201);
+    current = result.body;
+    const fetched = await manager.request('/shopping-lists/' + current.id);
+    expect(fetched.body.sections).toEqual([{ id: sectionId, name: 'Supplies' }]);
+    expect(fetched.body.lines[0].sectionId).toBe(sectionId);
+    expect((await update(sections, [{ ...lines[0], sectionId: requestId() }])).status).toBe(400);
+    expect((await manager.request('/shopping-lists/' + current.id)).body.version).toBe(
+      current.version,
+    );
+  });
 });

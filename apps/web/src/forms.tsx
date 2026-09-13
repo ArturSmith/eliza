@@ -574,6 +574,7 @@ export function SearchSelect({
   createLabel,
   onCreate,
   onSelect,
+  panelHeader,
 }: {
   label: string;
   placeholder: string;
@@ -582,11 +583,37 @@ export function SearchSelect({
   createLabel?: string;
   onCreate?: () => void;
   onSelect: (id: string) => void;
+  panelHeader?: (close: () => void) => ReactNode;
 }) {
   useLanguage();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const container = useRef<HTMLDivElement>(null);
+  const [panelLayout, setPanelLayout] = useState({ above: false, height: 360 });
+  useEffect(() => {
+    if (!open) return;
+    function position() {
+      const bounds = container.current?.getBoundingClientRect();
+      if (!bounds) return;
+      const viewport = window.visualViewport;
+      const top = viewport?.offsetTop ?? 0;
+      const bottom = top + (viewport?.height ?? window.innerHeight);
+      const below = Math.max(0, bottom - bounds.bottom - 12);
+      const above = Math.max(0, bounds.top - top - 12);
+      const opensAbove = below < 300 && above > below;
+      setPanelLayout({ above: opensAbove, height: Math.min(420, opensAbove ? above : below) });
+    }
+    position();
+    window.addEventListener('resize', position);
+    window.addEventListener('scroll', position, true);
+    window.visualViewport?.addEventListener('resize', position);
+    return () => {
+      window.removeEventListener('resize', position);
+      window.removeEventListener('scroll', position, true);
+      window.visualViewport?.removeEventListener('resize', position);
+    };
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
     function onPointerDown(event: MouseEvent) {
@@ -619,7 +646,18 @@ export function SearchSelect({
         <ChevronDown size={16} />
       </button>
       {open && (
-        <div className="search-select-panel">
+        <div
+          className="search-select-panel"
+          style={{
+            maxHeight: panelLayout.height,
+            top: panelLayout.above ? 'auto' : 'calc(100% + 4px)',
+            bottom: panelLayout.above ? 'calc(100% + 4px)' : 'auto',
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setOpen(false);
+          }}
+        >
+          {panelHeader?.(() => setOpen(false))}
           <input
             autoFocus
             className="search-select-search"

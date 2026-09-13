@@ -558,11 +558,17 @@ export const shoppingListCreateSchema = z.object({
   notes: z.string().trim().max(1000).default(''),
 });
 export const shoppingListSaveSchema = shoppingListCreateSchema.extend({
+  sections: z
+    .array(z.object({ id: z.uuid(), name: z.string().trim().min(1).max(120) }))
+    .max(100)
+    .refine((rows) => new Set(rows.map((row) => row.id)).size === rows.length, 'Duplicate sections')
+    .default([]),
   version: z.number().int().positive(),
   lines: z
     .array(
       z
         .object({
+          sectionId: z.uuid().nullable().default(null),
           productId: z.uuid().nullable().default(null),
           label: z.string().trim().max(120).default(''),
           target: nonnegativeQuantity,
@@ -620,6 +626,7 @@ export function initialReorderTarget(minimum: string, unit: string) {
   );
 }
 export type ShoppingListLine = {
+  sectionId?: string | null;
   id: string;
   productId: string | null;
   label: string;
@@ -644,6 +651,7 @@ export type ShoppingListLine = {
   purchaseStatus: string | null;
 };
 export type ShoppingList = {
+  sections: { id: string; name: string }[];
   id: string;
   name: string;
   notes: string;

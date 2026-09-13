@@ -1036,5 +1036,13 @@
   "Choose a supplier and a positive quantity for every selected item.": "Выберите поставщика и положительное количество для каждой выбранной позиции.",
   "Shopping list created": "Список закупок создан",
   "Shopping list saved": "Список закупок сохранён",
-  "Shopping list converted": "Из списка закупок созданы заказы"
+  "Shopping list converted": "Из списка закупок созданы заказы",
+  "New section": "Новый раздел",
+  "Add section": "Добавить раздел",
+  "Unsectioned": "Без раздела",
+  "Section name": "Название раздела",
+  "Section": "Раздел",
+  "Choose a section from this shopping list.": "Выберите раздел этого списка покупок.",
+  "Remove section": "Удалить раздел",
+  "Drag to another section": "Перетащите в другой раздел"
 }
