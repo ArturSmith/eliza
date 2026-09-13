@@ -101,7 +101,7 @@ function Editor({ profile }: { profile: Profile }) {
           <p className="muted">
             {t('Currency and timezone remain fixed to keep historical reporting consistent. ')}
           </p>
-          <h3>{t('Receipt header preview')}</h3>
+          <h3 style={{ marginTop: 24, marginBottom: 12 }}>{t('Receipt header preview')}</h3>
           <div style={{ whiteSpace: 'pre-wrap', padding: 20, border: '1px solid var(--border)' }}>
             <strong>{value.name}</strong>
             <div>{value.address}</div>

@@ -880,7 +880,7 @@ export function InventoryPage() {
           useCan('inventory.adjust') && (
             <Button onClick={() => setOpen(true)} disabled={!products.data?.some((p) => p.active)}>
               <Plus size={17} />
-              Adjust stock
+              {t('Adjust stock')}
             </Button>
           )
         }
