@@ -12,16 +12,22 @@ import {
   Check,
   ChevronRight,
   CircleHelp,
-  ClipboardList,
+  ClipboardCheck,
   LayoutDashboard,
+  ListChecks,
   LogOut,
   Monitor,
   Package,
   Plus,
+  Receipt,
+  ScanLine,
+  ScrollText,
   Search,
   Settings,
   ShieldCheck,
   Store,
+  Tags,
+  Truck,
   Users,
   X,
   Pencil,
@@ -52,8 +58,8 @@ const navGroups = [
   {
     label: 'Sales',
     items: [
-      { to: '/pos', label: 'Checkout', icon: Monitor, permission: 'pos.access' },
-      { to: '/sales', label: 'Sales', icon: ClipboardList, permission: 'sales.read' },
+      { to: '/pos', label: 'Checkout', icon: ScanLine, permission: 'pos.access' },
+      { to: '/sales', label: 'Sales', icon: Receipt, permission: 'sales.read' },
       { to: '/analytics', label: 'Analytics', icon: Activity, permission: 'sales.read' },
       { to: '/shifts', label: 'Shifts', icon: Clock3, permission: 'sales.read' },
     ],
@@ -66,10 +72,16 @@ const navGroups = [
       {
         to: '/stock-counts',
         label: 'Stock counts',
-        icon: ClipboardList,
+        icon: ClipboardCheck,
         permission: 'inventory.read',
       },
-      { to: '/purchases', label: 'Purchases', icon: ClipboardList, permission: 'purchases.read' },
+      {
+        to: '/shopping-lists',
+        label: 'Shopping lists',
+        icon: ListChecks,
+        permission: 'purchases.read',
+      },
+      { to: '/purchases', label: 'Purchases', icon: Truck, permission: 'purchases.read' },
       { to: '/suppliers', label: 'Suppliers', icon: Store, permission: 'suppliers.read' },
     ],
   },
@@ -78,7 +90,7 @@ const navGroups = [
     items: [
       { to: '/team', label: 'Team', icon: Users, permission: 'team.read' },
       { to: '/devices', label: 'Devices', icon: Monitor, permission: 'devices.manage' },
-      { to: '/audit', label: 'Activity log', icon: ClipboardList, permission: 'audit.read' },
+      { to: '/audit', label: 'Activity log', icon: ScrollText, permission: 'audit.read' },
       { to: '/settings', label: 'Store settings', icon: Settings, permission: 'settings.manage' },
     ],
   },
@@ -458,7 +470,7 @@ export function Overview() {
           label={t('Categories')}
           value={String(new Set(active.map((p) => p.category)).size)}
           sub="Keeping your shelves organized"
-          icon={<ClipboardList />}
+          icon={<Tags />}
         />
       </div>
       <div className="overview-grid">

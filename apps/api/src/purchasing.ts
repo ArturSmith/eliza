@@ -16,7 +16,13 @@ import {
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
+  type ShoppingList,
   supplierSchema,
+  shoppingListCreateSchema,
+  shoppingListSaveSchema,
+  shoppingListConvertSchema,
+  suggestedOrderQuantity,
+  initialReorderTarget,
   purchasePaymentSchema,
   purchaseDraftSchema,
   receiptInputSchema,
@@ -29,6 +35,7 @@ import { AuthModule } from './auth.js';
 import { AccessGuard, Require, parse, hash, cookie, type AuthRequest } from './security.js';
 import { Operations, audit } from './operations.js';
 import type { PoolClient } from 'pg';
+import { shoppingProducts } from './shopping-list-data.js';
 const command = z.object({ requestId: z.uuid(), version: z.number().int().positive() });
 const supplierColumns = `id,code,name,contact_name AS "contactName",email,phone,address,company_number AS "companyNumber",payment_terms AS "paymentTerms",notes,active,version,created_at AS "createdAt"`;
 @Controller()
@@ -83,6 +90,312 @@ export class PurchasingController {
       return result;
     });
   }
+
+  @Get('shopping-lists') @Require('purchases.read') async shoppingLists(@Req() req: AuthRequest) {
+    return (
+      await this.database.pool.query(
+        `SELECT s.id,s.name,s.notes,s.version,s.created_at AS "createdAt",
+      (SELECT count(*)::int FROM shopping_list_lines l WHERE l.list_id=s.id) AS "productCount",
+      (SELECT count(*)::int FROM shopping_list_lines l WHERE l.list_id=s.id AND l.purchase_id IS NOT NULL) AS "convertedCount"
+      FROM shopping_lists s WHERE s.store_id=$1 ORDER BY s.created_at DESC LIMIT 100`,
+        [req.context.store.id],
+      )
+    ).rows;
+  }
+  @Get('shopping-lists/products') @Require('purchases.read') async shoppingCatalog(
+    @Req() req: AuthRequest,
+  ) {
+    const c = await this.database.pool.connect();
+    try {
+      return await shoppingProducts(c, req.context.store.id);
+    } finally {
+      c.release();
+    }
+  }
+  private async shoppingDetail(c: PoolClient, id: string, store: string): Promise<ShoppingList> {
+    const list = (
+      await c.query(
+        'SELECT id,name,notes,version,created_at AS "createdAt" FROM shopping_lists WHERE id=$1 AND store_id=$2',
+        [id, store],
+      )
+    ).rows[0];
+    if (!list) throw new NotFoundException('Shopping list not found.');
+    const lines = (
+      await c.query(
+        `SELECT l.id,l.product_id AS "productId",l.label,l.target_stock AS target,
+      l.quantity,l.unit_cost AS "unitCost",l.tax_rate AS "taxRate",l.supplier_id AS "supplierId",l.notes,
+      l.purchase_id AS "purchaseId",s.name AS "supplierName",s.active AS "supplierActive",
+      p.number AS "purchaseNumber",p.status AS "purchaseStatus"
+      FROM shopping_list_lines l LEFT JOIN suppliers s ON s.id=l.supplier_id
+      LEFT JOIN purchases p ON p.id=l.purchase_id WHERE l.list_id=$1 ORDER BY l.position,l.id`,
+        [id],
+      )
+    ).rows;
+    const products = new Map(
+      (
+        await shoppingProducts(
+          c,
+          store,
+          lines.map((l) => l.productId).filter((productId) => productId !== null),
+        )
+      ).map((p) => [p.productId, p]),
+    );
+    return {
+      ...list,
+      lines: lines.map((line) =>
+        line.productId
+          ? { ...products.get(line.productId), ...line }
+          : {
+              name: line.label,
+              sku: '',
+              unit: 'piece',
+              active: true,
+              stock: '0',
+              minStock: '0',
+              incoming: '0',
+              drafts: '0',
+              ...line,
+            },
+      ),
+    };
+  }
+  @Get('shopping-lists/:id') @Require('purchases.read') async getShoppingList(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    const c = await this.database.pool.connect();
+    try {
+      return await this.shoppingDetail(c, id, req.context.store.id);
+    } finally {
+      c.release();
+    }
+  }
+  private async lockShopping(c: PoolClient, id: string, store: string, version: number) {
+    const row = (
+      await c.query('SELECT * FROM shopping_lists WHERE id=$1 AND store_id=$2 FOR UPDATE', [
+        id,
+        store,
+      ])
+    ).rows[0];
+    if (!row) throw new NotFoundException('Shopping list not found.');
+    if (row.version !== version)
+      throw new ConflictException('Shopping list changed. Reload it before continuing.');
+    return row;
+  }
+  @Post('shopping-lists') @Require('purchases.write') async createShoppingList(
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(shoppingListCreateSchema, input);
+    return this.run(req, b.requestId, 'shopping-create', b, async (c) => {
+      const store = req.context.store.id;
+      const products = (await shoppingProducts(c, store)).filter(
+        (p) => p.active && toScaled(p.stock, 3) <= toScaled(p.minStock, 3),
+      );
+      if (products.length > 500)
+        throw new BadRequestException('A shopping list supports up to 500 products.');
+      const list = (
+        await c.query(
+          'INSERT INTO shopping_lists(store_id,name,notes) VALUES($1,$2,$3) RETURNING id',
+          [store, b.name, b.notes],
+        )
+      ).rows[0];
+      for (const [index, p] of products.entries()) {
+        const target = p.preferredTarget ?? initialReorderTarget(p.minStock, p.unit);
+        const quantity = suggestedOrderQuantity(target, p.stock, p.incoming, p.drafts, p.unit);
+        await c.query(
+          'INSERT INTO shopping_list_lines(store_id,list_id,product_id,target_stock,quantity,unit_cost,tax_rate,supplier_id,position) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+          [
+            store,
+            list.id,
+            p.productId,
+            target,
+            quantity,
+            p.unitCost,
+            p.taxRate,
+            p.preferredSupplierId,
+            index,
+          ],
+        );
+      }
+      await audit(
+        c,
+        { storeId: store, employeeId: req.context.user.id, deviceId: req.context.device.id },
+        'Shopping list created',
+        list.id,
+        { products: products.length },
+      );
+      return this.shoppingDetail(c, list.id, store);
+    });
+  }
+  @Post('shopping-lists/:id') @Require('purchases.write') async saveShoppingList(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(shoppingListSaveSchema, input);
+    return this.run(req, b.requestId, 'shopping-save', { id, ...b }, async (c) => {
+      const store = req.context.store.id;
+      await this.lockShopping(c, id, store, b.version);
+      const old = await this.shoppingDetail(c, id, store);
+      const converted = new Set(
+        old.lines.filter((l) => l.purchaseId && l.productId).map((l) => l.productId),
+      );
+      if (b.lines.length + converted.size > 500)
+        throw new BadRequestException('A shopping list supports up to 500 products.');
+      await c.query('DELETE FROM shopping_list_lines WHERE list_id=$1 AND purchase_id IS NULL', [
+        id,
+      ]);
+      for (const [index, line] of b.lines.entries()) {
+        if (line.productId === null) {
+          await c.query(
+            'INSERT INTO shopping_list_lines(store_id,list_id,label,target_stock,quantity,unit_cost,tax_rate,supplier_id,notes,position) VALUES($1,$2,$3,0,$4,0,0,NULL,$5,$6)',
+            [store, id, line.label, line.quantity, line.notes, index],
+          );
+          continue;
+        }
+        if (converted.has(line.productId))
+          throw new ConflictException(
+            'Converted items cannot be changed or ordered again from this list.',
+          );
+        const p = (
+          await c.query(
+            'SELECT unit FROM products WHERE id=$1 AND store_id=$2 AND active FOR SHARE',
+            [line.productId, store],
+          )
+        ).rows[0];
+        if (!p) throw new BadRequestException('Choose active products from this store.');
+        this.whole(p.unit, line.target);
+        this.whole(p.unit, line.quantity);
+        if (
+          line.supplierId &&
+          !(
+            await c.query(
+              'SELECT id FROM suppliers WHERE id=$1 AND store_id=$2 AND active FOR SHARE',
+              [line.supplierId, store],
+            )
+          ).rowCount
+        )
+          throw new BadRequestException('Choose an active supplier.');
+        await c.query(
+          'INSERT INTO shopping_list_lines(store_id,list_id,product_id,target_stock,quantity,unit_cost,tax_rate,supplier_id,notes,position) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+          [
+            store,
+            id,
+            line.productId,
+            line.target,
+            line.quantity,
+            line.unitCost,
+            line.taxRate,
+            line.supplierId,
+            line.notes,
+            index,
+          ],
+        );
+        await c.query(
+          `INSERT INTO reorder_preferences(product_id,store_id,target_stock,supplier_id) VALUES($1,$2,$3,$4)
+          ON CONFLICT(product_id) DO UPDATE SET target_stock=EXCLUDED.target_stock,supplier_id=EXCLUDED.supplier_id`,
+          [line.productId, store, line.target, line.supplierId],
+        );
+      }
+      await c.query('UPDATE shopping_lists SET name=$2,notes=$3,version=version+1 WHERE id=$1', [
+        id,
+        b.name,
+        b.notes,
+      ]);
+      await audit(
+        c,
+        { storeId: store, employeeId: req.context.user.id, deviceId: req.context.device.id },
+        'Shopping list saved',
+        id,
+        { lines: b.lines },
+      );
+      return this.shoppingDetail(c, id, store);
+    });
+  }
+  @Post('shopping-lists/:id/convert') @Require('purchases.write') async convertShoppingList(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(shoppingListConvertSchema, input);
+    return this.run(req, b.requestId, 'shopping-convert', { id, ...b }, async (c) => {
+      const store = req.context.store.id;
+      const list = await this.lockShopping(c, id, store, b.version);
+      const detail = await this.shoppingDetail(c, id, store);
+      const groups = new Map<string, typeof detail.lines>();
+      for (const lineId of b.lineIds) {
+        const line = detail.lines.find((l) => l.id === lineId);
+        if (!line || line.purchaseId)
+          throw new ConflictException(
+            'Converted items cannot be changed or ordered again from this list.',
+          );
+        if (!line.supplierId || !line.productId || toScaled(line.quantity, 3) <= 0n)
+          throw new BadRequestException(
+            'Choose a supplier and a positive quantity for every selected item.',
+          );
+        const rows = groups.get(line.supplierId) ?? [];
+        rows.push(line);
+        groups.set(line.supplierId, rows);
+      }
+      for (const [supplierId, lines] of [...groups.entries()].sort(([a], [b]) =>
+        a.localeCompare(b),
+      )) {
+        for (let offset = 0; offset < lines.length; offset += 100) {
+          const batch = lines.slice(offset, offset + 100);
+          const order = await this.saveDraft(
+            c,
+            req,
+            purchaseDraftSchema.parse({
+              supplierId,
+              notes: ('Shopping list: ' + list.name + '\n' + list.notes).slice(0, 1000),
+              lines: batch.map((l) => ({
+                productId: l.productId,
+                quantity: l.quantity,
+                unitCost: l.unitCost,
+                taxRate: l.taxRate,
+              })),
+            }),
+          );
+          await c.query(
+            'UPDATE shopping_list_lines SET purchase_id=$1 WHERE list_id=$2 AND id=ANY($3::uuid[])',
+            [order.id, id, batch.map((l) => l.id)],
+          );
+        }
+      }
+      await c.query('UPDATE shopping_lists SET version=version+1 WHERE id=$1', [id]);
+      await audit(
+        c,
+        { storeId: store, employeeId: req.context.user.id, deviceId: req.context.device.id },
+        'Shopping list converted',
+        id,
+        { lineIds: b.lineIds },
+      );
+      return this.shoppingDetail(c, id, store);
+    });
+  }
+  @Post('shopping-lists/:id/delete') @Require('purchases.write') async deleteShoppingList(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(command, input);
+    return this.run(req, b.requestId, 'shopping-delete', { id, ...b }, async (c) => {
+      const store = req.context.store.id;
+      await this.lockShopping(c, id, store, b.version);
+      await c.query('DELETE FROM shopping_list_lines WHERE list_id=$1', [id]);
+      await c.query('DELETE FROM shopping_lists WHERE id=$1 AND store_id=$2', [id, store]);
+      await audit(
+        c,
+        { storeId: store, employeeId: req.context.user.id, deviceId: req.context.device.id },
+        'Shopping list deleted',
+        id,
+        {},
+      );
+      return { id };
+    });
+  }
+
   @Get('suppliers') @Require('suppliers.read') async suppliers(@Req() req: AuthRequest) {
     return (
       await this.database.pool.query(
@@ -239,102 +552,107 @@ export class PurchasingController {
       }),
       input,
     );
-    return this.run(req, b.requestId, 'draft', b, async (c) => {
-      const store = req.context.store.id;
-      if (b.id) {
-        const previous = await this.lock(c, b.id, store, b.version ?? 0);
-        if (previous.status !== 'draft') throw new ConflictException('Only drafts can be edited.');
-      }
-      if (
-        !(
+    return this.run(req, b.requestId, 'draft', b, (c) => this.saveDraft(c, req, b));
+  }
+  private async saveDraft(
+    c: PoolClient,
+    req: AuthRequest,
+    b: z.infer<typeof purchaseDraftSchema> & { id?: string; version?: number },
+  ) {
+    const store = req.context.store.id;
+    if (b.id) {
+      const previous = await this.lock(c, b.id, store, b.version ?? 0);
+      if (previous.status !== 'draft') throw new ConflictException('Only drafts can be edited.');
+    }
+    if (
+      !(
+        await c.query('SELECT id FROM suppliers WHERE id=$1 AND store_id=$2 AND active FOR SHARE', [
+          b.supplierId,
+          store,
+        ])
+      ).rowCount
+    )
+      throw new BadRequestException('Choose an active supplier.');
+    const lines = [];
+    let subtotal = 0n,
+      tax = 0n;
+    for (const line of [...b.lines].sort((a, b) => a.productId.localeCompare(b.productId))) {
+      const p = (
+        await c.query('SELECT * FROM products WHERE id=$1 AND store_id=$2 AND active FOR SHARE', [
+          line.productId,
+          store,
+        ])
+      ).rows[0];
+      if (!p) throw new BadRequestException('Choose active products from this store.');
+      this.whole(p.unit, line.quantity);
+      const totals = calculatePurchaseLine(line.unitCost, line.quantity, line.taxRate);
+      subtotal += toScaled(totals.subtotal, 2);
+      tax += toScaled(totals.tax, 2);
+      lines.push({ p, line, totals });
+    }
+    if (subtotal + tax > 99999999999n) throw new BadRequestException('Order total is too large.');
+    const p = b.id
+      ? { id: b.id }
+      : (
           await c.query(
-            'SELECT id FROM suppliers WHERE id=$1 AND store_id=$2 AND active FOR SHARE',
-            [b.supplierId, store],
+            `INSERT INTO purchases(store_id,supplier_id,number,supplier_reference,expected_date,notes,subtotal,tax,total,created_by,device_id) VALUES($1,$2,'PO-'||lpad(nextval('purchase_number_sequence')::text,6,'0'),$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+            [
+              store,
+              b.supplierId,
+              b.supplierReference,
+              b.expectedDate || null,
+              b.notes,
+              fromScaled(subtotal, 2),
+              fromScaled(tax, 2),
+              fromScaled(subtotal + tax, 2),
+              req.context.user.id,
+              req.context.device.id,
+            ],
           )
-        ).rowCount
-      )
-        throw new BadRequestException('Choose an active supplier.');
-      const lines = [];
-      let subtotal = 0n,
-        tax = 0n;
-      for (const line of [...b.lines].sort((a, b) => a.productId.localeCompare(b.productId))) {
-        const p = (
-          await c.query('SELECT * FROM products WHERE id=$1 AND store_id=$2 AND active FOR SHARE', [
-            line.productId,
-            store,
-          ])
         ).rows[0];
-        if (!p) throw new BadRequestException('Choose active products from this store.');
-        this.whole(p.unit, line.quantity);
-        const totals = calculatePurchaseLine(line.unitCost, line.quantity, line.taxRate);
-        subtotal += toScaled(totals.subtotal, 2);
-        tax += toScaled(totals.tax, 2);
-        lines.push({ p, line, totals });
-      }
-      if (subtotal + tax > 99999999999n) throw new BadRequestException('Order total is too large.');
-      const p = b.id
-        ? { id: b.id }
-        : (
-            await c.query(
-              `INSERT INTO purchases(store_id,supplier_id,number,supplier_reference,expected_date,notes,subtotal,tax,total,created_by,device_id) VALUES($1,$2,'PO-'||lpad(nextval('purchase_number_sequence')::text,6,'0'),$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
-              [
-                store,
-                b.supplierId,
-                b.supplierReference,
-                b.expectedDate || null,
-                b.notes,
-                fromScaled(subtotal, 2),
-                fromScaled(tax, 2),
-                fromScaled(subtotal + tax, 2),
-                req.context.user.id,
-                req.context.device.id,
-              ],
-            )
-          ).rows[0];
-      if (b.id) {
-        await c.query('DELETE FROM purchase_lines WHERE purchase_id=$1', [b.id]);
-        await c.query(
-          'UPDATE purchases SET supplier_id=$2,supplier_reference=$3,expected_date=$4,notes=$5,subtotal=$6,tax=$7,total=$8,version=version+1 WHERE id=$1',
-          [
-            b.id,
-            b.supplierId,
-            b.supplierReference,
-            b.expectedDate || null,
-            b.notes,
-            fromScaled(subtotal, 2),
-            fromScaled(tax, 2),
-            fromScaled(subtotal + tax, 2),
-          ],
-        );
-      }
-      for (const { p: product, line, totals } of lines)
-        await c.query(
-          'INSERT INTO purchase_lines(store_id,purchase_id,product_id,product_name,sku,unit,ordered_quantity,unit_cost,tax_rate,subtotal,tax,total,proposed_selling_price) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
-          [
-            store,
-            p.id,
-            product.id,
-            product.name,
-            product.sku,
-            product.unit,
-            line.quantity,
-            line.unitCost,
-            line.taxRate,
-            totals.subtotal,
-            totals.tax,
-            totals.total,
-            line.sellingPrice ?? null,
-          ],
-        );
-      await audit(
-        c,
-        { storeId: store, employeeId: req.context.user.id, deviceId: req.context.device.id },
-        b.id ? 'Purchase draft edited' : 'Purchase drafted',
-        p.id,
-        { total: fromScaled(subtotal + tax, 2) },
+    if (b.id) {
+      await c.query('DELETE FROM purchase_lines WHERE purchase_id=$1', [b.id]);
+      await c.query(
+        'UPDATE purchases SET supplier_id=$2,supplier_reference=$3,expected_date=$4,notes=$5,subtotal=$6,tax=$7,total=$8,version=version+1 WHERE id=$1',
+        [
+          b.id,
+          b.supplierId,
+          b.supplierReference,
+          b.expectedDate || null,
+          b.notes,
+          fromScaled(subtotal, 2),
+          fromScaled(tax, 2),
+          fromScaled(subtotal + tax, 2),
+        ],
       );
-      return this.details(c, p.id, store);
-    });
+    }
+    for (const { p: product, line, totals } of lines)
+      await c.query(
+        'INSERT INTO purchase_lines(store_id,purchase_id,product_id,product_name,sku,unit,ordered_quantity,unit_cost,tax_rate,subtotal,tax,total,proposed_selling_price) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
+        [
+          store,
+          p.id,
+          product.id,
+          product.name,
+          product.sku,
+          product.unit,
+          line.quantity,
+          line.unitCost,
+          line.taxRate,
+          totals.subtotal,
+          totals.tax,
+          totals.total,
+          line.sellingPrice ?? null,
+        ],
+      );
+    await audit(
+      c,
+      { storeId: store, employeeId: req.context.user.id, deviceId: req.context.device.id },
+      b.id ? 'Purchase draft edited' : 'Purchase drafted',
+      p.id,
+      { total: fromScaled(subtotal + tax, 2) },
+    );
+    return this.details(c, p.id, store);
   }
   private whole(unit: string, quantity: string) {
     if (['piece', 'pack', 'box'].includes(unit) && toScaled(quantity, 3) % 1000n !== 0n)

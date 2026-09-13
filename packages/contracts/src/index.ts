@@ -547,3 +547,111 @@ export type PurchaseDetail = PurchaseSummary & {
   lines: PurchaseLine[];
   receipts: GoodsReceipt[];
 };
+
+const nonnegativeQuantity = quantity.refine(
+  (value) => isQuantity(value) && toScaled(value, 3) >= 0n,
+  'Quantity cannot be negative',
+);
+export const shoppingListCreateSchema = z.object({
+  requestId: z.uuid(),
+  name: short,
+  notes: z.string().trim().max(1000).default(''),
+});
+export const shoppingListSaveSchema = shoppingListCreateSchema.extend({
+  version: z.number().int().positive(),
+  lines: z
+    .array(
+      z
+        .object({
+          productId: z.uuid().nullable().default(null),
+          label: z.string().trim().max(120).default(''),
+          target: nonnegativeQuantity,
+          quantity: nonnegativeQuantity,
+          supplierId: z.uuid().nullable(),
+          unitCost: money,
+          taxRate: purchaseTax,
+          notes: z.string().trim().max(300).default(''),
+        })
+        .refine(
+          (line) => (line.productId !== null) !== (line.label !== ''),
+          'Give either a catalogue product or a free-text item name.',
+        )
+        .refine(
+          (line) => line.productId !== null || line.supplierId === null,
+          'Free-text items cannot be assigned to a supplier.',
+        ),
+    )
+    .max(500)
+    .refine((lines) => {
+      const ids = lines.map((line) => line.productId).filter((id) => id !== null);
+      return new Set(ids).size === ids.length;
+    }, 'Combine duplicate products into one line'),
+});
+export const shoppingListConvertSchema = z.object({
+  requestId: z.uuid(),
+  version: z.number().int().positive(),
+  lineIds: z
+    .array(z.uuid())
+    .min(1)
+    .max(500)
+    .refine((ids) => new Set(ids).size === ids.length),
+});
+export function suggestedOrderQuantity(
+  target: string,
+  stock: string,
+  incoming: string,
+  drafts: string,
+  unit: string,
+) {
+  let amount =
+    toScaled(target, 3) - toScaled(stock, 3) - toScaled(incoming, 3) - toScaled(drafts, 3);
+  if (amount < 0n) amount = 0n;
+  if (['piece', 'pack', 'box'].includes(unit)) amount = ((amount + 999n) / 1000n) * 1000n;
+  return fromScaled(amount, 3);
+}
+export function initialReorderTarget(minimum: string, unit: string) {
+  const doubled = toScaled(minimum, 3) * 2n;
+  return suggestedOrderQuantity(
+    fromScaled(doubled > 1000n ? doubled : 1000n, 3),
+    '0',
+    '0',
+    '0',
+    unit,
+  );
+}
+export type ShoppingListLine = {
+  id: string;
+  productId: string | null;
+  label: string;
+  name: string;
+  sku: string;
+  unit: string;
+  active: boolean;
+  stock: string;
+  minStock: string;
+  incoming: string;
+  drafts: string;
+  target: string;
+  quantity: string;
+  unitCost: string;
+  taxRate: string;
+  notes: string;
+  supplierId: string | null;
+  supplierName: string | null;
+  supplierActive: boolean | null;
+  purchaseId: string | null;
+  purchaseNumber: string | null;
+  purchaseStatus: string | null;
+};
+export type ShoppingList = {
+  id: string;
+  name: string;
+  notes: string;
+  version: number;
+  createdAt: string;
+  lines: ShoppingListLine[];
+};
+export type ShoppingListSummary = Omit<ShoppingList, 'lines'> & {
+  productCount: number;
+  convertedCount: number;
+};

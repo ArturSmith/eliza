@@ -6,33 +6,33 @@ These are proposals to explore, not committed requirements or implemented featur
 
 ## Small improvements to explore during a shop pilot
 
-| Idea | Shop benefit | Initial scope | Dependency / consideration |
-| --- | --- | --- | --- |
-| Duplicate a purchase order | Reorder common deliveries without entering every line again. | Copy supplier and products into a new draft; use current costs and prices and require review. | Never copy received quantities, payment state, or transaction IDs. |
-| Reorder worksheet | Turn low-stock findings into an editable purchasing plan. | Select low-stock products and prepare supplier-specific drafts. | Preferred suppliers and inventory filters; no automatic order submission. |
-| Print changed shelf prices | Help staff keep shelf labels consistent after receiving a delivery. | List confirmed price changes with old/new prices and an acknowledgement checkbox. | Build on purchase price changes and label printing. |
-| Delivery discrepancy notes | Explain shortages, damage, or unexpected goods when checking a shipment. | Record notes and reasons against a delivery or outstanding line. | Keep delivered, accepted, damaged, and outstanding quantities distinct. |
-| Missing product data checklist | Find products with no barcode, photo, cost, or tax review. | Filter the catalog by missing fields and open each product for editing. | A zero cost or tax rate is not automatically an error. |
-| CSV product import with preview | Speed up onboarding an existing shop. | Map columns, validate units/prices/barcodes, preview changes, then import. | Reject ambiguous duplicates; report per-row errors; do not silently alter stock. |
-| CSV report export | Share figures with an accountant without manual transcription. | Export the currently applied Analytics filters with currency and timezone. | Preserve imported-data attribution where relevant and protect spreadsheet formula cells. |
-| Saved report filters | Repeat common sales comparisons quickly. | Save a named filter selection such as "Last month — drinks". | Clearly distinguish rolling date periods from fixed dates. |
-| Printable end-of-day summary | Give owners a consistent closing document. | Sales, refunds, payment totals, drawer differences, and unresolved shifts. | Reuse authoritative reporting calculations. |
-| Connection status and recovery guidance | Help cashiers understand an uncertain checkout result. | Show connection status and direct them to existing payment/refund recovery. | Must not imply that offline sales are supported. |
+| Idea                                    | Shop benefit                                                             | Initial scope                                                                                 | Dependency / consideration                                                               |
+| --------------------------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Duplicate a purchase order              | Reorder common deliveries without entering every line again.             | Copy supplier and products into a new draft; use current costs and prices and require review. | Never copy received quantities, payment state, or transaction IDs.                       |
+| Reorder worksheet                       | Turn low-stock findings into an editable purchasing plan.                | Select low-stock products and prepare supplier-specific drafts.                               | Preferred suppliers and inventory filters; no automatic order submission.                |
+| Print changed shelf prices              | Help staff keep shelf labels consistent after receiving a delivery.      | List confirmed price changes with old/new prices and an acknowledgement checkbox.             | Build on purchase price changes and label printing.                                      |
+| Delivery discrepancy notes              | Explain shortages, damage, or unexpected goods when checking a shipment. | Record notes and reasons against a delivery or outstanding line.                              | Keep delivered, accepted, damaged, and outstanding quantities distinct.                  |
+| Missing product data checklist          | Find products with no barcode, photo, cost, or tax review.               | Filter the catalog by missing fields and open each product for editing.                       | A zero cost or tax rate is not automatically an error.                                   |
+| CSV product import with preview         | Speed up onboarding an existing shop.                                    | Map columns, validate units/prices/barcodes, preview changes, then import.                    | Reject ambiguous duplicates; report per-row errors; do not silently alter stock.         |
+| CSV report export                       | Share figures with an accountant without manual transcription.           | Export the currently applied Analytics filters with currency and timezone.                    | Preserve imported-data attribution where relevant and protect spreadsheet formula cells. |
+| Saved report filters                    | Repeat common sales comparisons quickly.                                 | Save a named filter selection such as "Last month — drinks".                                  | Clearly distinguish rolling date periods from fixed dates.                               |
+| Printable end-of-day summary            | Give owners a consistent closing document.                               | Sales, refunds, payment totals, drawer differences, and unresolved shifts.                    | Reuse authoritative reporting calculations.                                              |
+| Connection status and recovery guidance | Help cashiers understand an uncertain checkout result.                   | Show connection status and direct them to existing payment/refund recovery.                   | Must not imply that offline sales are supported.                                         |
 
 ## Ideas that need more workflow design
 
-| Idea | Shop benefit | Questions to resolve first |
-| --- | --- | --- |
-| Expiry dates and batches | Identify goods approaching expiry and trace affected stock. | Are batch-level receiving, sales allocation, and stock counts required? Manual expiry notes alone are not batch tracking. |
-| Near-expiry markdowns | Reduce waste through controlled price reductions. | How are affected units identified? Prefer starting with approved line discounts before a promotion engine. |
-| Pack-to-piece receiving | Receive cases while selling individual items. | Define conversion factors, rounding, unit history, and whether barcodes distinguish packs from pieces. |
-| Stock reservation for held carts | Reduce contention for scarce products. | When should reservations expire, and should simply holding a cart reduce availability to other tills? |
-| Reason-based loss analysis | Distinguish expiry, damage, theft, and count differences. | Agree on staff-friendly reason codes and who can review sensitive categories. Extends stock-loss reports. |
-| Inventory count by aisle or shelf | Make physical counts manageable for larger shops. | Add locations, support products in multiple locations, and retain the existing movement-conflict rules. |
-| Supplier reliability report | Identify late or incomplete deliveries. | Need reliable expected dates, actual receipt times, and explicitly closed shortages. |
-| Price-change review queue | Let a manager review suggested selling prices before applying them. | Define permissions, stale-price checks, and when checkout starts using approved prices. |
-| Attach invoice or delivery-note photos | Keep supplier paperwork connected to the transaction. | Documents need access control, size limits, retention, and durable storage beyond tiny product thumbnails. |
-| Manager task inbox | Surface unresolved operational work in one place. | Start with pending deliveries, stock-count reviews, and drawer discrepancies; avoid duplicate notifications. |
+| Idea                                   | Shop benefit                                                        | Questions to resolve first                                                                                                |
+| -------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Expiry dates and batches               | Identify goods approaching expiry and trace affected stock.         | Are batch-level receiving, sales allocation, and stock counts required? Manual expiry notes alone are not batch tracking. |
+| Near-expiry markdowns                  | Reduce waste through controlled price reductions.                   | How are affected units identified? Prefer starting with approved line discounts before a promotion engine.                |
+| Pack-to-piece receiving                | Receive cases while selling individual items.                       | Define conversion factors, rounding, unit history, and whether barcodes distinguish packs from pieces.                    |
+| Stock reservation for held carts       | Reduce contention for scarce products.                              | When should reservations expire, and should simply holding a cart reduce availability to other tills?                     |
+| Reason-based loss analysis             | Distinguish expiry, damage, theft, and count differences.           | Agree on staff-friendly reason codes and who can review sensitive categories. Extends stock-loss reports.                 |
+| Inventory count by aisle or shelf      | Make physical counts manageable for larger shops.                   | Add locations, support products in multiple locations, and retain the existing movement-conflict rules.                   |
+| Supplier reliability report            | Identify late or incomplete deliveries.                             | Need reliable expected dates, actual receipt times, and explicitly closed shortages.                                      |
+| Price-change review queue              | Let a manager review suggested selling prices before applying them. | Define permissions, stale-price checks, and when checkout starts using approved prices.                                   |
+| Attach invoice or delivery-note photos | Keep supplier paperwork connected to the transaction.               | Documents need access control, size limits, retention, and durable storage beyond tiny product thumbnails.                |
+| Manager task inbox                     | Surface unresolved operational work in one place.                   | Start with pending deliveries, stock-count reviews, and drawer discrepancies; avoid duplicate notifications.              |
 
 ## Later opportunities
 
@@ -50,9 +50,9 @@ For each selected idea, record the user problem, real example, expected benefit,
 
 These four proposals now have assigned priorities in the [backlog](prioritized-backlog.md#additional-priorities--13-september-2026). They are not yet implemented.
 
-### 1. Editable shopping list from low stock — P1
+### 1. Editable shopping list from low stock — P1 — implemented
 
-Extends the earlier reorder worksheet proposal.
+Implemented on 13 September 2026. See [shopping-list usage and limits](shopping-lists.md). Extends the earlier reorder worksheet proposal.
 
 - Generate a draft from low-stock and out-of-stock products.
 - Suggest quantities using a configurable target stock level, subtracting current stock and quantities already on order; never suggest a negative quantity.
@@ -111,16 +111,16 @@ Recommended sequence: **shopping list → supplier comparison → scheduled repo
 
 Exploratory proposals, not implementation commitments. This order ranks AI ideas relative to one another; it does not replace the main MVP backlog. Focus on reducing manual entry and explaining useful information inside existing workflows.
 
-| Order | Feature | Example experience | AI contribution |
-| ---: | --- | --- | --- |
-| 1 | Purchase drafts from invoices or delivery notes | Upload a photo/PDF, review supplier and product lines, then save a draft. | Extract quantities, costs, and tax; suggest matches to existing products. |
-| 2 | Natural-language Analytics | Ask “How much Coca-Cola did Anna sell last week?” | Translate questions into supported report filters and explain verified results. |
-| 3 | Shopping-list explanations | Ask “Why should I order 24 bottles?” | Explain stock, incoming orders, targets, and demand assumptions; help refine drafts conversationally. |
-| 4 | Product creation from packaging photos | Photograph a package and review suggested name, description, brand, size, and category. | Extract details when barcode lookup has no match or incomplete information. |
-| 5 | End-of-period business summaries | Read a short explanation of sales and margin changes, linked to supporting reports. | Summarize calculated results and identify contributors without inventing causes. |
-| 6 | Supplier-option explanations | Understand why a higher unit price might still produce a cheaper small order after delivery charges. | Explain comparable costs, terms, lead times, and missing or stale information. |
-| 7 | Unusual-activity review | Review unusually high refunds and the affected receipts. | Highlight evidence for investigation; do not accuse employees or automatically restrict them. |
-| 8 | Contextual workflow help | Ask what to enter when only half a delivery arrives. | Explain the current screen and actual workflow using maintained Eliza documentation. |
+| Order | Feature                                         | Example experience                                                                                   | AI contribution                                                                                       |
+| ----: | ----------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+|     1 | Purchase drafts from invoices or delivery notes | Upload a photo/PDF, review supplier and product lines, then save a draft.                            | Extract quantities, costs, and tax; suggest matches to existing products.                             |
+|     2 | Natural-language Analytics                      | Ask “How much Coca-Cola did Anna sell last week?”                                                    | Translate questions into supported report filters and explain verified results.                       |
+|     3 | Shopping-list explanations                      | Ask “Why should I order 24 bottles?”                                                                 | Explain stock, incoming orders, targets, and demand assumptions; help refine drafts conversationally. |
+|     4 | Product creation from packaging photos          | Photograph a package and review suggested name, description, brand, size, and category.              | Extract details when barcode lookup has no match or incomplete information.                           |
+|     5 | End-of-period business summaries                | Read a short explanation of sales and margin changes, linked to supporting reports.                  | Summarize calculated results and identify contributors without inventing causes.                      |
+|     6 | Supplier-option explanations                    | Understand why a higher unit price might still produce a cheaper small order after delivery charges. | Explain comparable costs, terms, lead times, and missing or stale information.                        |
+|     7 | Unusual-activity review                         | Review unusually high refunds and the affected receipts.                                             | Highlight evidence for investigation; do not accuse employees or automatically restrict them.         |
+|     8 | Contextual workflow help                        | Ask what to enter when only half a delivery arrives.                                                 | Explain the current screen and actual workflow using maintained Eliza documentation.                  |
 
 ### Shared design rules
 

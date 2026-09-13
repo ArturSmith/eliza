@@ -2405,3 +2405,143 @@ select {
     display: none !important;
   }
 }
+
+.shopping-detail {
+  margin-top: 24px;
+}
+.shopping-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+}
+.shopping-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 240px;
+  flex: 1;
+}
+.shopping-head-text .muted {
+  font-size: 12px;
+}
+.shopping-title {
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 2px 6px;
+  margin-left: -6px;
+  font-size: 17px;
+  font-weight: 600;
+  border-radius: 6px;
+  width: 100%;
+}
+.shopping-title:hover:not(:disabled) {
+  border-color: var(--border);
+}
+.shopping-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.shopping-notice {
+  margin-bottom: 16px;
+}
+.shopping-lines {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.shopping-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 16px;
+}
+.shopping-line + .shopping-line {
+  border-top: 1px solid var(--border);
+}
+.shopping-line-done {
+  background: #f7f9f5;
+}
+.shopping-line-main {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 200px;
+}
+.shopping-line-name {
+  font-weight: 600;
+}
+.shopping-line-supplier,
+.shopping-line-unit {
+  font-size: 12px;
+}
+.shopping-line-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.shopping-qty {
+  width: 84px;
+  text-align: right;
+}
+.shopping-add {
+  padding-top: 4px;
+}
+.shopping-add-custom {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.shopping-add-custom .field {
+  flex: 1;
+  margin-bottom: 0;
+}
+.shopping-list-notes {
+  margin: 0 0 16px;
+  white-space: pre-wrap;
+}
+.shopping-notes-field {
+  margin-top: 20px;
+}
+.shopping-notes-field .field {
+  gap: 12px;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .shopping-print,
+  .shopping-print * {
+    visibility: visible;
+  }
+  .shopping-print .no-print,
+  .shopping-print .no-print * {
+    display: none !important;
+  }
+  .shopping-print {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    border: 0;
+    box-shadow: none;
+  }
+  .shopping-line {
+    break-inside: avoid;
+  }
+  .shopping-qty {
+    border: 0;
+    padding: 0;
+    background: transparent;
+  }
+}

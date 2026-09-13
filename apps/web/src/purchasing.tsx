@@ -348,7 +348,9 @@ export function PurchasesPage() {
   useLanguage();
   const q = useQuery({ queryKey: ['purchases'], queryFn: () => api<Order[]>('/purchases') });
   const currency = useSession().data?.store.currency ?? 'NOK';
-  const [selected, setSelected] = useState<string>();
+  const [selected, setSelected] = useState<string | undefined>(
+    () => new URLSearchParams(window.location.search).get('order') ?? undefined,
+  );
   const [create, setCreate] = useState(false);
   const [filter, setFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');

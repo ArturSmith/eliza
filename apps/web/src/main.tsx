@@ -1,3 +1,4 @@
+import { ShoppingListsPage } from './shopping-lists';
 import { t, useLanguage } from './i18n';
 import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
@@ -50,6 +51,11 @@ const root = createRootRoute({
   ),
 });
 const routes = [
+  createRoute({
+    getParentRoute: () => root,
+    path: '/shopping-lists',
+    component: ShoppingListsPage,
+  }),
   createRoute({ getParentRoute: () => root, path: '/stock-counts', component: StockCountsPage }),
   createRoute({ getParentRoute: () => root, path: '/suppliers', component: SuppliersPage }),
   createRoute({ getParentRoute: () => root, path: '/purchases', component: PurchasesPage }),
