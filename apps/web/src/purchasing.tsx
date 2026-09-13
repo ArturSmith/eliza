@@ -15,6 +15,9 @@ import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { formatMoney } from './receipts';
 type Order = {
+  close_reason: string;
+  closed_at: string | null;
+  closed_by_name: string | null;
   payment_status: 'unrecorded' | 'unpaid' | 'paid';
   payment_due_date: string | null;
   paid_at: string | null;
@@ -343,6 +346,7 @@ const statusTone: Record<string, string> = {
   partially_received: 'amber',
   received: 'green',
   cancelled: 'gray',
+  closed: 'gray',
 };
 export function PurchasesPage() {
   useLanguage();
@@ -391,7 +395,15 @@ export function PurchasesPage() {
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           >
-            {['all', 'draft', 'ordered', 'partially_received', 'received', 'cancelled'].map((s) => (
+            {[
+              'all',
+              'draft',
+              'ordered',
+              'partially_received',
+              'received',
+              'closed',
+              'cancelled',
+            ].map((s) => (
               <option key={s} value={s}>
                 {s === 'all' ? t('All statuses') : t(s)}
               </option>
@@ -1088,6 +1100,21 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
       {p && (
         <>
           {p.notes && <p className="order-detail-notes">{p.notes}</p>}
+          {p.status === 'closed' && (
+            <div className="order-detail-notes">
+              <strong>{t('Remaining quantities closed')}</strong>
+              <p>{p.close_reason}</p>
+              <p className="muted">
+                {p.closed_by_name} ·{' '}
+                {p.closed_at ? new Date(p.closed_at).toLocaleString(getLocale()) : ''}
+              </p>
+              <p className="muted">
+                {t(
+                  'Original order totals are retained. Stock, deliveries and payment status are unchanged.',
+                )}
+              </p>
+            </div>
+          )}
           <PurchasePayment key={p.id + ':' + p.version} order={p} />
           <div className="table-scroll">
             <table>
@@ -1096,6 +1123,9 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
                   <th>{t('Product')}</th>
                   <th className="table-number-column">{t('Ordered')}</th>
                   <th className="table-number-column">{t('Received')}</th>
+                  {p.status === 'closed' && (
+                    <th className="table-number-column">{t('Closed quantity')}</th>
+                  )}
                   <th className="table-number-column">{t('Cost excl. tax')}</th>
                   <th className="table-number-column">{t('Tax %')}</th>
                 </tr>
@@ -1113,6 +1143,17 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
                     <td className="table-number-column">
                       {Number(l.received_quantity)} {t(l.unit ?? '')}
                     </td>
+                    {p.status === 'closed' && (
+                      <td className="table-number-column">
+                        {Number(
+                          fromScaled(
+                            toScaled(l.ordered_quantity, 3) - toScaled(l.received_quantity, 3),
+                            3,
+                          ),
+                        )}{' '}
+                        {t(l.unit ?? '')}
+                      </td>
+                    )}
                     <td className="table-number-column">{formatMoney(l.unit_cost, currency)}</td>
                     <td className="table-number-column">{Number(l.tax_rate)}%</td>
                   </tr>
@@ -1128,6 +1169,9 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
             )}
             {['ordered', 'partially_received'].includes(p.status) && (
               <Button onClick={() => setReceiving(true)}>{t('Receive delivery')}</Button>
+            )}
+            {p.status === 'partially_received' && (
+              <CloseRemainder key={p.id + ':' + p.version} order={p} />
             )}
             {p.status === 'draft' && (
               <Button variant="outline" onClick={() => setEditing(true)}>
@@ -1373,5 +1417,98 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
         </p>
       )}
     </form>
+  );
+}
+
+function CloseRemainder({ order }: { order: Order }) {
+  useLanguage();
+  const allowed = useSession().data!.user.permissions.includes('purchases.write');
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [command, setCommand] = useState<{ requestId: string; version: number; reason: string }>();
+  const mutation = useMutation({
+    mutationFn: (body: { requestId: string; version: number; reason: string }) =>
+      api('/purchases/' + order.id + '/close-remainder', body),
+    onSuccess: () => {
+      setOpen(false);
+      void refresh();
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500)
+        setCommand(undefined);
+    },
+  });
+  if (!allowed) return null;
+  return (
+    <>
+      <Button variant="outline" onClick={() => setOpen(true)}>
+        {t('Close remaining quantities')}
+      </Button>
+      <Dialog
+        open={open}
+        onOpenChange={(value) => {
+          if (!mutation.isPending) setOpen(value);
+        }}
+        title={t('Close remaining quantities')}
+        description={t(
+          'Close all undelivered quantities permanently. Recorded deliveries, stock and payment status will not change.',
+        )}
+      >
+        <ul>
+          {order.lines
+            .filter(
+              (line) => toScaled(line.ordered_quantity, 3) > toScaled(line.received_quantity, 3),
+            )
+            .map((line) => (
+              <li key={line.id}>
+                {line.product_name}:{' '}
+                {Number(
+                  fromScaled(
+                    toScaled(line.ordered_quantity, 3) - toScaled(line.received_quantity, 3),
+                    3,
+                  ),
+                )}{' '}
+                {t(line.unit ?? '')}
+              </li>
+            ))}
+        </ul>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const body = command ?? {
+              requestId: crypto.randomUUID(),
+              version: order.version,
+              reason: reason.trim(),
+            };
+            setCommand(body);
+            mutation.mutate(body);
+          }}
+        >
+          <Field label={t('Closure reason')}>
+            <textarea
+              required
+              maxLength={500}
+              value={reason}
+              disabled={!!command}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          </Field>
+          <ErrorMessage error={mutation.error} />
+          <div className="form-actions">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={mutation.isPending}
+              onClick={() => setOpen(false)}
+            >
+              {t('Keep order ')}
+            </Button>
+            <Button disabled={mutation.isPending || !reason.trim()}>
+              {command && !mutation.isPending ? t('Retry same change') : t('Confirm closure')}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+    </>
   );
 }

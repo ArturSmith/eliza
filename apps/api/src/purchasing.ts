@@ -472,7 +472,7 @@ export class PurchasingController {
     return (
       await this.database.pool.query(
         `SELECT p.id,p.number,p.status,p.version,p.total,p.payment_status,p.payment_due_date::text,p.paid_at,
-(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,p.created_at AS "createdAt",s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.store_id=$1 ORDER BY p.created_at DESC LIMIT 200`,
+(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received','closed') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,p.created_at AS "createdAt",s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.store_id=$1 ORDER BY p.created_at DESC LIMIT 200`,
         [req.context.store.id],
       )
     ).rows;
@@ -491,8 +491,8 @@ export class PurchasingController {
   private async details(c: PoolClient, id: string, store: string) {
     const p = (
       await c.query(
-        `SELECT p.*,p.payment_due_date::text,
-(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.id=$1 AND p.store_id=$2`,
+        `SELECT p.*,(SELECT name FROM employees WHERE id=p.closed_by) AS closed_by_name,p.payment_due_date::text,
+(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received','closed') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.id=$1 AND p.store_id=$2`,
         [id, store],
       )
     ).rows[0];
@@ -709,6 +709,43 @@ export class PurchasingController {
         b.status === 'ordered' ? 'Purchase placed' : 'Purchase cancelled',
         id,
         { reason: b.reason },
+      );
+      return this.details(c, id, req.context.store.id);
+    });
+  }
+  @Post('purchases/:id/close-remainder') @Require('purchases.write') async closeRemainder(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(command.extend({ reason: z.string().trim().min(1).max(500) }), input);
+    return this.run(req, b.requestId, 'close-remainder', { id, ...b }, async (c) => {
+      const p = await this.lock(c, id, req.context.store.id, b.version);
+      if (p.status !== 'partially_received')
+        throw new ConflictException(
+          'Only partially received orders can have their remainder closed.',
+        );
+      const remaining = (
+        await c.query(
+          'SELECT product_id,ordered_quantity-received_quantity AS quantity FROM purchase_lines WHERE purchase_id=$1 AND ordered_quantity>received_quantity ORDER BY product_id',
+          [id],
+        )
+      ).rows;
+      if (!remaining.length) throw new ConflictException('This order has no remaining quantities.');
+      await c.query(
+        "UPDATE purchases SET status='closed',close_reason=$2,closed_at=now(),closed_by=$3,version=version+1 WHERE id=$1",
+        [id, b.reason, req.context.user.id],
+      );
+      await audit(
+        c,
+        {
+          storeId: req.context.store.id,
+          employeeId: req.context.user.id,
+          deviceId: req.context.device.id,
+        },
+        'Purchase remainder closed',
+        id,
+        { reason: b.reason, remaining },
       );
       return this.details(c, id, req.context.store.id);
     });

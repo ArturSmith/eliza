@@ -195,7 +195,7 @@
   "received": "получен",
   "cancelled": "отменён",
   "open": "открыта",
-  "closed": "закрыта",
+  "closed": "Закрыт",
   "counting": "пересчёт",
   "review": "проверка",
   "finalized": "завершена",
@@ -1044,5 +1044,15 @@
   "Section": "Раздел",
   "Choose a section from this shopping list.": "Выберите раздел этого списка покупок.",
   "Remove section": "Удалить раздел",
-  "Drag to another section": "Перетащите в другой раздел"
+  "Drag to another section": "Перетащите в другой раздел",
+  "Remaining quantities closed": "Остаток заказа закрыт",
+  "Closed quantity": "Закрытое количество",
+  "Close remaining quantities": "Закрыть остаток заказа",
+  "Closure reason": "Причина закрытия",
+  "Confirm closure": "Подтвердить закрытие",
+  "Close all undelivered quantities permanently. Recorded deliveries, stock and payment status will not change.": "Окончательно закрыть все недоставленные позиции. Поставки, остатки и статус оплаты не изменятся.",
+  "Original order totals are retained. Stock, deliveries and payment status are unchanged.": "Исходная сумма заказа сохранена. Остатки, поставки и статус оплаты не изменены.",
+  "Only partially received orders can have their remainder closed.": "Закрыть остаток можно только у частично полученного заказа.",
+  "This order has no remaining quantities.": "В этом заказе нет недоставленных позиций.",
+  "Purchase remainder closed": "Остаток заказа закрыт"
 }

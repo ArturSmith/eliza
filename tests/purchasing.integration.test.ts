@@ -388,4 +388,95 @@ describe.sequential('purchasing and receiving', () => {
       paid_at: null,
     });
   });
+  it('closes a partial remainder once, preserving stock, receipts and unpaid status', async () => {
+    await db.pool.query('UPDATE suppliers SET active=true WHERE id=$1', [supplier.id]);
+    let current = (
+      await manager.request('/purchases', {
+        requestId: requestId(),
+        supplierId: supplier.id,
+        lines: [{ productId, quantity: '10', unitCost: '5', taxRate: '0' }],
+      })
+    ).body;
+    const close = (body: any) =>
+      manager.request('/purchases/' + current.id + '/close-remainder', body);
+    expect(
+      (await close({ requestId: requestId(), version: current.version, reason: 'Unavailable' }))
+        .status,
+    ).toBe(409);
+    current = (
+      await manager.request('/purchases/' + current.id + '/status', {
+        requestId: requestId(),
+        version: current.version,
+        status: 'ordered',
+      })
+    ).body;
+    current = (
+      await manager.request('/purchases/' + current.id + '/receipts', {
+        requestId: requestId(),
+        version: current.version,
+        lines: [{ purchaseLineId: current.lines[0].id, quantity: '3' }],
+      })
+    ).body;
+    expect(current.status).toBe('partially_received');
+    current = (
+      await manager.request('/purchases/' + current.id + '/payment', {
+        requestId: requestId(),
+        version: current.version,
+        status: 'unpaid',
+        dueDate: '2020-01-01',
+      })
+    ).body;
+    expect(
+      (await close({ requestId: requestId(), version: current.version, reason: ' ' })).status,
+    ).toBe(400);
+    expect(
+      (await close({ requestId: requestId(), version: current.version - 1, reason: 'Unavailable' }))
+        .status,
+    ).toBe(409);
+    const before = (await manager.request('/products')).body;
+    const incomingBefore = (await manager.request('/shopping-lists/products')).body.find(
+      (p: any) => p.productId === productId,
+    ).incoming;
+    const body = {
+      requestId: requestId(),
+      version: current.version,
+      reason: 'Supplier discontinued the remaining goods',
+    };
+    const result = await close(body);
+    expect(result.status).toBe(201);
+    expect(result.body).toMatchObject({
+      status: 'closed',
+      close_reason: body.reason,
+      payment_status: 'unpaid',
+      payment_overdue: true,
+      total: current.total,
+    });
+    expect(result.body.closed_at).toBeTruthy();
+    expect(result.body.closed_by_name).toBe('Owner');
+    expect(result.body.lines).toEqual(current.lines);
+    expect(result.body.receipts).toEqual(current.receipts);
+    expect((await close(body)).body).toEqual(result.body);
+    expect(
+      (await close({ ...body, requestId: requestId(), version: result.body.version })).status,
+    ).toBe(409);
+    expect(
+      (
+        await manager.request('/purchases/' + current.id + '/receipts', {
+          requestId: requestId(),
+          version: result.body.version,
+          lines: [{ purchaseLineId: current.lines[0].id, quantity: '1' }],
+        })
+      ).status,
+    ).toBe(409);
+    expect((await manager.request('/products')).body).toEqual(before);
+    const incomingAfter = (await manager.request('/shopping-lists/products')).body.find(
+      (p: any) => p.productId === productId,
+    ).incoming;
+    expect(Number(incomingBefore) - Number(incomingAfter)).toBe(7);
+    const history = await db.pool.query(
+      "SELECT * FROM audits WHERE entity_id=$1 AND action='Purchase remainder closed'",
+      [current.id],
+    );
+    expect(history.rowCount).toBe(1);
+  });
 });
