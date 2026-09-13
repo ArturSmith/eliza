@@ -17,6 +17,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
   supplierSchema,
+  purchasePaymentSchema,
   purchaseDraftSchema,
   receiptInputSchema,
   calculatePurchaseLine,
@@ -150,7 +151,8 @@ export class PurchasingController {
   @Get('purchases') @Require('purchases.read') async list(@Req() req: AuthRequest) {
     return (
       await this.database.pool.query(
-        `SELECT p.id,p.number,p.status,p.version,p.total,p.created_at AS "createdAt",s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.store_id=$1 ORDER BY p.created_at DESC LIMIT 200`,
+        `SELECT p.id,p.number,p.status,p.version,p.total,p.payment_status,p.payment_due_date::text,p.paid_at,
+(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,p.created_at AS "createdAt",s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.store_id=$1 ORDER BY p.created_at DESC LIMIT 200`,
         [req.context.store.id],
       )
     ).rows;
@@ -169,7 +171,8 @@ export class PurchasingController {
   private async details(c: PoolClient, id: string, store: string) {
     const p = (
       await c.query(
-        `SELECT p.*,s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.id=$1 AND p.store_id=$2`,
+        `SELECT p.*,p.payment_due_date::text,
+(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.id=$1 AND p.store_id=$2`,
         [id, store],
       )
     ).rows[0];
@@ -188,6 +191,41 @@ export class PurchasingController {
         await c.query('SELECT * FROM goods_receipt_lines WHERE receipt_id=$1 ORDER BY sku', [r.id])
       ).rows;
     return { ...p, lines, receipts };
+  }
+  @Post('purchases/:id/payment') @Require('purchases.write') async payment(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(purchasePaymentSchema, input);
+    return this.run(req, b.requestId, 'payment', { id, ...b }, async (c) => {
+      const previous = await this.lock(c, id, req.context.store.id, b.version);
+      if (previous.status === 'cancelled')
+        throw new ConflictException('Cancelled orders cannot change payment status.');
+      await c.query(
+        "UPDATE purchases SET payment_status=$1,payment_due_date=$2,paid_at=CASE WHEN $1='paid' THEN COALESCE(paid_at,now()) ELSE NULL END,version=version+1 WHERE id=$3",
+        [b.status, b.dueDate || null, id],
+      );
+      await audit(
+        c,
+        {
+          storeId: req.context.store.id,
+          employeeId: req.context.user.id,
+          deviceId: req.context.device.id,
+        },
+        'Purchase payment updated',
+        id,
+        {
+          before: {
+            status: previous.payment_status,
+            dueDate: previous.payment_due_date,
+            paidAt: previous.paid_at,
+          },
+          after: { status: b.status, dueDate: b.dueDate || null },
+        },
+      );
+      return this.details(c, id, req.context.store.id);
+    });
   }
   @Post('purchases') @Require('purchases.write') async draft(
     @Body() input: unknown,

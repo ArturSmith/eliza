@@ -410,6 +410,12 @@ const optionalDate = z
         new Date(v).toISOString().slice(0, 10) === v),
     'Use a valid calendar date',
   );
+export const purchasePaymentSchema = z.object({
+  requestId: z.uuid(),
+  version: z.number().int().positive(),
+  status: z.enum(['unpaid', 'paid']),
+  dueDate: optionalDate.default(''),
+});
 export const purchaseDraftSchema = z.object({
   supplierId: z.uuid(),
   supplierReference: z.string().trim().max(120).default(''),

@@ -1,4 +1,4 @@
-import { countText, t, useLanguage } from './i18n';
+import { countText, t, useLanguage, getLocale } from './i18n';
 import { useState, type ReactNode } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Search, X } from 'lucide-react';
@@ -15,6 +15,10 @@ import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { formatMoney } from './receipts';
 type Order = {
+  payment_status: 'unrecorded' | 'unpaid' | 'paid';
+  payment_due_date: string | null;
+  paid_at: string | null;
+  payment_overdue: boolean;
   supplier_id: string;
   supplier_reference: string;
   expected_date: string | null;
@@ -347,11 +351,14 @@ export function PurchasesPage() {
   const [selected, setSelected] = useState<string>();
   const [create, setCreate] = useState(false);
   const [filter, setFilter] = useState('all');
+  const [paymentFilter, setPaymentFilter] = useState('all');
   const [search, setSearch] = useState('');
   const terms = search.trim().toLowerCase();
   const rows = (q.data ?? []).filter(
     (p) =>
       (filter === 'all' || p.status === filter) &&
+      (paymentFilter === 'all' ||
+        (paymentFilter === 'overdue' ? p.payment_overdue : p.payment_status === paymentFilter)) &&
       [p.number, p.supplierName, p.supplier_reference].some((v) =>
         (v ?? '').toLowerCase().includes(terms),
       ),
@@ -388,6 +395,17 @@ export function PurchasesPage() {
               </option>
             ))}
           </select>
+          <select
+            aria-label={t('Payment status')}
+            value={paymentFilter}
+            onChange={(e) => setPaymentFilter(e.target.value)}
+          >
+            <option value="all">{t('All payments')}</option>
+            <option value="unpaid">{t('Unpaid')}</option>
+            <option value="paid">{t('Paid')}</option>
+            <option value="overdue">{t('Overdue')}</option>
+            <option value="unrecorded">{t('Payment not recorded')}</option>
+          </select>
           <span className="muted">{countText('orders', rows.length)}</span>
         </div>
         <ErrorMessage error={q.error} />
@@ -401,6 +419,7 @@ export function PurchasesPage() {
                   <th>{t('Order')}</th>
                   <th>{t('Supplier')}</th>
                   <th>{t('Status')}</th>
+                  <th>{t('Payment status')}</th>
                   <th className="table-number-column">{t('Total incl. tax')}</th>
                   <th className="table-actions-column">{t('Actions')}</th>
                 </tr>
@@ -417,6 +436,14 @@ export function PurchasesPage() {
                       <span className={`badge badge-${statusTone[p.status] ?? 'gray'}`}>
                         {t(p.status)}
                       </span>
+                    </td>
+                    <td>
+                      <PaymentBadge order={p} />
+                      {p.payment_due_date && (
+                        <small>
+                          {t('Payment due date')}: {p.payment_due_date}
+                        </small>
+                      )}
                     </td>
                     <td className="table-number-column">{formatMoney(p.total, currency)}</td>
                     <td className="table-actions-column">
@@ -859,6 +886,152 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
     </>
   );
 }
+
+function PaymentBadge({ order }: { order: Order }) {
+  useLanguage();
+  const label =
+    order.payment_status === 'paid'
+      ? 'Paid'
+      : order.payment_overdue
+        ? 'Overdue'
+        : order.payment_status === 'unpaid'
+          ? 'Unpaid'
+          : 'Payment not recorded';
+  return (
+    <span
+      className={
+        'badge badge-' +
+        (order.payment_status === 'paid' ? 'green' : order.payment_overdue ? 'amber' : 'gray')
+      }
+    >
+      {t(label)}
+    </span>
+  );
+}
+function PurchasePayment({ order }: { order: Order }) {
+  useLanguage();
+  const session = useSession().data;
+  const canWrite = session?.user.permissions.includes('purchases.write');
+  const editable = canWrite && order.status !== 'cancelled';
+  const [open, setOpen] = useState(false);
+  const [status, setStatus] = useState<'paid' | 'unpaid'>(
+    order.payment_status === 'paid' ? 'paid' : 'unpaid',
+  );
+  const [dueDate, setDueDate] = useState(order.payment_due_date ?? '');
+  const [pending, setPending] = useState<{
+    requestId: string;
+    version: number;
+    status: 'paid' | 'unpaid';
+    dueDate: string;
+  }>();
+  const mutation = useMutation({
+    mutationFn: (body: NonNullable<typeof pending>) =>
+      api('/purchases/' + order.id + '/payment', body),
+    onSuccess: () => {
+      setPending(undefined);
+      setOpen(false);
+      void refresh();
+    },
+    onError: (error) => {
+      if (error instanceof ApiError && error.status >= 400 && error.status < 500)
+        setPending(undefined);
+    },
+  });
+  return (
+    <div className="order-detail-section order-payment">
+      <div className="order-payment-head">
+        <div className="order-payment-title">
+          <h3>{t('Purchase payment')}</h3>
+          <PaymentBadge order={order} />
+        </div>
+        {editable && (
+          <Button variant="outline" onClick={() => setOpen(true)}>
+            {t('Update payment')}
+          </Button>
+        )}
+      </div>
+      <dl className="order-payment-facts">
+        <div>
+          <dt>{t('Payment due date')}</dt>
+          <dd>{order.payment_due_date || t('Not set')}</dd>
+        </div>
+        <div>
+          <dt>{t('Marked paid at')}</dt>
+          <dd>
+            {order.paid_at
+              ? new Date(order.paid_at).toLocaleString(getLocale(), {
+                  timeZone: session?.store.timezone,
+                })
+              : '—'}
+          </dd>
+        </div>
+      </dl>
+      <p className="muted order-payment-note">
+        {t(
+          'Payment is tracked separately from delivery. Mark paid only after the supplier has been paid in full.',
+        )}
+      </p>
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          if (!v) setOpen(false);
+        }}
+        title={t('Update payment')}
+        description={t(
+          'Payment is tracked separately from delivery. Mark paid only after the supplier has been paid in full.',
+        )}
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const body = pending ?? {
+              requestId: crypto.randomUUID(),
+              version: order.version,
+              status,
+              dueDate,
+            };
+            setPending(body);
+            mutation.mutate(body);
+          }}
+        >
+          <fieldset disabled={mutation.isPending || !!pending}>
+            <Field label={t('Payment status')}>
+              <select
+                value={status}
+                onChange={(e) => setStatus(e.target.value as 'paid' | 'unpaid')}
+              >
+                <option value="unpaid">{t('Unpaid')}</option>
+                <option value="paid">{t('Paid')}</option>
+              </select>
+            </Field>
+            <Field
+              label={t('Payment due date')}
+              hint={t(
+                'Optional. Unpaid orders become overdue after this date in the store timezone.',
+              )}
+            >
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </Field>
+          </fieldset>
+          <ErrorMessage error={mutation.error} />
+          <div className="form-actions">
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              {t('Cancel')}
+            </Button>
+            <Button disabled={mutation.isPending}>
+              {mutation.isPending
+                ? t('Saving…')
+                : pending
+                  ? t('Retry same change')
+                  : t('Save payment status')}
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+    </div>
+  );
+}
+
 function OrderDetail({ id, close }: { id: string; close: () => void }) {
   useLanguage();
   const q = useQuery({ queryKey: ['purchase', id], queryFn: () => api<Order>('/purchases/' + id) });
@@ -913,6 +1086,7 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
       {p && (
         <>
           {p.notes && <p className="order-detail-notes">{p.notes}</p>}
+          <PurchasePayment key={p.id + ':' + p.version} order={p} />
           <div className="table-scroll">
             <table>
               <thead>

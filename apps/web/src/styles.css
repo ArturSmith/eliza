@@ -2080,6 +2080,46 @@ tr:last-child td {
   font-size: 12px;
   margin: 0;
 }
+.order-payment-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.order-payment-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.order-payment-head h3 {
+  margin: 0;
+}
+.order-payment-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 32px;
+  margin: 0 0 10px;
+}
+.order-payment-facts div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.order-payment-facts dt {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.order-payment-facts dd {
+  margin: 0;
+  font-size: 13px;
+}
+.order-payment-note {
+  margin: 0;
+}
 .delivery-list {
   display: flex;
   flex-direction: column;

@@ -312,4 +312,80 @@ describe.sequential('purchasing and receiving', () => {
       ).status,
     ).toBe(400);
   });
+  it('tracks overdue and paid independently of receiving, with safe retries and auditing', async () => {
+    const current = (await manager.request('/purchases/' + order.id)).body;
+    expect(current.status).toBe('received');
+    expect(current.payment_status).toBe('unpaid');
+    const stockBefore = (await manager.request('/products')).body;
+    const body = {
+      requestId: requestId(),
+      version: current.version,
+      status: 'unpaid',
+      dueDate: '2000-01-01',
+    };
+    const overdue = await manager.request('/purchases/' + order.id + '/payment', body);
+    expect(overdue.status).toBe(201);
+    expect(overdue.body).toMatchObject({
+      status: 'received',
+      payment_status: 'unpaid',
+      payment_overdue: true,
+      payment_due_date: '2000-01-01',
+      paid_at: null,
+    });
+    expect((await manager.request('/purchases/' + order.id + '/payment', body)).body).toEqual(
+      overdue.body,
+    );
+    expect(
+      (
+        await manager.request('/purchases/' + order.id + '/payment', {
+          ...body,
+          requestId: requestId(),
+          status: 'paid',
+        })
+      ).status,
+    ).toBe(409);
+    expect(
+      (
+        await manager.request('/purchases/' + order.id + '/payment', {
+          ...body,
+          requestId: requestId(),
+          version: overdue.body.version,
+          dueDate: '2026-02-30',
+        })
+      ).status,
+    ).toBe(400);
+    const paid = await manager.request('/purchases/' + order.id + '/payment', {
+      ...body,
+      requestId: requestId(),
+      version: overdue.body.version,
+      status: 'paid',
+    });
+    expect(paid.status).toBe(201);
+    expect(paid.body).toMatchObject({
+      status: 'received',
+      payment_status: 'paid',
+      payment_overdue: false,
+    });
+    expect(paid.body.paid_at).toBeTruthy();
+    const listed = (await manager.request('/purchases')).body.find((p: any) => p.id === order.id);
+    expect(listed.payment_status).toBe('paid');
+    expect((await manager.request('/products')).body).toEqual(stockBefore);
+    const audit = await db.pool.query(
+      "SELECT * FROM audits WHERE entity_id=$1 AND action='Purchase payment updated'",
+      [order.id],
+    );
+    expect(audit.rowCount).toBe(2);
+    const clear = await manager.request('/purchases/' + order.id + '/payment', {
+      requestId: requestId(),
+      version: paid.body.version,
+      status: 'unpaid',
+      dueDate: '',
+    });
+    expect(clear.body).toMatchObject({
+      payment_status: 'unpaid',
+      payment_overdue: false,
+      payment_due_date: null,
+      paid_at: null,
+    });
+  });
 });

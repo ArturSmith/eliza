@@ -969,5 +969,20 @@
   "counts.one": "{count} инвентаризация",
   "counts.few": "{count} инвентаризации",
   "counts.many": "{count} инвентаризаций",
-  "counts.other": "{count} инвентаризации"
+  "counts.other": "{count} инвентаризации",
+  "Payment status": "Статус оплаты",
+  "All payments": "Все оплаты",
+  "Paid": "Оплачен",
+  "Unpaid": "Не оплачен",
+  "Overdue": "Оплата просрочена",
+  "Payment not recorded": "Оплата не отмечена",
+  "Payment due date": "Срок оплаты",
+  "Purchase payment": "Оплата заказа",
+  "Marked paid at": "Отмечен оплаченным",
+  "Update payment": "Изменить оплату",
+  "Save payment status": "Сохранить статус оплаты",
+  "Payment is tracked separately from delivery. Mark paid only after the supplier has been paid in full.": "Оплата учитывается отдельно от поставки. Отмечайте заказ оплаченным только после полной оплаты поставщику.",
+  "Optional. Unpaid orders become overdue after this date in the store timezone.": "Необязательно. Неоплаченные заказы становятся просроченными после этой даты в часовом поясе магазина.",
+  "Cancelled orders cannot change payment status.": "Нельзя изменить статус оплаты отменённого заказа.",
+  "Purchase payment updated": "Оплата заказа обновлена"
 }
