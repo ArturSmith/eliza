@@ -28,6 +28,7 @@ type Count = {
   finalized_at: string | null;
   lines: Line[];
 };
+type CountSummary = Omit<Count, 'lines'> & { productCount: number };
 type Command = { path: string; body: Record<string, unknown> };
 const countStatusTone: Record<string, string> = {
   draft: 'gray',
@@ -40,7 +41,7 @@ export function StockCountsPage() {
   useLanguage();
   const list = useQuery({
     queryKey: ['stock-counts'],
-    queryFn: () => api<Count[]>('/stock-counts'),
+    queryFn: () => api<CountSummary[]>('/stock-counts'),
   });
   const [selected, setSelected] = useState<string>();
   const [creating, setCreating] = useState(false);
@@ -126,7 +127,7 @@ export function StockCountsPage() {
                         {t(c.status)}
                       </span>
                     </td>
-                    <td className="table-number-column">{c.lines.length}</td>
+                    <td className="table-number-column">{c.productCount}</td>
                     <td className="table-actions-column">
                       <Button variant="ghost" onClick={() => setSelected(c.id)}>
                         {t('Open ')}

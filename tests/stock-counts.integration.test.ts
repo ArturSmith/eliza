@@ -117,6 +117,17 @@ describe.sequential('physical stock counts', () => {
     expect(r.status).toBe(201);
     count = r.body;
     expect(count.status).toBe('draft');
+    const list = await manager.request('/stock-counts');
+    expect(list.status).toBe(200);
+    expect(list.body.find((row: any) => row.id === count.id)).toMatchObject({
+      name: count.name,
+      notes: count.notes,
+      creator: count.creator,
+      finalizer: null,
+      finalized_at: null,
+      status: 'draft',
+      productCount: 2,
+    });
     expect(count.lines[0].system_quantity).toBeNull();
     expect((await manager.request('/stock-counts', body)).body).toEqual(count);
     const start = await command('start');

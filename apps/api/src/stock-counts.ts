@@ -109,7 +109,12 @@ class StockCountsController {
   @Get() @Require('inventory.read') async list(@Req() req: AuthRequest) {
     return (
       await this.database.pool.query(
-        'SELECT id,name,status,version,created_at FROM stock_counts WHERE store_id=$1 ORDER BY created_at DESC LIMIT 100',
+        `SELECT c.id,c.name,c.notes,c.status,c.version,c.created_at,c.finalized_at,
+e.name AS creator,f.name AS finalizer,
+(SELECT count(*)::int FROM stock_count_lines l WHERE l.count_id=c.id) AS "productCount"
+FROM stock_counts c JOIN employees e ON e.id=c.created_by
+LEFT JOIN employees f ON f.id=c.finalized_by
+WHERE c.store_id=$1 ORDER BY c.created_at DESC LIMIT 100`,
         [req.context.store.id],
       )
     ).rows;
