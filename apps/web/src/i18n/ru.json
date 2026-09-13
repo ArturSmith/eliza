@@ -501,6 +501,7 @@
   "Expected": "Ожидается",
   "Counted cash": "Фактические наличные",
   "Drawer reconciliation": "Сверка кассы",
+  "Every shift with its expected, counted, and difference totals.": "Все смены с ожидаемой и фактической суммой и расхождением.",
   "Loading shifts…": "Загрузка смен…",
   "No shifts yet": "Смен пока нет",
   "Start a shift from an enrolled register.": "Откройте смену на зарегистрированной кассе.",

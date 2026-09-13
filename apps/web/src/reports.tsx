@@ -125,9 +125,16 @@ export function ShiftsPage() {
           </p>
         </div>
       </div>
-      <h2>{t('Drawer reconciliation')}</h2>
       <ErrorMessage error={query.error} />
       <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <h2>{t('Drawer reconciliation')}</h2>
+            <p className="muted">
+              {t('Every shift with its expected, counted, and difference totals.')}
+            </p>
+          </div>
+        </div>
         {query.isPending ? (
           <p className="panel-padding muted">{t('Loading shifts…')}</p>
         ) : query.data?.length ? (
