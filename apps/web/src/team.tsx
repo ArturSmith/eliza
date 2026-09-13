@@ -1,3 +1,4 @@
+import { t, useLanguage } from './i18n';
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Plus, Pencil, KeyRound, Users } from 'lucide-react';
@@ -7,6 +8,7 @@ import { Field, ErrorMessage } from './forms';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 export function TeamManagementPage() {
+  useLanguage();
   const session = useSession().data!;
   const canManage = session.user.permissions.includes('team.manage');
   const query = useEmployees();
@@ -34,9 +36,9 @@ export function TeamManagementPage() {
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">YOUR PEOPLE</div>
-          <h1>Team</h1>
-          <p className="muted">Set up employee access and fast, six-digit register PINs.</p>
+          <div className="eyebrow">{t('YOUR PEOPLE')}</div>
+          <h1>{t('Team')}</h1>
+          <p className="muted">{t('Set up employee access and fast, six-digit register PINs.')}</p>
         </div>
         {canManage && (
           <Button
@@ -47,17 +49,18 @@ export function TeamManagementPage() {
             }}
           >
             <Plus size={17} />
-            Add employee
+            {t('Add employee ')}
           </Button>
         )}
       </div>
       <div className="notice inventory-notice">
         <KeyRound size={20} />
         <div>
-          <strong>PINs are for enrolled registers.</strong>
+          <strong>{t('PINs are for enrolled registers.')}</strong>
           <span>
-            Back-office access requires an email and password. Set your own PIN here before using
-            checkout.
+            {t(
+              'Back-office access requires an email and password. Set your own PIN here before using checkout. ',
+            )}
           </span>
         </div>
       </div>
@@ -67,12 +70,12 @@ export function TeamManagementPage() {
           <table>
             <thead>
               <tr>
-                <th>Employee</th>
-                <th>Employee code</th>
-                <th>Role</th>
-                <th>Register PIN</th>
-                <th>Status</th>
-                {canManage && <th>Actions</th>}
+                <th>{t('Employee')}</th>
+                <th>{t('Employee code')}</th>
+                <th>{t('Role')}</th>
+                <th>{t('Register PIN')}</th>
+                <th>{t('Status')}</th>
+                {canManage && <th>{t('Actions')}</th>}
               </tr>
             </thead>
             <tbody>
@@ -80,16 +83,16 @@ export function TeamManagementPage() {
                 <tr key={e.id}>
                   <td>
                     <strong>{e.name}</strong>
-                    <small>{e.email || 'PIN-only account'}</small>
+                    <small>{e.email || t('PIN-only account')}</small>
                   </td>
                   <td>{e.employeeCode}</td>
                   <td>
-                    <span className="badge badge-gray">{e.role}</span>
+                    <span className="badge badge-gray">{t(e.role)}</span>
                   </td>
-                  <td>{e.hasPin ? 'Set' : 'Not set'}</td>
+                  <td>{e.hasPin ? t('Set') : t('Not set')}</td>
                   <td>
                     <span className={`badge badge-${e.active ? 'green' : 'gray'}`}>
-                      {e.active ? 'Active' : 'Inactive'}
+                      {e.active ? t('Active') : t('Inactive')}
                     </span>
                   </td>
                   {canManage && (
@@ -101,10 +104,10 @@ export function TeamManagementPage() {
                           mutation.reset();
                           setOpen(true);
                         }}
-                        aria-label={`Edit ${e.name}`}
+                        aria-label={t('Edit {value0}', { value0: e.name })}
                       >
                         <Pencil size={15} />
-                        Edit access
+                        {t('Edit access ')}
                       </Button>
                     </td>
                   )}
@@ -113,29 +116,31 @@ export function TeamManagementPage() {
             </tbody>
           </table>
         </div>
-        {query.isPending && <p className="panel-padding muted">Loading team…</p>}
+        {query.isPending && <p className="panel-padding muted">{t('Loading team…')}</p>}
       </section>
       <Dialog
         open={open}
         onOpenChange={setOpen}
-        title={employee ? 'Edit employee access' : 'Add an employee'}
-        description="Never share a PIN between employees. Changes are recorded in the activity log."
+        title={employee ? t('Edit employee access') : t('Add an employee')}
+        description={t(
+          'Never share a PIN between employees. Changes are recorded in the activity log.',
+        )}
       >
         <form onSubmit={submit} key={employee?.id ?? 'new'}>
-          <Field label="Employee name">
+          <Field label={t('Employee name')}>
             <input name="name" defaultValue={employee?.name} required maxLength={120} />
           </Field>
           <div className="form-grid">
-            <Field label="Employee code">
+            <Field label={t('Employee code')}>
               <input
                 name="employeeCode"
                 defaultValue={employee?.employeeCode}
                 required
                 maxLength={20}
-                placeholder="e.g. ANNA"
+                placeholder={t('e.g. ANNA')}
               />
             </Field>
-            <Field label="Role">
+            <Field label={t('Role')}>
               <select
                 name="roleId"
                 defaultValue={employee?.roleId ?? roles.data?.find((r) => r.name === 'Cashier')?.id}
@@ -143,18 +148,20 @@ export function TeamManagementPage() {
               >
                 {roles.data?.map((r) => (
                   <option value={r.id} key={r.id}>
-                    {r.name}
+                    {t(r.name)}
                   </option>
                 ))}
               </select>
             </Field>
           </div>
           <Field
-            label={employee ? 'New PIN (optional)' : 'Register PIN'}
+            label={employee ? t('New PIN (optional)') : t('Register PIN')}
             hint={
               employee
-                ? 'Leave blank to keep the existing PIN. Changing it locks their register session.'
-                : 'Exactly six digits.'
+                ? t(
+                    'Leave blank to keep the existing PIN. Changing it locks their register session.',
+                  )
+                : t('Exactly six digits.')
             }
           >
             <input
@@ -169,20 +176,22 @@ export function TeamManagementPage() {
             />
           </Field>
           {employee ? (
-            <Field label="Status">
+            <Field label={t('Status')}>
               <select name="active" defaultValue={String(employee.active)}>
-                <option value="true">Active</option>
-                <option value="false">Inactive</option>
+                <option value="true">{t('Active')}</option>
+                <option value="false">{t('Inactive')}</option>
               </select>
             </Field>
           ) : (
             <>
-              <Field label="Management email (optional)">
+              <Field label={t('Management email (optional)')}>
                 <input name="email" type="email" autoComplete="off" />
               </Field>
               <Field
-                label="Management password (optional)"
-                hint="Provide both email and a password to allow back-office login. At least 12 characters."
+                label={t('Management password (optional)')}
+                hint={t(
+                  'Provide both email and a password to allow back-office login. At least 12 characters.',
+                )}
               >
                 <input
                   name="password"
@@ -197,10 +206,10 @@ export function TeamManagementPage() {
           <ErrorMessage error={mutation.error} />
           <div className="form-actions">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
+              {t('Cancel ')}
             </Button>
             <Button disabled={mutation.isPending || roles.isPending}>
-              {mutation.isPending ? 'Saving…' : 'Save employee'}
+              {mutation.isPending ? t('Saving…') : t('Save employee')}
             </Button>
           </div>
         </form>

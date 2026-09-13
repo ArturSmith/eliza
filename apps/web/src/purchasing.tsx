@@ -1,3 +1,4 @@
+import { countText, t, useLanguage } from './i18n';
 import { useState, type ReactNode } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Search, X } from 'lucide-react';
@@ -58,6 +59,7 @@ function CostComparison({
   previous?: string | null;
   price?: string;
 }) {
+  useLanguage();
   const currency = useSession().data?.store.currency ?? 'NOK';
   const valid = /^\d{1,9}(\.\d{1,2})?$/.test(cost);
   const changed = previous != null && valid && Number(cost) !== Number(previous);
@@ -65,20 +67,28 @@ function CostComparison({
     <div className="muted" aria-live="polite">
       {changed && (
         <p className="purchase-cost-change">
-          <strong>Unit cost {Number(cost) > Number(previous) ? 'increased' : 'decreased'}:</strong>{' '}
-          {formatMoney(previous!, currency)} to {formatMoney(cost, currency)}
+          <strong>
+            {t('Unit cost ')}
+            {Number(cost) > Number(previous) ? t('increased') : t('decreased')}:
+          </strong>{' '}
+          {formatMoney(previous!, currency)} {t(' to ')}
+          {formatMoney(cost, currency)}
           {Number(previous) > 0 &&
             ' (' + (((Number(cost) - Number(previous)) / Number(previous)) * 100).toFixed(1) + '%)'}
-          . Costs exclude tax.
+          {t('. Costs exclude tax. ')}
         </p>
       )}
       {price !== undefined && (
-        <p>Current selling price: {formatMoney(price, currency)} including tax.</p>
+        <p>
+          {t('Current selling price: ')}
+          {formatMoney(price, currency)} {t(' including tax.')}
+        </p>
       )}
     </div>
   );
 }
 function SupplierSummary({ supplier }: { supplier: Supplier }) {
+  useLanguage();
   const details: [string, string][] = [
     ['Code', supplier.code],
     ['Contact', supplier.contactName],
@@ -93,19 +103,19 @@ function SupplierSummary({ supplier }: { supplier: Supplier }) {
     <div className="supplier-summary">
       <div className="supplier-summary-head">
         <strong>{supplier.name}</strong>
-        {!supplier.active && <span className="supplier-summary-flag">Inactive</span>}
+        {!supplier.active && <span className="supplier-summary-flag">{t('Inactive')}</span>}
       </div>
       {shown.length ? (
         <dl>
           {shown.map(([label, value]) => (
             <div key={label}>
-              <dt>{label}</dt>
+              <dt>{t(label)}</dt>
               <dd>{value}</dd>
             </div>
           ))}
         </dl>
       ) : (
-        <p className="muted">No contact details recorded for this supplier.</p>
+        <p className="muted">{t('No contact details recorded for this supplier.')}</p>
       )}
       {supplier.notes && <p className="supplier-summary-notes">{supplier.notes}</p>}
     </div>
@@ -122,10 +132,11 @@ function Heading({
   className?: string;
   action?: ReactNode;
 }) {
+  useLanguage();
   return (
     <div className={'page-heading ' + className}>
       <div>
-        <div className="eyebrow">PURCHASING</div>
+        <div className="eyebrow">{t('PURCHASING')}</div>
         <h1>{title}</h1>
         <p className="muted">{description}</p>
       </div>
@@ -134,6 +145,7 @@ function Heading({
   );
 }
 export function SuppliersPage() {
+  useLanguage();
   const q = useQuery({ queryKey: ['suppliers'], queryFn: () => api<Supplier[]>('/suppliers') });
   const [editing, setEditing] = useState<Supplier | null | undefined>();
   const [search, setSearch] = useState('');
@@ -145,8 +157,8 @@ export function SuppliersPage() {
   return (
     <>
       <Heading
-        title="Suppliers"
-        description="Supplier contacts and ordering details."
+        title={t('Suppliers')}
+        description={t('Supplier contacts and ordering details.')}
         action={<Button onClick={() => setEditing(null)}>Add supplier</Button>}
       />
       <section className="panel">
@@ -154,29 +166,27 @@ export function SuppliersPage() {
           <div className="search-box">
             <Search size={18} />
             <input
-              aria-label="Search suppliers"
-              placeholder="Search name, code, contact, email, or phone…"
+              aria-label={t('Search suppliers')}
+              placeholder={t('Search name, code, contact, email, or phone…')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <span className="muted">
-            {rows.length} {rows.length === 1 ? 'supplier' : 'suppliers'}
-          </span>
+          <span className="muted">{countText('suppliers', rows.length)}</span>
         </div>
         <ErrorMessage error={q.error} />
         {q.isPending ? (
-          <p className="panel-padding">Loading suppliers…</p>
+          <p className="panel-padding">{t('Loading suppliers…')}</p>
         ) : rows.length ? (
           <div className="table-scroll">
             <table>
               <thead>
                 <tr>
-                  <th>Supplier</th>
-                  <th>Contact</th>
-                  <th>Terms</th>
-                  <th>Status</th>
-                  <th className="table-actions-column">Actions</th>
+                  <th>{t('Supplier')}</th>
+                  <th>{t('Contact')}</th>
+                  <th>{t('Terms')}</th>
+                  <th>{t('Status')}</th>
+                  <th className="table-actions-column">{t('Actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -195,12 +205,12 @@ export function SuppliersPage() {
                     <td>{s.paymentTerms || '—'}</td>
                     <td>
                       <span className={`badge badge-${s.active ? 'green' : 'gray'}`}>
-                        {s.active ? 'Active' : 'Inactive'}
+                        {s.active ? t('Active') : t('Inactive')}
                       </span>
                     </td>
                     <td className="table-actions-column">
                       <Button variant="ghost" onClick={() => setEditing(s)}>
-                        Edit
+                        {t('Edit ')}
                       </Button>
                     </td>
                   </tr>
@@ -211,16 +221,16 @@ export function SuppliersPage() {
         ) : (
           <p className="panel-padding">
             {q.data?.length
-              ? `No suppliers match “${search.trim()}”.`
-              : 'Add your first supplier to start purchasing.'}
+              ? t('No suppliers match “{value0}”.', { value0: search.trim() })
+              : t('Add your first supplier to start purchasing.')}
           </p>
         )}
       </section>
       <Dialog
         open={editing !== undefined}
         onOpenChange={(v) => !v && setEditing(undefined)}
-        title={editing ? 'Edit supplier' : 'Add supplier'}
-        description="Keep supplier details available for your team."
+        title={editing ? t('Edit supplier') : t('Add supplier')}
+        description={t('Keep supplier details available for your team.')}
       >
         {editing !== undefined && (
           <SupplierForm
@@ -242,6 +252,7 @@ function SupplierForm({
   done: () => void;
   onCreated?: (supplier: Supplier) => void;
 }) {
+  useLanguage();
   const [value, setValue] = useState(
     supplier ?? {
       ...supplierSchema.parse({ code: 'NEW', name: 'New supplier' }),
@@ -282,7 +293,7 @@ function SupplierForm({
         ).map((key) => (
           <Field
             key={key}
-            label={
+            label={t(
               {
                 code: 'Supplier code',
                 name: 'Supplier name',
@@ -293,8 +304,8 @@ function SupplierForm({
                 phone: 'Phone',
                 address: 'Address',
                 notes: 'Notes',
-              }[key]
-            }
+              }[key],
+            )}
           >
             <input
               required={key === 'code' || key === 'name'}
@@ -311,12 +322,12 @@ function SupplierForm({
           checked={value.active}
           onChange={(e) => setValue({ ...value, active: e.target.checked })}
         />
-        Active supplier
+        {t('Active supplier ')}
       </label>
       <ErrorMessage error={mutation.error} />
       <div className="form-actions">
         <Button disabled={mutation.isPending}>
-          {mutation.isPending ? 'Saving…' : 'Save supplier'}
+          {mutation.isPending ? t('Saving…') : t('Save supplier')}
         </Button>
       </div>
     </form>
@@ -330,6 +341,7 @@ const statusTone: Record<string, string> = {
   cancelled: 'gray',
 };
 export function PurchasesPage() {
+  useLanguage();
   const q = useQuery({ queryKey: ['purchases'], queryFn: () => api<Order[]>('/purchases') });
   const currency = useSession().data?.store.currency ?? 'NOK';
   const [selected, setSelected] = useState<string>();
@@ -347,9 +359,11 @@ export function PurchasesPage() {
   return (
     <>
       <Heading
-        title="Purchase orders"
+        title={t('Purchase orders')}
         className="purchases-heading"
-        description="Order stock, then record each delivery when it arrives. Costs exclude tax."
+        description={t(
+          'Order stock, then record each delivery when it arrives. Costs exclude tax.',
+        )}
         action={<Button onClick={() => setCreate(true)}>New purchase order</Button>}
       />
       <section className="panel">
@@ -357,40 +371,38 @@ export function PurchasesPage() {
           <div className="search-box">
             <Search size={18} />
             <input
-              aria-label="Search purchase orders"
-              placeholder="Search order number, supplier, or reference…"
+              aria-label={t('Search purchase orders')}
+              placeholder={t('Search order number, supplier, or reference…')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           <select
-            aria-label="Filter order status"
+            aria-label={t('Filter order status')}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           >
             {['all', 'draft', 'ordered', 'partially_received', 'received', 'cancelled'].map((s) => (
               <option key={s} value={s}>
-                {s === 'all' ? 'All statuses' : s.replaceAll('_', ' ')}
+                {s === 'all' ? t('All statuses') : t(s)}
               </option>
             ))}
           </select>
-          <span className="muted">
-            {rows.length} {rows.length === 1 ? 'order' : 'orders'}
-          </span>
+          <span className="muted">{countText('orders', rows.length)}</span>
         </div>
         <ErrorMessage error={q.error} />
         {q.isPending ? (
-          <p className="panel-padding">Loading orders…</p>
+          <p className="panel-padding">{t('Loading orders…')}</p>
         ) : rows.length ? (
           <div className="table-scroll">
             <table>
               <thead>
                 <tr>
-                  <th>Order</th>
-                  <th>Supplier</th>
-                  <th>Status</th>
-                  <th className="table-number-column">Total incl. tax</th>
-                  <th className="table-actions-column">Actions</th>
+                  <th>{t('Order')}</th>
+                  <th>{t('Supplier')}</th>
+                  <th>{t('Status')}</th>
+                  <th className="table-number-column">{t('Total incl. tax')}</th>
+                  <th className="table-actions-column">{t('Actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -403,13 +415,13 @@ export function PurchasesPage() {
                     <td>{p.supplierName}</td>
                     <td>
                       <span className={`badge badge-${statusTone[p.status] ?? 'gray'}`}>
-                        {p.status.replaceAll('_', ' ')}
+                        {t(p.status)}
                       </span>
                     </td>
                     <td className="table-number-column">{formatMoney(p.total, currency)}</td>
                     <td className="table-actions-column">
                       <Button variant="ghost" onClick={() => setSelected(p.id)}>
-                        View
+                        {t('View ')}
                       </Button>
                     </td>
                   </tr>
@@ -419,7 +431,9 @@ export function PurchasesPage() {
           </div>
         ) : (
           <p className="panel-padding">
-            {q.data?.length ? 'No orders match this search or filter.' : 'No purchase orders yet.'}
+            {q.data?.length
+              ? t('No orders match this search or filter.')
+              : t('No purchase orders yet.')}
           </p>
         )}
       </section>
@@ -427,8 +441,10 @@ export function PurchasesPage() {
       <Dialog
         open={create}
         onOpenChange={setCreate}
-        title="New purchase order"
-        description="Save a draft before placing your order. Stock changes only when you receive a delivery."
+        title={t('New purchase order')}
+        description={t(
+          'Save a draft before placing your order. Stock changes only when you receive a delivery.',
+        )}
       >
         {create && (
           <DraftForm
@@ -443,6 +459,7 @@ export function PurchasesPage() {
   );
 }
 function DraftForm({ done, order }: { done: (id: string) => void; order?: Order }) {
+  useLanguage();
   const suppliers = useQuery({
     queryKey: ['suppliers'],
     queryFn: () => api<Supplier[]>('/suppliers'),
@@ -559,8 +576,8 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
         }}
       >
         <SearchSelect
-          label="Supplier"
-          placeholder="Select a supplier"
+          label={t('Supplier')}
+          placeholder={t('Select a supplier')}
           value={
             selectedSupplier && { title: selectedSupplier.name, subtitle: selectedSupplier.code }
           }
@@ -572,15 +589,15 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
               subtitle: [s.code, s.contactName, s.phone].filter(Boolean).join(' · '),
               keywords: [s.name, s.code, s.contactName, s.email, s.phone, s.companyNumber],
             }))}
-          createLabel="Add new supplier"
+          createLabel={t('Add new supplier')}
           onCreate={() => setAddingSupplier(true)}
           onSelect={setSupplier}
         />
         {selectedSupplier && <SupplierSummary supplier={selectedSupplier} />}
-        <Field label="Supplier reference">
+        <Field label={t('Supplier reference')}>
           <input value={reference} onChange={(e) => setReference(e.target.value)} />
         </Field>
-        <Field label="Expected delivery">
+        <Field label={t('Expected delivery')}>
           <input type="date" value={expectedDate} onChange={(e) => setDate(e.target.value)} />
         </Field>
         {lines.map((line, index) => {
@@ -589,11 +606,16 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
             return (
               <div key={index} className="purchase-line-summary">
                 <div className="purchase-line-summary-text">
-                  <strong>{product ? product.name : 'Product not selected'}</strong>
+                  <strong>{product ? product.name : t('Product not selected')}</strong>
                   <span className="muted">
                     {product
-                      ? `${line.quantity} ${product.unit} · ${formatMoney(line.unitCost || '0', currency)} excl. tax`
-                      : 'Incomplete line'}
+                      ? t('{value0} {value1} · {value2} {value3}', {
+                          value0: line.quantity,
+                          value1: t(product.unit),
+                          value2: formatMoney(line.unitCost || '0', currency),
+                          value3: t('excl. tax'),
+                        })
+                      : t('Incomplete line')}
                   </span>
                 </div>
                 <div className="purchase-line-summary-actions">
@@ -605,10 +627,10 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
                       setActiveIndex(index);
                     }}
                   >
-                    Edit
+                    {t('Edit ')}
                   </Button>
                   <Button type="button" variant="ghost" onClick={() => removeLine(index)}>
-                    Remove
+                    {t('Remove ')}
                   </Button>
                 </div>
               </div>
@@ -617,20 +639,23 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
             <fieldset key={index} className="purchase-line">
               <div className="purchase-product-picker">
                 <SearchSelect
-                  label="Product"
-                  placeholder="Select a product"
+                  label={t('Product')}
+                  placeholder={t('Select a product')}
                   value={
-                    product && { title: product.name, subtitle: `${product.sku} (${product.unit})` }
+                    product && {
+                      title: product.name,
+                      subtitle: `${product.sku} (${t(product.unit)})`,
+                    }
                   }
                   options={availableProducts
                     .filter((p) => p.active)
                     .map((p) => ({
                       id: p.id,
                       title: p.name,
-                      subtitle: `${p.sku} · ${p.unit}`,
+                      subtitle: `${p.sku} · ${t(p.unit ?? '')}`,
                       keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
                     }))}
-                  createLabel="Create new product"
+                  createLabel={t('Create new product')}
                   onCreate={() => setAddingProduct(index)}
                   onSelect={(id) => {
                     const selected = availableProducts.find((p) => p.id === id);
@@ -646,10 +671,10 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
                     setScanLine(index);
                   }}
                 >
-                  Scan barcode
+                  {t('Scan barcode ')}
                 </Button>
               </div>
-              <Field label="Quantity">
+              <Field label={t('Quantity')}>
                 <input
                   required
                   inputMode="decimal"
@@ -661,7 +686,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
                   }
                 />
               </Field>
-              <Field label="Unit cost excl. tax">
+              <Field label={t('Unit cost excl. tax')}>
                 <input
                   required
                   inputMode="decimal"
@@ -681,8 +706,10 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
                 />
               )}
               <Field
-                label="Proposed selling price incl. tax (optional)"
-                hint="Leave blank to keep the current selling price. Confirm any proposed price when receiving the delivery. Saving this order does not change checkout prices."
+                label={t('Proposed selling price incl. tax (optional)')}
+                hint={t(
+                  'Leave blank to keep the current selling price. Confirm any proposed price when receiving the delivery. Saving this order does not change checkout prices.',
+                )}
               >
                 <input
                   inputMode="decimal"
@@ -696,7 +723,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
                   }
                 />
               </Field>
-              <Field label="Purchase tax %">
+              <Field label={t('Purchase tax %')}>
                 <input
                   required
                   inputMode="decimal"
@@ -710,7 +737,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
               </Field>
               {lines.length > 1 && (
                 <Button type="button" variant="ghost" onClick={() => removeLine(index)}>
-                  Remove line
+                  {t('Remove line ')}
                 </Button>
               )}
             </fieldset>
@@ -731,21 +758,21 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
                 setActiveIndex(lines.length);
               }}
             >
-              Add product
+              {t('Add product ')}
             </Button>
           ) : (
             <Button type="button" variant="outline" onClick={nextProduct}>
-              Next product
+              {t('Next product ')}
             </Button>
           )}
         </div>
-        <Field label="Order notes">
+        <Field label={t('Order notes')}>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
         <ErrorMessage error={mutation.error} />
         <div className="form-actions">
           <Button disabled={mutation.isPending}>
-            {mutation.isPending ? 'Saving…' : 'Save draft'}
+            {mutation.isPending ? t('Saving…') : t('Save draft')}
           </Button>
         </div>
       </form>
@@ -753,8 +780,8 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
         elevated
         open={addingSupplier}
         onOpenChange={setAddingSupplier}
-        title="Add supplier"
-        description="Keep supplier details available for your team."
+        title={t('Add supplier')}
+        description={t('Keep supplier details available for your team.')}
       >
         {addingSupplier && (
           <SupplierForm
@@ -773,8 +800,8 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
         onOpenChange={(open) => {
           if (!open) setAddingProduct(null);
         }}
-        title="Add a product"
-        description="Start with the basics. Receive stock through this purchase order."
+        title={t('Add a product')}
+        description={t('Start with the basics. Receive stock through this purchase order.')}
       >
         {addingProduct !== null && (
           <ProductForm
@@ -791,8 +818,8 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
         onOpenChange={(open) => {
           if (!open) setScanLine(null);
         }}
-        title="Scan barcode"
-        description="Scan with your barcode reader, or type the barcode and press Enter."
+        title={t('Scan barcode')}
+        description={t('Scan with your barcode reader, or type the barcode and press Enter.')}
       >
         {scanLine !== null && (
           <form
@@ -811,7 +838,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
               setScanLine(null);
             }}
           >
-            <Field label="Barcode">
+            <Field label={t('Barcode')}>
               <input
                 autoFocus
                 required
@@ -824,7 +851,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
             </Field>
             <ErrorMessage error={scanError} />
             <Button type="submit" disabled={products.isPending}>
-              Find product
+              {t('Find product ')}
             </Button>
           </form>
         )}
@@ -833,6 +860,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
   );
 }
 function OrderDetail({ id, close }: { id: string; close: () => void }) {
+  useLanguage();
   const q = useQuery({ queryKey: ['purchase', id], queryFn: () => api<Order>('/purchases/' + id) });
   const [receiving, setReceiving] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -858,24 +886,23 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
       <div className="order-detail-head">
         <div className="order-detail-title">
           <div className="order-detail-number">
-            <h2>{p ? p.number : 'Order'}</h2>
+            <h2>{p ? p.number : t('Order')}</h2>
             {p && (
-              <span className={`badge badge-${statusTone[p.status] ?? 'gray'}`}>
-                {p.status.replaceAll('_', ' ')}
-              </span>
+              <span className={`badge badge-${statusTone[p.status] ?? 'gray'}`}>{t(p.status)}</span>
             )}
           </div>
           {p && (
             <p className="muted">
               {p.supplierName}
-              {p.supplier_reference ? ` · ${p.supplier_reference}` : ''} ·{' '}
-              {formatMoney(p.total, currency)} incl. tax
+              {p.supplier_reference
+                ? t(' · {value0}', { value0: p.supplier_reference })
+                : ''} · {formatMoney(p.total, currency)} {t(' incl. tax ')}
             </p>
           )}
         </div>
         <Button variant="ghost" onClick={close}>
           <X size={16} />
-          Close
+          {t('Close ')}
         </Button>
       </div>
       {q.error && (
@@ -890,11 +917,11 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
             <table>
               <thead>
                 <tr>
-                  <th>Product</th>
-                  <th className="table-number-column">Ordered</th>
-                  <th className="table-number-column">Received</th>
-                  <th className="table-number-column">Cost excl. tax</th>
-                  <th className="table-number-column">Tax %</th>
+                  <th>{t('Product')}</th>
+                  <th className="table-number-column">{t('Ordered')}</th>
+                  <th className="table-number-column">{t('Received')}</th>
+                  <th className="table-number-column">{t('Cost excl. tax')}</th>
+                  <th className="table-number-column">{t('Tax %')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -905,10 +932,10 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
                       <small>{l.sku}</small>
                     </td>
                     <td className="table-number-column">
-                      {Number(l.ordered_quantity)} {l.unit}
+                      {Number(l.ordered_quantity)} {t(l.unit ?? '')}
                     </td>
                     <td className="table-number-column">
-                      {Number(l.received_quantity)} {l.unit}
+                      {Number(l.received_quantity)} {t(l.unit ?? '')}
                     </td>
                     <td className="table-number-column">{formatMoney(l.unit_cost, currency)}</td>
                     <td className="table-number-column">{Number(l.tax_rate)}%</td>
@@ -920,20 +947,20 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
           <div className="order-detail-actions">
             {p.status === 'draft' && (
               <Button disabled={status.isPending} onClick={() => status.mutate('ordered')}>
-                {status.isPending ? 'Placing…' : 'Place order'}
+                {status.isPending ? t('Placing…') : t('Place order')}
               </Button>
             )}
             {['ordered', 'partially_received'].includes(p.status) && (
-              <Button onClick={() => setReceiving(true)}>Receive delivery</Button>
+              <Button onClick={() => setReceiving(true)}>{t('Receive delivery')}</Button>
             )}
             {p.status === 'draft' && (
               <Button variant="outline" onClick={() => setEditing(true)}>
-                Edit draft
+                {t('Edit draft ')}
               </Button>
             )}
             {['draft', 'ordered'].includes(p.status) && (
               <Button variant="ghost" onClick={() => setCancel(true)}>
-                Cancel order
+                {t('Cancel order ')}
               </Button>
             )}
           </div>
@@ -943,7 +970,7 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
             </div>
           )}
           <div className="order-detail-section">
-            <h3>Delivery history</h3>
+            <h3>{t('Delivery history')}</h3>
             {p.receipts.length ? (
               <div className="delivery-list">
                 {p.receipts.map((r) => (
@@ -951,21 +978,23 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
                     <summary>
                       <span className="delivery-entry-summary">
                         <strong>{r.number}</strong>
-                        <small>{r.delivery_reference || 'No delivery reference'}</small>
+                        <small>{r.delivery_reference || t('No delivery reference')}</small>
                       </span>
                       <span className="delivery-entry-total">{formatMoney(r.total, currency)}</span>
                     </summary>
                     <div className="delivery-entry-body">
                       <p className="muted">
-                        Received by {r.actor} on {r.device}
+                        {t('Received by ')}
+                        {r.actor} {t(' on ')}
+                        {r.device}
                       </p>
                       <ul>
                         {r.lines.map((l) => (
                           <li key={l.id}>
                             <span>{l.product_name}</span>
                             <span className="muted">
-                              {Number(l.quantity)} {l.unit} × {formatMoney(l.unit_cost, currency)}{' '}
-                              excl. tax
+                              {Number(l.quantity)} {t(l.unit ?? '')} ×{' '}
+                              {formatMoney(l.unit_cost, currency)} {t('excl. tax ')}
                             </span>
                           </li>
                         ))}
@@ -975,14 +1004,16 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
                 ))}
               </div>
             ) : (
-              <p className="muted">No deliveries recorded yet.</p>
+              <p className="muted">{t('No deliveries recorded yet.')}</p>
             )}
           </div>
           <Dialog
             open={cancel}
             onOpenChange={setCancel}
-            title="Cancel this order"
-            description="Cancelling is permanent and does not change stock. Partly received orders cannot be cancelled."
+            title={t('Cancel this order')}
+            description={t(
+              'Cancelling is permanent and does not change stock. Partly received orders cannot be cancelled.',
+            )}
           >
             <form
               onSubmit={(e) => {
@@ -990,7 +1021,7 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
                 status.mutate('cancelled');
               }}
             >
-              <Field label="Cancellation reason">
+              <Field label={t('Cancellation reason')}>
                 <input
                   autoFocus
                   required
@@ -1002,10 +1033,10 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
               <ErrorMessage error={status.error} />
               <div className="form-actions">
                 <Button type="button" variant="outline" onClick={() => setCancel(false)}>
-                  Keep order
+                  {t('Keep order ')}
                 </Button>
                 <Button disabled={status.isPending}>
-                  {status.isPending ? 'Cancelling…' : 'Confirm cancellation'}
+                  {status.isPending ? t('Cancelling…') : t('Confirm cancellation')}
                 </Button>
               </div>
             </form>
@@ -1013,16 +1044,16 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
           <Dialog
             open={editing}
             onOpenChange={setEditing}
-            title="Edit purchase draft"
-            description="Only drafts can be edited."
+            title={t('Edit purchase draft')}
+            description={t('Only drafts can be edited.')}
           >
             {editing && <DraftForm order={p} done={() => setEditing(false)} />}
           </Dialog>
           <Dialog
             open={receiving}
             onOpenChange={setReceiving}
-            title="Receive delivery"
-            description="Enter only quantities delivered now. Leave other lines at zero."
+            title={t('Receive delivery')}
+            description={t('Enter only quantities delivered now. Leave other lines at zero.')}
           >
             {receiving && <ReceiveForm order={p} done={() => setReceiving(false)} />}
           </Dialog>
@@ -1032,6 +1063,7 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
   );
 }
 function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
+  useLanguage();
   const products = useProducts();
   const session = useSession();
   const canPrice = session.data?.user.permissions.includes('catalog.write');
@@ -1084,7 +1116,7 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
       }}
     >
       <fieldset disabled={!!payload}>
-        <Field label="Delivery reference">
+        <Field label={t('Delivery reference')}>
           <input value={reference} onChange={(e) => setReference(e.target.value)} />
         </Field>
         {order.lines
@@ -1092,7 +1124,14 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
           .map((l) => (
             <div key={l.id}>
               <Field
-                label={`${l.product_name} — ${fromScaled(toScaled(l.ordered_quantity, 3) - toScaled(l.received_quantity, 3), 3)} ${l.unit} remaining`}
+                label={t('{value0} — {value1} {value2} remaining', {
+                  value0: l.product_name,
+                  value1: fromScaled(
+                    toScaled(l.ordered_quantity, 3) - toScaled(l.received_quantity, 3),
+                    3,
+                  ),
+                  value2: t(l.unit ?? ''),
+                })}
               >
                 <input
                   inputMode="decimal"
@@ -1100,7 +1139,7 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
                   onChange={(e) => setQuantities({ ...quantities, [l.id]: e.target.value })}
                 />
               </Field>
-              <Field label={'Unit cost excl. tax for ' + l.product_name}>
+              <Field label={t('Unit cost excl. tax for ') + l.product_name}>
                 <input
                   inputMode="decimal"
                   required
@@ -1115,7 +1154,9 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
                 price={products.data?.find((p) => p.id === l.product_id)?.price}
               />
               {canPrice && (
-                <Field label={'New selling price incl. tax for ' + l.product_name + ' (optional)'}>
+                <Field
+                  label={t('New selling price incl. tax for ') + l.product_name + t(' (optional)')}
+                >
                   <input
                     inputMode="decimal"
                     value={prices[l.id] ?? ''}
@@ -1133,8 +1174,9 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
                     required
                   />
                   <span>
-                    Apply this selling price to all stock of {l.product_name}, including older
-                    items. Update the shelf label.
+                    {t('Apply this selling price to all stock of ')}
+                    {l.product_name}
+                    {t(', including older items. Update the shelf label. ')}
                   </span>
                 </label>
               )}
@@ -1143,12 +1185,15 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
       </fieldset>
       <ErrorMessage error={error} />
       <div className="delivery-submit">
-        <Button disabled={pending}>{payload ? 'Retry same delivery' : 'Record delivery'}</Button>
+        <Button disabled={pending}>
+          {payload ? t('Retry same delivery') : t('Record delivery')}
+        </Button>
       </div>
       {!!payload && !pending && (
         <p className="muted">
-          The delivery details are locked for a safe retry. Refresh the order before starting a
-          different delivery.
+          {t(
+            'The delivery details are locked for a safe retry. Refresh the order before starting a different delivery. ',
+          )}
         </p>
       )}
     </form>

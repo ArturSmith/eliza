@@ -1,3 +1,4 @@
+import { t, useLanguage } from './i18n';
 import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -11,10 +12,12 @@ import {
 } from '@tanstack/react-router';
 import { queryClient } from './api';
 import { Shell, Overview, ProductsPage, InventoryPage, AuditPage, DevicesPage } from './pages';
+import { LanguageSwitcher } from './i18n/LanguageSwitcher';
 import './styles.css';
 import './pos.css';
 const PosPage = lazy(() => import('./pos').then((module) => ({ default: module.PosPage })));
 function CheckoutRoute() {
+  useLanguage();
   return (
     <Suspense fallback={<div className="loading">Opening register…</div>}>
       <PosPage />
@@ -28,15 +31,21 @@ import { TeamManagementPage } from './team';
 import { AnalyticsPage } from './analytics';
 import { SalesPage, ShiftsPage } from './reports';
 function Root() {
+  useLanguage();
   const location = useLocation();
-  return location.pathname === '/pos' ? <Outlet /> : <Shell />;
+  return (
+    <>
+      <LanguageSwitcher />
+      {location.pathname === '/pos' ? <Outlet /> : <Shell />}
+    </>
+  );
 }
 const root = createRootRoute({
   component: Root,
   notFoundComponent: () => (
     <div className="empty">
-      <h2>Page not found</h2>
-      <a href="/">Return to overview</a>
+      <h2>{t('Page not found')}</h2>
+      <a href="/">{t('Return to overview')}</a>
     </div>
   ),
 });

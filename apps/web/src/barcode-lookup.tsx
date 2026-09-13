@@ -1,3 +1,4 @@
+import { t, useLanguage } from './i18n';
 import { useState } from 'react';
 import type { Product } from '@eliza/contracts';
 import { api } from './api';
@@ -22,6 +23,7 @@ export function BarcodeLookup({
   onUse: (value: Suggestion) => Promise<void>;
   onExisting: (product: Product) => void;
 }) {
+  useLanguage();
   const [barcode, setBarcode] = useState('');
   const [result, setResult] = useState<Result>();
   const [busy, setBusy] = useState(false);
@@ -45,10 +47,12 @@ export function BarcodeLookup({
   }
   return (
     <fieldset disabled={busy} className="barcode-lookup">
-      <legend>Find product by barcode</legend>
+      <legend>{t('Find product by barcode')}</legend>
       <Field
-        label="Scan or enter barcode"
-        hint="Optional. Look up packaged food in Open Food Facts, then review before importing."
+        label={t('Scan or enter barcode')}
+        hint={t(
+          'Optional. Look up packaged food in Open Food Facts, then review before importing.',
+        )}
       >
         <input
           value={barcode}
@@ -72,13 +76,14 @@ export function BarcodeLookup({
         disabled={!barcode.trim() || busy}
         onClick={() => void lookup()}
       >
-        {busy ? 'Looking up…' : 'Look up barcode'}
+        {busy ? t('Looking up…') : t('Look up barcode')}
       </Button>
       <ErrorMessage error={error} />
       {result?.existing && (
         <div role="status">
           <p>
-            This barcode already belongs to <strong>{result.existing.name}</strong> in your catalog.
+            {t('This barcode already belongs to ')}
+            <strong>{result.existing.name}</strong> {t(' in your catalog. ')}
           </p>
           <Button
             type="button"
@@ -98,17 +103,21 @@ export function BarcodeLookup({
               }
             }}
           >
-            Open existing product
+            {t('Open existing product ')}
           </Button>
         </div>
       )}
       {result && !result.existing && !result.suggestion && (
-        <p role="status">No match found. Continue below; the barcode is already filled in.</p>
+        <p role="status">
+          {t('No match found. Continue below; the barcode is already filled in.')}
+        </p>
       )}
       {result?.suggestion && (
         <div className="barcode-suggestion">
-          {result.suggestion.image && <img src={result.suggestion.image} alt="Suggested product" />}
-          <strong>{result.suggestion.name || 'Name unavailable'}</strong>
+          {result.suggestion.image && (
+            <img src={result.suggestion.image} alt={t('Suggested product')} />
+          )}
+          <strong>{result.suggestion.name || t('Name unavailable')}</strong>
           <p>
             {[result.suggestion.brand, result.suggestion.quantity, result.suggestion.category]
               .filter(Boolean)
@@ -117,8 +126,9 @@ export function BarcodeLookup({
           {result.suggestion.description && <p>{result.suggestion.description}</p>}
           <div className="barcode-import-note">
             <p>
-              (Check the package and details. Existing fields and your uploaded photo will be kept.
-              Package size does not change the selling unit.
+              {t(
+                '(Check the package and details. Existing fields and your uploaded photo will be kept. Package size does not change the selling unit. ',
+              )}
             </p>
             <p>
               <a
@@ -126,9 +136,9 @@ export function BarcodeLookup({
                 target="_blank"
                 rel="noreferrer"
               >
-                Open Food Facts contributors
+                {t('Open Food Facts contributors ')}
               </a>{' '}
-              · Data: ODbL · Photo: CC BY-SA 3.0.)
+              {t('· Data: ODbL · Photo: CC BY-SA 3.0.) ')}
             </p>
           </div>
           <Button
@@ -146,7 +156,7 @@ export function BarcodeLookup({
               }
             }}
           >
-            Use these details
+            {t('Use these details ')}
           </Button>
         </div>
       )}

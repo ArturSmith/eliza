@@ -1,3 +1,4 @@
+import { t, useLanguage } from './i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, refresh } from './api';
@@ -15,6 +16,7 @@ type Profile = {
   version: number;
 };
 export function StoreSettingsPage() {
+  useLanguage();
   const q = useQuery({
     queryKey: ['store-profile'],
     queryFn: () => api<Profile>('/store-profile'),
@@ -23,17 +25,20 @@ export function StoreSettingsPage() {
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">STORE CONFIGURATION</div>
-          <h1>Store settings</h1>
-          <p className="muted">Business details, receipt text, and defaults for new products.</p>
+          <div className="eyebrow">{t('STORE CONFIGURATION')}</div>
+          <h1>{t('Store settings')}</h1>
+          <p className="muted">
+            {t('Business details, receipt text, and defaults for new products.')}
+          </p>
         </div>
       </div>
       <ErrorMessage error={q.error} />
-      {q.data ? <Editor key={q.data.version} profile={q.data} /> : <p>Loading settings…</p>}
+      {q.data ? <Editor key={q.data.version} profile={q.data} /> : <p>{t('Loading settings…')}</p>}
     </>
   );
 }
 function Editor({ profile }: { profile: Profile }) {
+  useLanguage();
   const [value, setValue] = useState(profile),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>();
@@ -67,7 +72,7 @@ function Editor({ profile }: { profile: Profile }) {
                 ['defaultTaxRate', 'Default tax rate (%)'],
               ] as const
             ).map(([key, label]) => (
-              <Field key={key} label={label}>
+              <Field key={key} label={t(label)}>
                 <input
                   required={key === 'name' || key === 'defaultTaxRate'}
                   value={value[key]}
@@ -76,7 +81,7 @@ function Editor({ profile }: { profile: Profile }) {
               </Field>
             ))}
           </div>
-          <Field label="Receipt footer">
+          <Field label={t('Receipt footer')}>
             <textarea
               rows={3}
               value={value.receiptFooter}
@@ -84,16 +89,19 @@ function Editor({ profile }: { profile: Profile }) {
             />
           </Field>
           <p className="muted">
-            Default tax applies to new products only. Existing product rates and old receipts remain
-            unchanged.
+            {t(
+              'Default tax applies to new products only. Existing product rates and old receipts remain unchanged. ',
+            )}
           </p>
           <p>
-            Currency: {profile.currency} · Timezone: {profile.timezone}
+            {t('Currency: ')}
+            {profile.currency} {t(' · Timezone: ')}
+            {profile.timezone}
           </p>
           <p className="muted">
-            Currency and timezone remain fixed to keep historical reporting consistent.
+            {t('Currency and timezone remain fixed to keep historical reporting consistent. ')}
           </p>
-          <h3>Receipt header preview</h3>
+          <h3>{t('Receipt header preview')}</h3>
           <div style={{ whiteSpace: 'pre-wrap', padding: 20, border: '1px solid var(--border)' }}>
             <strong>{value.name}</strong>
             <div>{value.address}</div>
@@ -102,7 +110,7 @@ function Editor({ profile }: { profile: Profile }) {
             <p>{value.receiptFooter}</p>
           </div>
           <ErrorMessage error={error} />
-          <Button style={{ marginTop: 16 }}>Save store settings</Button>
+          <Button style={{ marginTop: 16 }}>{t('Save store settings')}</Button>
         </fieldset>
       </form>
     </section>

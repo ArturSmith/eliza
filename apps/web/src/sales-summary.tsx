@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from './i18n';
 import { AnalyticsCharts } from './analytics';
 import { GrossProfit } from './gross-profit';
 import { useState } from 'react';
@@ -53,36 +54,28 @@ export type Summary = {
   };
 };
 export function rowLabel(row: Totals, group: Group, timezone: string) {
-  if (group === 'dayOfMonth') return 'Day ' + Number(row.bucket);
+  if (group === 'dayOfMonth') return t('Day ') + Number(row.bucket);
   if (group === 'hour') return row.bucket + ':00–' + row.bucket + ':59';
   if (group === 'weekday')
-    return ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][
-      Number(row.bucket) - 1
-    ];
+    return new Intl.DateTimeFormat(getLocale(), { weekday: 'long', timeZone: 'UTC' }).format(
+      new Date(Date.UTC(2024, 0, Number(row.bucket))),
+    );
   if (group === 'monthOfYear')
-    return [
-      'January',
-      'February',
-      'March',
-      'April',
-      'May',
-      'June',
-      'July',
-      'August',
-      'September',
-      'October',
-      'November',
-      'December',
-    ][Number(row.bucket) - 1];
+    return new Intl.DateTimeFormat(getLocale(), { month: 'long', timeZone: 'UTC' }).format(
+      new Date(Date.UTC(2024, Number(row.bucket) - 1, 1)),
+    );
+  if (group === 'payment') return t(row.label ?? row.bucket);
+  if (group === 'category' && row.bucket === 'unrecorded') return t('Unrecorded category');
   if (group === 'shift')
     return (
       (row.label ?? row.cashier) +
       ' · ' +
-      new Date(row.openedAt!).toLocaleString('en-GB', { timeZone: timezone })
+      new Date(row.openedAt!).toLocaleString(getLocale(), { timeZone: timezone })
     );
   return row.label ?? row.bucket;
 }
 export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group }) {
+  useLanguage();
   const store = useSession().data!.store;
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: store.timezone,
@@ -112,16 +105,17 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
     <section
       className="panel panel-padding"
       style={{ marginBottom: 24 }}
-      aria-label="Sales summary"
+      aria-label={t('Sales summary')}
     >
-      <h2>Sales summary</h2>
+      <h2>{t('Sales summary')}</h2>
       <p className="muted">
-        All completed sales in the selected dates, using {store.timezone}. Sales include tax and are
-        after discounts. Refunds are counted on the date issued; breakdown rows show original sales
-        before refunds. Product filters count only that product’s lines. Refunds follow the original
-        sale’s shift. Opening float and cash in/out are excluded.
+        {t('All completed sales in the selected dates, using ')}
+        {store.timezone}
+        {t(
+          '. Sales include tax and are after discounts. Refunds are counted on the date issued; breakdown rows show original sales before refunds. Product filters count only that product’s lines. Refunds follow the original sale’s shift. Opening float and cash in/out are excluded. ',
+        )}
       </p>
-      <div className="analytics-presets" aria-label="Quick date ranges">
+      <div className="analytics-presets" aria-label={t('Quick date ranges')}>
         {['Today', 'This week', 'This month', 'This year'].map((label) => (
           <Button
             key={label}
@@ -140,7 +134,7 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
               setDraft({ ...draft, from, to: today });
             }}
           >
-            {label}
+            {t(label ?? '')}
           </Button>
         ))}
       </div>
@@ -152,7 +146,7 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
           setFilter({ ...draft });
         }}
       >
-        <Field label="From date">
+        <Field label={t('From date')}>
           <input
             type="date"
             required
@@ -160,7 +154,7 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
             onChange={(e) => setDraft({ ...draft, from: e.target.value })}
           />
         </Field>
-        <Field label="To date">
+        <Field label={t('To date')}>
           <input
             type="date"
             required
@@ -169,45 +163,47 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
             onChange={(e) => setDraft({ ...draft, to: e.target.value })}
           />
         </Field>
-        <Field label="Product filter">
+        <Field label={t('Product filter')}>
           <select
             value={draft.productId}
             onChange={(e) => setDraft({ ...draft, productId: e.target.value })}
           >
-            <option value="">All products</option>
+            <option value="">{t('All products')}</option>
             {data?.options.products.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.label}
-                {p.active ? '' : ' (inactive)'}
+                {p.active ? '' : t(' (inactive)')}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Shift filter">
+        <Field label={t('Shift filter')}>
           <select
             value={draft.shiftId}
             onChange={(e) => setDraft({ ...draft, shiftId: e.target.value })}
           >
-            <option value="">All shifts</option>
+            <option value="">{t('All shifts')}</option>
             {data?.options.shifts.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.cashier} · {s.register} ·{' '}
-                {new Date(s.openedAt).toLocaleString('en-GB', { timeZone: store.timezone })}
+                {new Date(s.openedAt).toLocaleString(getLocale(), { timeZone: store.timezone })}
               </option>
             ))}
           </select>
         </Field>
         <p className="muted">
-          Filters combine. Apply a new date range first to load its available shifts and products.
+          {t(
+            'Filters combine. Apply a new date range first to load its available shifts and products. ',
+          )}
         </p>
-        <Field label="Group sales by">
+        <Field label={t('Group sales by')}>
           <select
             value={draft.group}
             onChange={(e) => setDraft({ ...draft, group: e.target.value as typeof draft.group })}
           >
             {Object.entries(groups).map(([value, label]) => (
               <option key={value} value={value}>
-                {label}
+                {t(label ?? '')}
               </option>
             ))}
           </select>
@@ -216,26 +212,33 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
           style={{ alignSelf: 'end', justifySelf: 'start', marginBottom: 16 }}
           disabled={query.isFetching}
         >
-          Apply filters
+          {t('Apply filters ')}
         </Button>
       </form>
       <ErrorMessage error={query.error} />
       {query.isFetching ? (
-        <p className="muted">Loading sales totals…</p>
+        <p className="muted">{t('Loading sales totals…')}</p>
       ) : (
         data && (
           <>
             <p className="muted">
-              Showing {filter.from} through {filter.to}, inclusive.{' '}
-              {filter.group === 'shift' && 'Shift totals include only sales within these dates.'}
+              {t('Showing ')}
+              {filter.from} {t(' through ')}
+              {filter.to}
+              {t(', inclusive.')}{' '}
+              {filter.group === 'shift' && t('Shift totals include only sales within these dates.')}
               {filter.group === 'week' &&
-                'Weeks start Monday; boundary weeks include only selected dates.'}
+                t('Weeks start Monday; boundary weeks include only selected dates.')}
               {filter.group === 'category' &&
-                'Older receipts without a category snapshot appear under Unrecorded category.'}
+                t('Older receipts without a category snapshot appear under Unrecorded category.')}
               {['product', 'category'].includes(filter.group) &&
-                'Sales, discounts and tax use original receipt lines. Receipts containing multiple groups are counted in each group. Payments are not allocated to products.'}
+                t(
+                  'Sales, discounts and tax use original receipt lines. Receipts containing multiple groups are counted in each group. Payments are not allocated to products.',
+                )}
               {filter.group === 'payment' &&
-                'Amounts are payments collected, excluding change. Tax and discounts are not allocated between payment methods.'}
+                t(
+                  'Amounts are payments collected, excluding change. Tax and discounts are not allocated between payment methods.',
+                )}
             </p>
             <div
               className="form-grid"
@@ -258,25 +261,26 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                 ],
               ].map(([label, value]) => (
                 <div key={label}>
-                  <small>{label}</small>
+                  <small>{t(label ?? '')}</small>
                   <strong style={{ display: 'block', fontSize: 20 }}>
-                    {value === null ? 'Not allocated' : formatMoney(value, data.currency)}
+                    {value === null ? t('Not allocated') : formatMoney(value, data.currency)}
                   </strong>
                 </div>
               ))}
               <div>
-                <small>Transactions</small>
+                <small>{t('Transactions')}</small>
                 <strong style={{ display: 'block', fontSize: 20 }}>
                   {data.totals.transactions}
                 </strong>
               </div>
             </div>
             <AnalyticsCharts data={data} />
-            <h3>Detailed breakdown</h3>
+            <h3>{t('Detailed breakdown')}</h3>
             {filter.productId && (
               <p className="muted">
-                Payment methods are not allocated to individual products. Clear the product filter
-                to compare payments.
+                {t(
+                  'Payment methods are not allocated to individual products. Clear the product filter to compare payments. ',
+                )}
               </p>
             )}
             <div className="table-scroll">
@@ -285,21 +289,21 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                   <tr>
                     <th>
                       {filter.group === 'shift'
-                        ? 'Cashier / register / shift opened'
+                        ? t('Cashier / register / shift opened')
                         : groups[filter.group]}
                     </th>
-                    <th>Transactions</th>
-                    <th>Sales</th>
+                    <th>{t('Transactions')}</th>
+                    <th>{t('Sales')}</th>
                     <th>
                       {['product', 'category', 'payment'].includes(filter.group)
-                        ? 'Average per matching receipt'
-                        : 'Average basket'}
+                        ? t('Average per matching receipt')
+                        : t('Average basket')}
                     </th>
-                    {filter.group === 'product' && <th>Quantity sold</th>}
-                    <th>Cash sales</th>
-                    <th>Card sales</th>
-                    <th>Discounts</th>
-                    <th>Tax included</th>
+                    {filter.group === 'product' && <th>{t('Quantity sold')}</th>}
+                    <th>{t('Cash sales')}</th>
+                    <th>{t('Card sales')}</th>
+                    <th>{t('Discounts')}</th>
+                    <th>{t('Tax included')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -311,7 +315,7 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                             <strong>{r.cashier}</strong>
                             <small>
                               {r.register} ·{' '}
-                              {new Date(r.openedAt!).toLocaleString('en-GB', {
+                              {new Date(r.openedAt!).toLocaleString(getLocale(), {
                                 timeZone: data.timezone,
                               })}
                             </small>
@@ -325,7 +329,7 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                       <td>{formatMoney(r.average, data.currency)}</td>
                       {filter.group === 'product' && (
                         <td>
-                          {r.quantity} {r.unit}
+                          {r.quantity} {t(r.unit ?? '')}
                         </td>
                       )}
                       {[r.cash, r.card, r.discount, r.tax].map((v, i) => (
@@ -339,22 +343,24 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
             {data.rows.length > 25 && (
               <div className="analytics-pagination">
                 <Button variant="outline" disabled={page === 0} onClick={() => setPage(page - 1)}>
-                  Previous
+                  {t('Previous ')}
                 </Button>
                 <span>
-                  Page {page + 1} of {Math.ceil(data.rows.length / 25)}
+                  {t('Page ')}
+                  {page + 1} {t(' of ')}
+                  {Math.ceil(data.rows.length / 25)}
                 </span>
                 <Button
                   variant="outline"
                   disabled={(page + 1) * 25 >= data.rows.length}
                   onClick={() => setPage(page + 1)}
                 >
-                  Next
+                  {t('Next ')}
                 </Button>
               </div>
             )}
             {!data.rows.length && !(filter.group === 'payment' && filter.productId) && (
-              <p className="muted">No completed sales in this date range.</p>
+              <p className="muted">{t('No completed sales in this date range.')}</p>
             )}
           </>
         )

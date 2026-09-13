@@ -1,3 +1,4 @@
+import { countText, t, useLanguage, getLocale } from './i18n';
 import { useState, type ReactNode } from 'react';
 import { Link, Outlet, useLocation } from '@tanstack/react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -84,13 +85,13 @@ const navGroups = [
 ] as const;
 const nav = navGroups.flatMap((group) => [...group.items]);
 function money(value: string | number, currency = 'NOK') {
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(Number(value));
+  return new Intl.NumberFormat(getLocale(), { style: 'currency', currency }).format(Number(value));
 }
 function date(
   value: string,
   zone = queryClient.getQueryData<Session>(['session'])?.store.timezone ?? 'UTC',
 ) {
-  return new Intl.DateTimeFormat('en-GB', {
+  return new Intl.DateTimeFormat(getLocale(), {
     dateStyle: 'medium',
     timeStyle: 'short',
     timeZone: zone,
@@ -106,6 +107,7 @@ function Badge({
   children: ReactNode;
   tone?: 'green' | 'amber' | 'gray';
 }) {
+  useLanguage();
   return <span className={`badge badge-${tone}`}>{children}</span>;
 }
 function PageHeading({
@@ -119,6 +121,7 @@ function PageHeading({
   description: string;
   action?: ReactNode;
 }) {
+  useLanguage();
   return (
     <div className="page-heading">
       <div>
@@ -139,6 +142,7 @@ function Empty({
   description: string;
   action?: ReactNode;
 }) {
+  useLanguage();
   return (
     <div className="empty">
       <span className="icon-tile">
@@ -151,14 +155,16 @@ function Empty({
   );
 }
 function Loading() {
+  useLanguage();
   return (
     <div className="loading">
       <span className="loading-dot" />
-      Loading your store…
+      {t('Loading your store… ')}
     </div>
   );
 }
 export function Shell() {
+  useLanguage();
   const status = useQuery({
     queryKey: ['setup'],
     queryFn: () => api<{ needsSetup: boolean }>('/auth/status'),
@@ -179,9 +185,9 @@ export function Shell() {
     return (
       <div className="connection-error">
         <Store size={40} />
-        <h1>Your store is temporarily unavailable</h1>
+        <h1>{t('Your store is temporarily unavailable')}</h1>
         <ErrorMessage error={status.error} />
-        <Button onClick={() => void refresh()}>Try again</Button>
+        <Button onClick={() => void refresh()}>{t('Try again')}</Button>
       </div>
     );
   if (status.data?.needsSetup) return <AuthForm setup />;
@@ -193,7 +199,7 @@ export function Shell() {
     return (
       <div className="connection-error">
         <ErrorMessage error={session.error} />
-        <Button onClick={() => void refresh()}>Try again</Button>
+        <Button onClick={() => void refresh()}>{t('Try again')}</Button>
       </div>
     );
   }
@@ -204,7 +210,7 @@ export function Shell() {
       <aside className={`sidebar ${mobile ? 'mobile-open' : ''}`}>
         <button
           className="mobile-close"
-          aria-label="Close navigation"
+          aria-label={t('Close navigation')}
           onClick={() => setMobile(false)}
         >
           <X size={18} />
@@ -213,17 +219,18 @@ export function Shell() {
           <span className="brand-mark">
             <Store size={21} />
           </span>
-          eliza<span className="brand-period">.</span>
+          {t('eliza')}
+          <span className="brand-period">.</span>
         </Link>
         <div className="store-switch">
           <span className="store-avatar">{store.name.slice(0, 1)}</span>
           <div>
             <strong>{store.name}</strong>
-            <small>Store workspace</small>
+            <small>{t('Store workspace')}</small>
           </div>
           <ShieldCheck size={17} />
         </div>
-        <nav aria-label="Main navigation">
+        <nav aria-label={t('Main navigation')}>
           {navGroups.map((group) => {
             const items = group.items.filter((item) => user.permissions.includes(item.permission));
             if (!items.length) return null;
@@ -244,7 +251,7 @@ export function Shell() {
                     )
                   }
                 >
-                  {group.label}
+                  {t(group.label)}
                   <ChevronRight size={13} className={expanded ? 'expanded' : ''} />
                 </button>
                 <div id={groupId} className="nav-group-links" hidden={!expanded}>
@@ -258,7 +265,7 @@ export function Shell() {
                       onClick={() => setMobile(false)}
                     >
                       <Icon size={19} />
-                      {label}
+                      {t(label)}
                       {to === location.pathname && <span className="nav-dot" />}
                     </Link>
                   ))}
@@ -269,12 +276,13 @@ export function Shell() {
         </nav>
         <div className="sidebar-bottom">
           <span className="status-dot" />
-          Local workspace <span>v0.1</span>
+          {t('Local workspace ')}
+          <span>{t('v0.1')}</span>
         </div>
       </aside>
       {mobile && (
         <button
-          aria-label="Dismiss navigation"
+          aria-label={t('Dismiss navigation')}
           className="mobile-backdrop"
           onClick={() => setMobile(false)}
         />
@@ -284,20 +292,20 @@ export function Shell() {
           <div className="breadcrumb">
             <button
               className="mobile-toggle"
-              aria-label="Open navigation"
+              aria-label={t('Open navigation')}
               onClick={() => setMobile(true)}
             >
               <Menu />
             </button>
             <Store size={16} />
-            <span>Workspace</span>
+            <span>{t('Workspace')}</span>
             <ChevronRight size={14} />
-            <strong>{current?.label ?? 'Page'}</strong>
+            <strong>{t(current?.label ?? 'Page')}</strong>
           </div>
           <div className="topbar-right">
             <span className="local-badge">
               <span className="status-dot" />
-              Local server
+              {t('Local server ')}
             </span>
             <span className="topbar-divider" />
             <span className="user-avatar">
@@ -309,13 +317,13 @@ export function Shell() {
             </span>
             <div className="user-info">
               <strong>{user.name}</strong>
-              <small>{user.role}</small>
+              <small>{t(user.role)}</small>
             </div>
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Sign out"
-              title="Sign out"
+              aria-label={t('Sign out')}
+              title={t('Sign out')}
               disabled={logout.isPending}
               onClick={() => logout.mutate()}
             >
@@ -327,21 +335,23 @@ export function Shell() {
           <ErrorMessage error={logout.error} />
           {current && !user.permissions.includes(current.permission) ? (
             <Empty
-              title="Access restricted"
-              description="Ask your store owner for access to this area."
+              title={t('Access restricted')}
+              description={t('Ask your store owner for access to this area.')}
             />
           ) : (
             <Outlet />
           )}
         </main>
         <footer>
-          Made for the everyday business of running a store.<span>Eliza · Local edition</span>
+          {t('Made for the everyday business of running a store.')}
+          <span>{t('Eliza · Local edition')}</span>
         </footer>
       </div>
     </div>
   );
 }
 export function Overview() {
+  useLanguage();
   const session = useSession().data!;
   const products = useProducts();
   const canAdjust = useCan('inventory.adjust');
@@ -361,12 +371,12 @@ export function Overview() {
   return (
     <>
       <PageHeading
-        eyebrow="YOUR STORE AT A GLANCE"
-        title={`Good to see you, ${session.user.name.split(' ')[0]}.`}
-        description="A clear picture of what’s in store today."
+        eyebrow={t('YOUR STORE AT A GLANCE')}
+        title={t('Good to see you, {value0}.', { value0: session.user.name.split(' ')[0] })}
+        description={t('A clear picture of what’s in store today.')}
         action={
           <span className="date-pill">
-            {new Intl.DateTimeFormat('en-GB', {
+            {new Intl.DateTimeFormat(getLocale(), {
               weekday: 'short',
               day: 'numeric',
               month: 'long',
@@ -377,20 +387,22 @@ export function Overview() {
       />
       <section className="welcome-banner">
         <div>
-          <Badge>LET’S GET YOU READY</Badge>
+          <Badge>{t('LET’S GET YOU READY')}</Badge>
           <h2>
-            Good days start with
-            <br />a well-stocked store.
+            {t('Good days start with ')}
+            <br />
+            {t('a well-stocked store. ')}
           </h2>
           <p>
-            Bring your products together and keep every
-            <br className="desktop-br" /> stock change accounted for.
+            {t('Bring your products together and keep every ')}
+            <br className="desktop-br" /> {t(' stock change accounted for. ')}
           </p>
           <div className="banner-actions">
             {canWrite && <AddProduct />}
             <Button variant="ghost" asChild>
               <Link to="/inventory">
-                View inventory <ArrowRight size={16} />
+                {t('View inventory ')}
+                <ArrowRight size={16} />
               </Link>
             </Button>
           </div>
@@ -399,7 +411,7 @@ export function Overview() {
           <div className="art-circle" />
           <div className="art-card art-back">
             <Boxes size={24} />
-            <span>Everything in its place</span>
+            <span>{t('Everything in its place')}</span>
             <i />
             <i />
             <i />
@@ -408,8 +420,8 @@ export function Overview() {
             <span className="art-check">
               <Check size={19} />
             </span>
-            <strong>Ready for a fresh start</strong>
-            <span>One product at a time.</span>
+            <strong>{t('Ready for a fresh start')}</strong>
+            <span>{t('One product at a time.')}</span>
             <div className="art-lines">
               <i />
               <i />
@@ -420,13 +432,13 @@ export function Overview() {
       </section>
       <div className="metrics">
         <Metric
-          label="Active products"
+          label={t('Active products')}
           value={String(active.length)}
           sub="In your store catalog"
           icon={<Package />}
         />
         <Metric
-          label="Inventory value"
+          label={t('Inventory value')}
           value={
             session.user.permissions.includes('costs.read')
               ? money(inventoryValue, session.store.currency)
@@ -436,14 +448,14 @@ export function Overview() {
           icon={<Boxes />}
         />
         <Metric
-          label="Low-stock products"
+          label={t('Low-stock products')}
           value={String(low.length)}
           sub="At or below their threshold"
           icon={<AlertTriangle />}
           amber={low.length > 0}
         />
         <Metric
-          label="Categories"
+          label={t('Categories')}
           value={String(new Set(active.map((p) => p.category)).size)}
           sub="Keeping your shelves organized"
           icon={<ClipboardList />}
@@ -453,11 +465,12 @@ export function Overview() {
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <h2>Needs a little attention</h2>
-              <p className="muted">Keep your essentials on the shelf.</p>
+              <h2>{t('Needs a little attention')}</h2>
+              <p className="muted">{t('Keep your essentials on the shelf.')}</p>
             </div>
             <Link to="/inventory" className="text-link">
-              View inventory <ArrowRight size={15} />
+              {t('View inventory ')}
+              <ArrowRight size={15} />
             </Link>
           </div>
           {low.length ? (
@@ -472,18 +485,22 @@ export function Overview() {
                     </small>
                   </div>
                   <Badge tone={Number(p.stock) === 0 ? 'gray' : 'amber'}>
-                    {Number(p.stock) === 0 ? 'Out of stock' : `${Number(p.stock)} left`}
+                    {Number(p.stock) === 0
+                      ? t('Out of stock')
+                      : t('{value0} left', { value0: Number(p.stock) })}
                   </Badge>
                 </div>
               ))}
             </div>
           ) : (
             <Empty
-              title={list.length ? 'Your stock looks good' : 'A fresh start for your shelves'}
+              title={list.length ? t('Your stock looks good') : t('A fresh start for your shelves')}
               description={
                 list.length
-                  ? 'No products are at or below their low-stock threshold.'
-                  : 'Add your first products and their opening stock to see what needs attention.'
+                  ? t('No products are at or below their low-stock threshold.')
+                  : t(
+                      'Add your first products and their opening stock to see what needs attention.',
+                    )
               }
             />
           )}
@@ -491,24 +508,28 @@ export function Overview() {
         <section className="panel getting-started">
           <div className="panel-heading">
             <div>
-              <h2>Your store checklist</h2>
-              <p className="muted">A few small steps. A solid foundation.</p>
+              <h2>{t('Your store checklist')}</h2>
+              <p className="muted">{t('A few small steps. A solid foundation.')}</p>
             </div>
             <span className="progress-count">
               {1 + (list.length ? 1 : 0) + (list.some((p) => Number(p.stock) > 0) ? 1 : 0)}/3
             </span>
           </div>
-          <Checklist done title="Create your store" description="Your workspace is ready." />
+          <Checklist
+            done
+            title={t('Create your store')}
+            description={t('Your workspace is ready.')}
+          />
           <Checklist
             done={list.length > 0}
-            title="Build your product catalog"
-            description="Names, prices, barcodes, and PLUs."
+            title={t('Build your product catalog')}
+            description={t('Names, prices, barcodes, and PLUs.')}
             to="/products"
           />
           <Checklist
             done={list.some((p) => Number(p.stock) > 0)}
-            title="Record opening stock"
-            description="Start with an accurate count."
+            title={t('Record opening stock')}
+            description={t('Start with an accurate count.')}
             to="/inventory"
           />
           {canAdjust && (
@@ -519,13 +540,15 @@ export function Overview() {
               disabled={!active.length}
             >
               <Plus size={16} />
-              Record stock
+              {t('Record stock ')}
             </Button>
           )}
           <div className="next-note">
             <CircleHelp size={17} />
             <p>
-              Set employee PINs in Team, then open Checkout to enroll a register and start a shift.
+              {t(
+                'Set employee PINs in Team, then open Checkout to enroll a register and start a shift. ',
+              )}
             </p>
           </div>
         </section>
@@ -534,8 +557,8 @@ export function Overview() {
       <Dialog
         open={adjust}
         onOpenChange={setAdjust}
-        title="Record a stock adjustment"
-        description="Keep stock accurate with a traceable change."
+        title={t('Record a stock adjustment')}
+        description={t('Keep stock accurate with a traceable change.')}
       >
         <AdjustmentForm products={list} onDone={() => setAdjust(false)} />
       </Dialog>
@@ -555,14 +578,15 @@ function Metric({
   icon: ReactNode;
   amber?: boolean;
 }) {
+  useLanguage();
   return (
     <section className="metric">
       <div>
-        <span>{label}</span>
+        <span>{t(label)}</span>
         <span className={`metric-icon ${amber ? 'amber' : ''}`}>{icon}</span>
       </div>
       <strong>{value}</strong>
-      <small>{sub}</small>
+      <small>{t(sub)}</small>
     </section>
   );
 }
@@ -577,6 +601,7 @@ function Checklist({
   description: string;
   to?: '/products' | '/inventory';
 }) {
+  useLanguage();
   return (
     <div className="checklist-row">
       <span className={`check-circle ${done ? 'done' : ''}`}>
@@ -595,23 +620,26 @@ function Checklist({
   );
 }
 function ProductIcon({ category, image }: { category: string; image?: string }) {
+  useLanguage();
   return (
     <span className={`product-icon color-${category.length % 4}`}>
-      {image ? <img src={image} alt="" loading="lazy" /> : <Package size={20} />}
+      {image ? <img src={image} alt={t('')} loading="lazy" /> : <Package size={20} />}
     </span>
   );
 }
 function RecentActivity() {
+  useLanguage();
   const query = useAudit();
   return (
     <section className="panel recent-panel">
       <div className="panel-heading">
         <div>
-          <h2>Recent activity</h2>
-          <p className="muted">The story behind every change.</p>
+          <h2>{t('Recent activity')}</h2>
+          <p className="muted">{t('The story behind every change.')}</p>
         </div>
         <Link to="/audit" className="text-link">
-          View activity <ArrowRight size={15} />
+          {t('View activity ')}
+          <ArrowRight size={15} />
         </Link>
       </div>
       <ErrorMessage error={query.error} />
@@ -621,7 +649,7 @@ function RecentActivity() {
             <Activity size={17} />
           </span>
           <div>
-            <strong>{a.action}</strong>
+            <strong>{t(a.action)}</strong>
             <small>
               {a.actor} · {a.device}
             </small>
@@ -630,12 +658,15 @@ function RecentActivity() {
         </div>
       ))}
       {query.data?.length === 0 && (
-        <p className="muted panel-padding">Your store’s activity will appear here as you work.</p>
+        <p className="muted panel-padding">
+          {t('Your store’s activity will appear here as you work.')}
+        </p>
       )}
     </section>
   );
 }
 export function ProductsPage() {
+  useLanguage();
   const query = useProducts();
   const session = useSession().data!;
   const canWrite = useCan('catalog.write');
@@ -660,9 +691,9 @@ export function ProductsPage() {
   return (
     <>
       <PageHeading
-        eyebrow="YOUR CATALOG"
-        title="Products"
-        description="Every item has a place. With or without a barcode."
+        eyebrow={t('YOUR CATALOG')}
+        title={t('Products')}
+        description={t('Every item has a place. With or without a barcode.')}
         action={canWrite && <AddProduct />}
       />
       <section className="panel">
@@ -670,23 +701,23 @@ export function ProductsPage() {
           <div className="search-box">
             <Search size={18} />
             <input
-              aria-label="Search products"
-              placeholder="Search name, barcode, SKU, or PLU…"
+              aria-label={t('Search products')}
+              placeholder={t('Search name, barcode, SKU, or PLU…')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           <select
-            aria-label="Filter category"
+            aria-label={t('Filter category')}
             value={category}
             onChange={(e) => setCategory(e.target.value)}
           >
-            <option>All categories</option>
+            <option>{t('All categories')}</option>
             {[...new Set(query.data?.map((p) => p.category))].sort().map((c) => (
               <option key={c}>{c}</option>
             ))}
           </select>
-          <span className="muted">{rows.length} products</span>
+          <span className="muted">{countText('products', rows.length)}</span>
         </div>
         <ErrorMessage error={query.error} />
         {query.isPending ? (
@@ -696,13 +727,13 @@ export function ProductsPage() {
             <table>
               <thead>
                 <tr>
-                  <th>Product</th>
-                  <th>Category</th>
-                  <th>Price</th>
-                  <th>On hand</th>
-                  <th>Barcode / PLU</th>
-                  <th>Status</th>
-                  {canWrite && <th>Actions</th>}
+                  <th>{t('Product')}</th>
+                  <th>{t('Category')}</th>
+                  <th>{t('Price')}</th>
+                  <th>{t('On hand')}</th>
+                  <th>{t('Barcode / PLU')}</th>
+                  <th>{t('Status')}</th>
+                  {canWrite && <th>{t('Actions')}</th>}
                 </tr>
               </thead>
               <tbody>
@@ -721,9 +752,10 @@ export function ProductsPage() {
                                 target="_blank"
                                 rel="noreferrer"
                               >
-                                Open Food Facts contributors
+                                {t('Open Food Facts contributors ')}
                               </a>{' '}
-                              · ODbL{p.source.imageImported && ' · Photo resized, CC BY-SA 3.0'}
+                              {t('· ODbL')}
+                              {p.source.imageImported && t(' · Photo resized, CC BY-SA 3.0')}
                             </small>
                           )}
                         </div>
@@ -732,19 +764,26 @@ export function ProductsPage() {
                     <td>{p.category}</td>
                     <td className="numeric">
                       {money(p.price, session.store.currency)}
-                      <small>per {p.unit}</small>
+                      <small>
+                        {t('per ')}
+                        {t(p.unit ?? '')}
+                      </small>
                     </td>
                     <td className="numeric">
                       {Number(p.stock)}
-                      <small>{p.unit}</small>
+                      <small>{t(p.unit ?? '')}</small>
                     </td>
                     <td className="code-cell">
-                      {p.barcodes[0] ?? (p.plu ? `PLU ${p.plu}` : 'No barcode')}
-                      {p.barcodes.length > 1 && <small>+{p.barcodes.length - 1} more</small>}
+                      {p.barcodes[0] ?? (p.plu ? `PLU ${p.plu}` : t('No barcode'))}
+                      {p.barcodes.length > 1 && (
+                        <small>
+                          +{p.barcodes.length - 1} {t(' more')}
+                        </small>
+                      )}
                     </td>
                     <td>
                       <Badge tone={p.active ? 'green' : 'gray'}>
-                        {p.active ? 'Active' : 'Inactive'}
+                        {p.active ? t('Active') : t('Inactive')}
                       </Badge>
                     </td>
                     {canWrite && (
@@ -753,7 +792,7 @@ export function ProductsPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label={`Edit ${p.name}`}
+                            aria-label={t('Edit {value0}', { value0: p.name })}
                             onClick={() => setEdit(p)}
                           >
                             <Pencil size={15} />
@@ -766,7 +805,7 @@ export function ProductsPage() {
                               setStatus(p);
                             }}
                           >
-                            {p.active ? 'Deactivate' : 'Activate'}
+                            {p.active ? t('Deactivate') : t('Activate')}
                           </Button>
                         </div>
                       </td>
@@ -779,11 +818,13 @@ export function ProductsPage() {
         ) : (
           !query.error && (
             <Empty
-              title={query.data?.length ? 'No matching products' : 'Your first product starts here'}
+              title={
+                query.data?.length ? t('No matching products') : t('Your first product starts here')
+              }
               description={
                 query.data?.length
-                  ? 'Try a different name, barcode, or category.'
-                  : 'Add an item with a name, price, and SKU. A barcode is optional.'
+                  ? t('Try a different name, barcode, or category.')
+                  : t('Add an item with a name, price, and SKU. A barcode is optional.')
               }
               action={canWrite && !query.data?.length ? <AddProduct /> : undefined}
             />
@@ -793,29 +834,31 @@ export function ProductsPage() {
       <Dialog
         open={!!edit}
         onOpenChange={(v) => !v && setEdit(null)}
-        title="Edit product"
-        description="Price and barcode changes are recorded in your activity log."
+        title={t('Edit product')}
+        description={t('Price and barcode changes are recorded in your activity log.')}
       >
         {edit && <ProductForm key={edit.id} initial={edit} onDone={() => setEdit(null)} />}
       </Dialog>
       <Dialog
         open={!!status}
         onOpenChange={(v) => !v && setStatus(null)}
-        title={status?.active ? 'Deactivate product?' : 'Activate product?'}
+        title={status?.active ? t('Deactivate product?') : t('Activate product?')}
         description={
           status?.active
-            ? 'The product remains in your records and stock history. It will be unavailable for new stock adjustments.'
-            : 'The product will be available for stock adjustments again.'
+            ? t(
+                'The product remains in your records and stock history. It will be unavailable for new stock adjustments.',
+              )
+            : t('The product will be available for stock adjustments again.')
         }
       >
         <p className="confirm-name">{status?.name}</p>
         <ErrorMessage error={mutation.error} />
         <div className="form-actions">
           <Button variant="outline" onClick={() => setStatus(null)}>
-            Cancel
+            {t('Cancel ')}
           </Button>
           <Button disabled={mutation.isPending} onClick={() => status && mutation.mutate(status)}>
-            {mutation.isPending ? 'Saving…' : 'Confirm'}
+            {mutation.isPending ? t('Saving…') : t('Confirm')}
           </Button>
         </div>
       </Dialog>
@@ -823,15 +866,16 @@ export function ProductsPage() {
   );
 }
 export function InventoryPage() {
+  useLanguage();
   const products = useProducts();
   const movements = useMovements();
   const [open, setOpen] = useState(false);
   return (
     <>
       <PageHeading
-        eyebrow="EVERY CHANGE ACCOUNTED FOR"
-        title="Inventory"
-        description="A permanent record of what comes in and what goes out."
+        eyebrow={t('EVERY CHANGE ACCOUNTED FOR')}
+        title={t('Inventory')}
+        description={t('A permanent record of what comes in and what goes out.')}
         action={
           useCan('inventory.adjust') && (
             <Button onClick={() => setOpen(true)} disabled={!products.data?.some((p) => p.active)}>
@@ -844,17 +888,21 @@ export function InventoryPage() {
       <div className="notice inventory-notice">
         <ShieldCheck size={20} />
         <div>
-          <strong>Stock changes have a history.</strong>
-          <span>Every adjustment records the person, device, reason, and resulting balance.</span>
+          <strong>{t('Stock changes have a history.')}</strong>
+          <span>
+            {t('Every adjustment records the person, device, reason, and resulting balance.')}
+          </span>
         </div>
       </div>
       <section className="panel">
         <div className="panel-heading">
           <div>
-            <h2>Stock movements</h2>
-            <p className="muted">Most recent 100 movements, across your store.</p>
+            <h2>{t('Stock movements')}</h2>
+            <p className="muted">{t('Most recent 100 movements, across your store.')}</p>
           </div>
-          <Badge tone="gray">{movements.data?.length ?? 0} records</Badge>
+          <Badge tone="gray">
+            {movements.data?.length ?? 0} {t(' records')}
+          </Badge>
         </div>
         <ErrorMessage error={products.error ?? movements.error} />
         {movements.isPending ? (
@@ -864,12 +912,12 @@ export function InventoryPage() {
             <table>
               <thead>
                 <tr>
-                  <th>Product</th>
-                  <th>Change</th>
-                  <th>Balance after</th>
-                  <th>Reason</th>
-                  <th>Recorded by</th>
-                  <th>When</th>
+                  <th>{t('Product')}</th>
+                  <th>{t('Change')}</th>
+                  <th>{t('Balance after')}</th>
+                  <th>{t('Reason')}</th>
+                  <th>{t('Recorded by')}</th>
+                  <th>{t('When')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -894,7 +942,7 @@ export function InventoryPage() {
                     </td>
                     <td>{Number(m.balance)}</td>
                     <td className="reason">
-                      {m.reason.replaceAll('_', ' ')}
+                      {t(m.reason)}
                       {m.notes && <small>{m.notes}</small>}
                     </td>
                     <td>
@@ -910,8 +958,10 @@ export function InventoryPage() {
         ) : (
           !movements.error && (
             <Empty
-              title="Start with what’s on your shelves"
-              description="Add your products, then record an opening balance. Every future change will build on this history."
+              title={t('Start with what’s on your shelves')}
+              description={t(
+                'Add your products, then record an opening balance. Every future change will build on this history.',
+              )}
             />
           )
         )}
@@ -919,8 +969,8 @@ export function InventoryPage() {
       <Dialog
         open={open}
         onOpenChange={setOpen}
-        title="Record a stock adjustment"
-        description="A positive quantity adds stock. A negative quantity removes it."
+        title={t('Record a stock adjustment')}
+        description={t('A positive quantity adds stock. A negative quantity removes it.')}
       >
         <AdjustmentForm products={products.data ?? []} onDone={() => setOpen(false)} />
       </Dialog>
@@ -928,13 +978,14 @@ export function InventoryPage() {
   );
 }
 export function AuditPage() {
+  useLanguage();
   const query = useAudit();
   return (
     <>
       <PageHeading
-        eyebrow="TRACEABILITY"
-        title="Activity log"
-        description="Who changed what, when, and from which device. Latest 100 events."
+        eyebrow={t('TRACEABILITY')}
+        title={t('Activity log')}
+        description={t('Who changed what, when, and from which device. Latest 100 events.')}
       />
       <section className="panel">
         <ErrorMessage error={query.error} />
@@ -953,7 +1004,7 @@ export function AuditPage() {
                     {a.actor} · {a.device} · {date(a.createdAt)}
                   </p>
                   <details>
-                    <summary>View recorded details</summary>
+                    <summary>{t('View recorded details')}</summary>
                     <pre>{JSON.stringify(a.details, null, 2)}</pre>
                   </details>
                 </div>
@@ -963,8 +1014,10 @@ export function AuditPage() {
         ) : (
           !query.error && (
             <Empty
-              title="Your store history starts here"
-              description="Product changes, inventory adjustments, and device events appear automatically."
+              title={t('Your store history starts here')}
+              description={t(
+                'Product changes, inventory adjustments, and device events appear automatically.',
+              )}
             />
           )
         )}
@@ -973,6 +1026,7 @@ export function AuditPage() {
   );
 }
 export function DevicesPage() {
+  useLanguage();
   const query = useDevices();
   const session = useSession().data!;
   const [edit, setEdit] = useState<Device | null>(null);
@@ -987,9 +1041,9 @@ export function DevicesPage() {
   return (
     <>
       <PageHeading
-        eyebrow="TRUSTED ACCESS"
-        title="Devices"
-        description="Management browsers are registered when an owner signs in."
+        eyebrow={t('TRUSTED ACCESS')}
+        title={t('Devices')}
+        description={t('Management browsers are registered when an owner signs in.')}
       />
       <ErrorMessage error={query.error} />
       <div className="device-grid">
@@ -1000,15 +1054,18 @@ export function DevicesPage() {
                 <Monitor size={24} />
               </span>
               <Badge tone={d.active ? 'green' : 'gray'}>
-                {d.active ? 'Registered' : 'Blocked'}
+                {d.active ? t('Registered') : t('Blocked')}
               </Badge>
             </div>
             <h2>{d.name}</h2>
             <p className="muted">
-              {d.type === 'management' ? 'Management browser' : d.type}
-              {d.id === session.device.id ? ' · This device' : ''}
+              {d.type === 'management' ? t('Management browser') : t(d.type)}
+              {d.id === session.device.id ? t(' · This device') : ''}
             </p>
-            <small>Added {date(d.createdAt)}</small>
+            <small>
+              {t('Added ')}
+              {date(d.createdAt)}
+            </small>
             <Button
               variant="outline"
               onClick={() => {
@@ -1016,7 +1073,7 @@ export function DevicesPage() {
                 setEdit(d);
               }}
             >
-              Manage device
+              {t('Manage device ')}
             </Button>
           </section>
         ))}
@@ -1024,8 +1081,10 @@ export function DevicesPage() {
       <Dialog
         open={!!edit}
         onOpenChange={(v) => !v && setEdit(null)}
-        title="Manage device"
-        description="Blocked devices lose access immediately. Blocking this browser will also sign you out."
+        title={t('Manage device')}
+        description={t(
+          'Blocked devices lose access immediately. Blocking this browser will also sign you out.',
+        )}
       >
         {edit && (
           <form
@@ -1034,7 +1093,7 @@ export function DevicesPage() {
               mutation.mutate(edit);
             }}
           >
-            <Field label="Device name">
+            <Field label={t('Device name')}>
               <input
                 value={edit.name}
                 required
@@ -1042,21 +1101,21 @@ export function DevicesPage() {
                 onChange={(e) => setEdit({ ...edit, name: e.target.value })}
               />
             </Field>
-            <Field label="Access">
+            <Field label={t('Access')}>
               <select
                 value={String(edit.active)}
                 onChange={(e) => setEdit({ ...edit, active: e.target.value === 'true' })}
               >
-                <option value="true">Registered</option>
-                <option value="false">Blocked</option>
+                <option value="true">{t('Registered')}</option>
+                <option value="false">{t('Blocked')}</option>
               </select>
             </Field>
             <ErrorMessage error={mutation.error} />
             <div className="form-actions">
               <Button variant="outline" type="button" onClick={() => setEdit(null)}>
-                Cancel
+                {t('Cancel ')}
               </Button>
-              <Button disabled={mutation.isPending}>Save device</Button>
+              <Button disabled={mutation.isPending}>{t('Save device')}</Button>
             </div>
           </form>
         )}
@@ -1065,48 +1124,50 @@ export function DevicesPage() {
   );
 }
 export function SettingsPage() {
+  useLanguage();
   const { store, user } = useSession().data!;
   return (
     <>
       <PageHeading
-        eyebrow="STORE FOUNDATION"
-        title="Store settings"
-        description="The store details you established during setup."
+        eyebrow={t('STORE FOUNDATION')}
+        title={t('Store settings')}
+        description={t('The store details you established during setup.')}
       />
       <section className="panel settings-panel">
         <div className="panel-heading">
           <div>
-            <h2>Store profile</h2>
-            <p className="muted">Current configuration</p>
+            <h2>{t('Store profile')}</h2>
+            <p className="muted">{t('Current configuration')}</p>
           </div>
           <Store size={23} />
         </div>
         <dl>
           <div>
-            <dt>Store name</dt>
+            <dt>{t('Store name')}</dt>
             <dd>{store.name}</dd>
           </div>
           <div>
-            <dt>Currency</dt>
+            <dt>{t('Currency')}</dt>
             <dd>{store.currency}</dd>
           </div>
           <div>
-            <dt>Time zone</dt>
+            <dt>{t('Time zone')}</dt>
             <dd>{store.timezone}</dd>
           </div>
           <div>
-            <dt>Owner</dt>
+            <dt>{t('Owner')}</dt>
             <dd>{user.name}</dd>
           </div>
           <div>
-            <dt>Data storage</dt>
-            <dd>Local PostgreSQL</dd>
+            <dt>{t('Data storage')}</dt>
+            <dd>{t('Local PostgreSQL')}</dd>
           </div>
         </dl>
       </section>
       <p className="muted footnote">
-        Tax rules, receipt settings, and configuration editing will be added before checkout is
-        enabled.
+        {t(
+          'Tax rules, receipt settings, and configuration editing will be added before checkout is enabled. ',
+        )}
       </p>
     </>
   );

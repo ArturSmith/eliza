@@ -1,3 +1,4 @@
+import { t, useLanguage, translateError } from './i18n';
 import { ReceiptSearch } from './refunds';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -77,12 +78,12 @@ function approvalFields() {
   return (
     <div className="approval-fields">
       <div className="notice">
-        Manager approval keeps this sale assigned to the current cashier.
+        {t('Manager approval keeps this sale assigned to the current cashier. ')}
       </div>
-      <Field label="Manager employee code">
+      <Field label={t('Manager employee code')}>
         <input name="employeeCode" autoComplete="off" required />
       </Field>
-      <Field label="Manager PIN">
+      <Field label={t('Manager PIN')}>
         <input
           name="pin"
           type="password"
@@ -102,6 +103,7 @@ function approvalFrom(data: FormData) {
     : undefined;
 }
 export function PosPage() {
+  useLanguage();
   const context = useQuery({
     queryKey: ['pos-context'],
     queryFn: () => api<PosContext>('/pos/enter', {}),
@@ -118,13 +120,13 @@ export function PosPage() {
     },
   });
   const value = context.data;
-  if (context.isPending) return <div className="loading">Opening register…</div>;
+  if (context.isPending) return <div className="loading">{t('Opening register…')}</div>;
   if (context.error)
     return (
       <div className="connection-error">
         <ErrorMessage error={context.error} />
-        <Button onClick={() => void context.refetch()}>Try again</Button>
-        <a href="/">Back to management</a>
+        <Button onClick={() => void context.refetch()}>{t('Try again')}</Button>
+        <a href="/">{t('Back to management')}</a>
       </div>
     );
   if (!value?.registered)
@@ -132,16 +134,17 @@ export function PosPage() {
       <div className="register-welcome">
         <a className="text-link" href="/">
           <ArrowLeft size={16} />
-          Back to management
+          {t('Back to management ')}
         </a>
         <div className="icon-tile">
           <Monitor size={26} />
         </div>
-        <div className="eyebrow">CHECKOUT STARTS HERE</div>
-        <h1>Give this register a name.</h1>
+        <div className="eyebrow">{t('CHECKOUT STARTS HERE')}</div>
+        <h1>{t('Give this register a name.')}</h1>
         <p className="muted">
-          Sign in to management as the owner first, then enroll this browser. Set employee PINs in
-          Team before starting.
+          {t(
+            'Sign in to management as the owner first, then enroll this browser. Set employee PINs in Team before starting. ',
+          )}
         </p>
         <form
           onSubmit={(e) => {
@@ -149,26 +152,26 @@ export function PosPage() {
             enroll.mutate({ name: new FormData(e.currentTarget).get('name') });
           }}
         >
-          <Field label="Register name">
-            <input name="name" required placeholder="e.g. Checkout 01" maxLength={120} />
+          <Field label={t('Register name')}>
+            <input name="name" required placeholder={t('e.g. Checkout 01')} maxLength={120} />
           </Field>
           <ErrorMessage error={enroll.error} />
           <Button disabled={enroll.isPending} className="full">
-            Enroll this register
+            {t('Enroll this register ')}
             <ArrowRight size={16} />
           </Button>
         </form>
-        <p className="muted">Enrollment ends the management session on this browser.</p>
+        <p className="muted">{t('Enrollment ends the management session on this browser.')}</p>
       </div>
     );
   if (value.blocked)
     return (
       <div className="connection-error">
         <LockKeyhole size={35} />
-        <h1>This register is blocked</h1>
-        <p>Ask the owner to reactivate it from Devices.</p>
-        <a href="/">Management sign in</a>
-        <Button onClick={() => void context.refetch()}>Check again</Button>
+        <h1>{t('This register is blocked')}</h1>
+        <p>{t('Ask the owner to reactivate it from Devices.')}</p>
+        <a href="/">{t('Management sign in')}</a>
+        <Button onClick={() => void context.refetch()}>{t('Check again')}</Button>
       </div>
     );
   if (!value.operator)
@@ -176,7 +179,7 @@ export function PosPage() {
       <div className="pin-screen">
         <div className="pin-brand">
           <ShoppingBag size={26} />
-          eliza.
+          {t('eliza. ')}
         </div>
         <div className="pin-card">
           <span className="icon-tile">
@@ -185,8 +188,10 @@ export function PosPage() {
           <div className="eyebrow">
             {value.store?.name} · {value.device?.name}
           </div>
-          <h1>Ready for your shift?</h1>
-          <p className="muted">Use your employee code and six-digit PIN to unlock this register.</p>
+          <h1>{t('Ready for your shift?')}</h1>
+          <p className="muted">
+            {t('Use your employee code and six-digit PIN to unlock this register.')}
+          </p>
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -194,10 +199,10 @@ export function PosPage() {
               login.mutate({ employeeCode: data.get('employeeCode'), pin: data.get('pin') });
             }}
           >
-            <Field label="Employee code">
+            <Field label={t('Employee code')}>
               <select name="employeeCode" required defaultValue="">
                 <option value="" disabled>
-                  Select your name
+                  {t('Select your name ')}
                 </option>
                 {value.employees?.map((e) => (
                   <option key={e.employeeCode} value={e.employeeCode}>
@@ -206,7 +211,7 @@ export function PosPage() {
                 ))}
               </select>
             </Field>
-            <Field label="Register PIN">
+            <Field label={t('Register PIN')}>
               <input
                 name="pin"
                 className="pin-input"
@@ -221,20 +226,22 @@ export function PosPage() {
             </Field>
             <ErrorMessage error={login.error} />
             <Button className="full" disabled={login.isPending || !value.employees?.length}>
-              Unlock register
+              {t('Unlock register ')}
               <ArrowRight size={16} />
             </Button>
           </form>
           {!value.employees?.length && (
             <p className="notice">
-              No employees have a PIN yet. Set one in Team using management login.
+              {t('No employees have a PIN yet. Set one in Team using management login. ')}
             </p>
           )}
           <a href="/" className="text-link">
-            Management sign in
+            {t('Management sign in ')}
           </a>
         </div>
-        <p className="muted">Your held cart stays on this tab while the register is locked.</p>
+        <p className="muted">
+          {t('Your held cart stays on this tab while the register is locked.')}
+        </p>
       </div>
     );
   return (
@@ -253,6 +260,7 @@ function ShiftForm({
   mode: 'start' | 'close' | 'cash';
   onDone: () => void;
 }) {
+  useLanguage();
   const [requestId] = useState(() => crypto.randomUUID());
   const [counted, setCounted] = useState('');
   const canApprove = context.operator!.permissions.includes('shift.approve');
@@ -301,33 +309,33 @@ function ShiftForm({
     <form onSubmit={submit}>
       {mode === 'start' ? (
         <Field
-          label="Opening cash"
-          hint="Count the cash already in the drawer before taking sales."
+          label={t('Opening cash')}
+          hint={t('Count the cash already in the drawer before taking sales.')}
         >
           <input name="openingCash" inputMode="decimal" required defaultValue="0.00" />
         </Field>
       ) : mode === 'cash' ? (
         <>
-          <Field label="Direction">
+          <Field label={t('Direction')}>
             <select name="direction">
-              <option value="in">Cash in</option>
-              <option value="out">Cash out / safe drop</option>
+              <option value="in">{t('Cash in')}</option>
+              <option value="out">{t('Cash out / safe drop')}</option>
             </select>
           </Field>
-          <Field label="Amount">
+          <Field label={t('Amount')}>
             <input name="amount" inputMode="decimal" required />
           </Field>
-          <Field label="Reason">
+          <Field label={t('Reason')}>
             <input name="reason" required maxLength={300} />
           </Field>
         </>
       ) : (
         <>
           <p className="notice">
-            Expected drawer cash:{' '}
+            {t('Expected drawer cash:')}{' '}
             <strong>{formatMoney(context.shift!.expectedCash, context.store!.currency)}</strong>
           </p>
-          <Field label="Counted cash">
+          <Field label={t('Counted cash')}>
             <input
               name="countedCash"
               inputMode="decimal"
@@ -336,34 +344,37 @@ function ShiftForm({
               required
             />
           </Field>
-          <Field label="Closing notes">
+          <Field label={t('Closing notes')}>
             <textarea name="notes" maxLength={500} rows={2} />
           </Field>
           {needsApproval && approvalFields()}
           <p className="muted">
-            Closing makes this shift’s totals permanent. Finish or hold your cart before closing.
+            {t(
+              'Closing makes this shift’s totals permanent. Finish or hold your cart before closing. ',
+            )}
           </p>
         </>
       )}
       <ErrorMessage error={mutation.error} />
       <div className="form-actions">
         <Button variant="outline" type="button" onClick={onDone}>
-          Cancel
+          {t('Cancel ')}
         </Button>
         <Button disabled={mutation.isPending}>
           {mutation.isPending
-            ? 'Saving…'
+            ? t('Saving…')
             : mode === 'start'
-              ? 'Start shift'
+              ? t('Start shift')
               : mode === 'cash'
-                ? 'Record cash movement'
-                : 'Close shift'}
+                ? t('Record cash movement')
+                : t('Close shift')}
         </Button>
       </div>
     </form>
   );
 }
 function RegisterWorkspace({ context }: { context: PosContext }) {
+  useLanguage();
   const storageKey = `eliza-cart:${context.store!.id}:${context.device!.id}:${context.operator!.id}:${context.shift?.id ?? 'unopened'}`;
   const [draft, setDraft] = useState(() => loadDraft(storageKey));
   const [storageError, setStorageError] = useState<unknown>(null);
@@ -593,7 +604,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       <header className="pos-topbar">
         <div className="pos-brand">
           <ShoppingBag size={23} />
-          <strong>eliza.</strong>
+          <strong>{t('eliza.')}</strong>
           <span className="pos-divider" />
           <div>
             <strong>{context.device!.name}</strong>
@@ -604,11 +615,11 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
           <UserRound size={17} />
           <span>{context.operator!.name}</span>
           <span className={`badge badge-${context.shift ? 'green' : 'gray'}`}>
-            {context.shift ? 'Shift open' : 'No open shift'}
+            {context.shift ? t('Shift open') : t('No open shift')}
           </span>
           <Button variant="outline" onClick={() => lock.mutate()} disabled={lock.isPending}>
             <LockKeyhole size={15} />
-            Lock
+            {t('Lock ')}
           </Button>
         </div>
       </header>
@@ -616,8 +627,8 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         <section className="pos-catalog">
           <div className="pos-heading">
             <div>
-              <div className="eyebrow">A GOOD DAY IN STORE</div>
-              <h1>Checkout</h1>
+              <div className="eyebrow">{t('A GOOD DAY IN STORE')}</div>
+              <h1>{t('Checkout')}</h1>
             </div>
             <Button
               variant="ghost"
@@ -629,17 +640,17 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
               }}
             >
               <RefreshCw size={15} />
-              Refresh products
+              {t('Refresh products ')}
             </Button>
           </div>
           {!context.shift && (
             <div className="pos-start-notice">
               <div>
-                <strong>Let’s start your shift.</strong>
-                <p>Count your opening float before taking the first sale.</p>
+                <strong>{t('Let’s start your shift.')}</strong>
+                <p>{t('Count your opening float before taking the first sale.')}</p>
               </div>
               <Button onClick={() => setModal('start')}>
-                Start shift
+                {t('Start shift ')}
                 <ArrowRight size={16} />
               </Button>
             </div>
@@ -649,11 +660,11 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
             <input
               ref={scan}
               autoFocus
-              aria-label="Scan or search products"
+              aria-label={t('Scan or search products')}
               placeholder={
                 noShift
-                  ? 'Start your shift to begin selling…'
-                  : 'Scan a barcode, enter a PLU, or search products…'
+                  ? t('Start your shift to begin selling…')
+                  : t('Scan a barcode, enter a PLU, or search products…')
               }
               value={search}
               onChange={(e) => {
@@ -662,7 +673,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
               }}
               disabled={frozen || noShift}
             />
-            <kbd>Enter</kbd>
+            <kbd>{t('Enter')}</kbd>
           </form>
           <div className="pos-categories">
             {categories.map((c) => (
@@ -671,14 +682,14 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                 className={c === category ? 'selected' : ''}
                 onClick={() => setCategory(c)}
               >
-                {c}
+                {c === 'All products' ? t('All products') : c}
               </button>
             ))}
           </div>
           <ErrorMessage error={catalog.error ?? lock.error} />
           {message && (
             <p className="notice" role="status">
-              {message}
+              {translateError(message)}
             </p>
           )}
           <div className="pos-product-grid">
@@ -690,27 +701,33 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                 disabled={frozen || noShift || Number(p.stock) <= 0}
               >
                 <span className={`product-icon color-${p.category.length % 4}`}>
-                  {p.image ? <img src={p.image} alt="" loading="lazy" /> : <Package size={25} />}
+                  {p.image ? (
+                    <img src={p.image} alt={t('')} loading="lazy" />
+                  ) : (
+                    <Package size={25} />
+                  )}
                 </span>
                 <small>{p.category}</small>
                 <strong>{p.name}</strong>
                 <span className="pos-product-price">
                   {formatMoney(p.price, currency)}
-                  <small>/ {p.unit}</small>
+                  <small>/ {t(p.unit ?? '')}</small>
                 </span>
-                <span className="pos-stock">{Number(p.stock)} on hand</span>
+                <span className="pos-stock">
+                  {Number(p.stock)} {t(' on hand')}
+                </span>
               </button>
             ))}
           </div>
           {catalog.isPending ? (
-            <div className="empty">Loading products…</div>
+            <div className="empty">{t('Loading products…')}</div>
           ) : (
             !visible.length && (
               <div className="empty">
                 <Package size={32} />
-                <h3>No matching products</h3>
+                <h3>{t('No matching products')}</h3>
                 <p className="muted">
-                  Try another search, or ask a manager to add products and stock.
+                  {t('Try another search, or ask a manager to add products and stock. ')}
                 </p>
               </div>
             )
@@ -719,12 +736,13 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         <aside className="pos-cart">
           <div className="cart-heading">
             <h2>
-              Current sale <span>{draft.lines.length}</span>
+              {t('Current sale ')}
+              <span>{draft.lines.length}</span>
             </h2>
             <Button
               variant="ghost"
               size="icon"
-              aria-label="Clear cart"
+              aria-label={t('Clear cart')}
               onClick={() => setConfirmClear(true)}
               disabled={frozen || !draft.lines.length}
             >
@@ -759,11 +777,11 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
             ) : (
               <div className="cart-empty">
                 <ShoppingBag size={39} />
-                <h3>Your next sale starts here.</h3>
+                <h3>{t('Your next sale starts here.')}</h3>
                 <p>
-                  Scan a barcode or tap a product
+                  {t('Scan a barcode or tap a product ')}
                   <br />
-                  to add it to the cart.
+                  {t('to add it to the cart. ')}
                 </p>
               </div>
             )}
@@ -776,13 +794,14 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                 disabled={frozen || !draft.lines.length || held.length >= 10}
               >
                 <Pause size={14} />
-                Hold
+                {t('Hold ')}
               </Button>
               <Button variant="outline" onClick={() => setModal('held')} disabled={frozen}>
-                Held carts ({held.length})
+                {t('Held carts (')}
+                {held.length})
               </Button>
             </div>
-            <Field label="Sale discount (%)">
+            <Field label={t('Sale discount (%)')}>
               <input
                 inputMode="decimal"
                 value={draft.discount}
@@ -796,26 +815,28 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
             </Field>
             <dl className="cart-summary">
               <div>
-                <dt>Subtotal</dt>
+                <dt>{t('Subtotal')}</dt>
                 <dd>{formatMoney(fromScaled(totals.subtotal, 2), currency)}</dd>
               </div>
               <div>
-                <dt>Discount</dt>
+                <dt>{t('Discount')}</dt>
                 <dd>−{formatMoney(fromScaled(totals.discount, 2), currency)}</dd>
               </div>
               <div>
-                <dt>Included tax</dt>
+                <dt>{t('Included tax')}</dt>
                 <dd>{formatMoney(fromScaled(totals.tax, 2), currency)}</dd>
               </div>
               <div className="cart-total">
-                <dt>Total</dt>
+                <dt>{t('Total')}</dt>
                 <dd>{formatMoney(total, currency)}</dd>
               </div>
             </dl>
             <ErrorMessage error={storageError} />
             {draft.pending && (
               <p className="notice">
-                Payment is not yet confirmed. Retry this same request to safely recover the result.
+                {t(
+                  'Payment is not yet confirmed. Retry this same request to safely recover the result. ',
+                )}
               </p>
             )}
             <Button
@@ -829,10 +850,10 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
               }}
             >
               <Banknote size={18} />
-              {draft.pending ? 'Recover payment' : 'Take payment'}
+              {draft.pending ? t('Recover payment') : t('Take payment')}
               <ArrowRight size={18} />
             </Button>
-            <p className="cart-footnote">Prices include each product’s configured tax.</p>
+            <p className="cart-footnote">{t('Prices include each product’s configured tax.')}</p>
           </div>
         </aside>
       </div>
@@ -840,16 +861,16 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       <footer className="pos-footer">
         <div>
           <span className="status-dot" />
-          Online checkout · drafts saved on this tab
+          {t('Online checkout · drafts saved on this tab ')}
         </div>
         <div>
           <Button variant="ghost" size="sm" onClick={() => setModal('history')}>
             <Clock3 size={14} />
-            Recent receipts
+            {t('Recent receipts ')}
           </Button>
           {context.shift && context.operator!.permissions.includes('cash.manage') && (
             <Button variant="ghost" size="sm" onClick={() => setModal('cash')}>
-              Cash in / out
+              {t('Cash in / out ')}
             </Button>
           )}
           {context.shift && (
@@ -859,11 +880,11 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
               disabled={frozen || draft.lines.length > 0 || held.length > 0}
               onClick={() => setModal('close')}
             >
-              Close shift
+              {t('Close shift ')}
             </Button>
           )}
           <a href="/" className="text-link">
-            Management
+            {t('Management ')}
           </a>
         </div>
       </footer>
@@ -872,10 +893,10 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         onOpenChange={(v) => !v && setModal(null)}
         title={
           modal === 'start'
-            ? 'Start your shift'
+            ? t('Start your shift')
             : modal === 'cash'
-              ? 'Cash in / cash out'
-              : 'Close your shift'
+              ? t('Cash in / cash out')
+              : t('Close your shift')
         }
         description={context.device!.name}
       >
@@ -886,8 +907,10 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       <Dialog
         open={!!weighted}
         onOpenChange={(v) => !v && setWeighted(null)}
-        title={weighted ? `Add ${weighted.name}` : 'Enter quantity'}
-        description={`Enter quantity in ${weighted?.unit ?? 'the product unit'}.`}
+        title={weighted ? t('Add {value0}', { value0: weighted.name }) : t('Enter quantity')}
+        description={t('Enter quantity in {value0}.', {
+          value0: t(weighted?.unit ?? 'the product unit'),
+        })}
       >
         <form
           onSubmit={(e) => {
@@ -900,23 +923,26 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
             if (weighted) add(weighted, value);
           }}
         >
-          <Field label="Quantity / weight">
+          <Field label={t('Quantity / weight')}>
             <input
               name="quantity"
               inputMode="decimal"
               required
               autoFocus
-              placeholder="e.g. 1.350"
+              placeholder={t('e.g. 1.350')}
             />
           </Field>
-          <Button className="full">Add to cart</Button>
+          <Button className="full">{t('Add to cart')}</Button>
         </form>
       </Dialog>
       <Dialog
         open={modal === 'payment'}
         onOpenChange={(v) => !v && !checkout.isPending && setModal(null)}
-        title="Take payment"
-        description={`Total ${formatMoney(total, currency)} · ${context.operator!.name}`}
+        title={t('Take payment')}
+        description={t('Total {value0} · {value1}', {
+          value0: formatMoney(total, currency),
+          value1: context.operator!.name,
+        })}
       >
         <form onSubmit={submitPayment}>
           <div className="payment-methods">
@@ -927,7 +953,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
               onClick={() => setMethod('cash')}
             >
               <Banknote />
-              Cash
+              {t('Cash ')}
             </button>
             <button
               type="button"
@@ -936,11 +962,11 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
               onClick={() => setMethod('card')}
             >
               <CreditCard />
-              Card
+              {t('Card ')}
             </button>
           </div>
           {method === 'cash' ? (
-            <Field label="Cash tendered">
+            <Field label={t('Cash tendered')}>
               <input
                 inputMode="decimal"
                 required
@@ -952,14 +978,14 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
           ) : (
             <label className="card-confirmation">
               <input type="checkbox" required />
-              The card payment has already been accepted on the external terminal.
+              {t('The card payment has already been accepted on the external terminal. ')}
             </label>
           )}
           {method === 'cash' &&
             money.safeParse(tendered).success &&
             toScaled(tendered, 2) >= totals.total && (
               <p className="payment-change">
-                Change{' '}
+                {t('Change')}{' '}
                 <strong>
                   {formatMoney(fromScaled(toScaled(tendered, 2) - totals.total, 2), currency)}
                 </strong>
@@ -970,45 +996,46 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
           <ErrorMessage error={message || storageError} />
           <Button className="full" disabled={checkout.isPending}>
             {checkout.isPending
-              ? 'Confirming sale…'
+              ? t('Confirming sale…')
               : draft.pending
-                ? 'Retry payment confirmation'
-                : 'Complete sale'}
+                ? t('Retry payment confirmation')
+                : t('Complete sale')}
           </Button>
           <p className="muted payment-note">
-            Card payments are recorded here; this app does not charge a card terminal.
+            {t('Card payments are recorded here; this app does not charge a card terminal. ')}
           </p>
         </form>
       </Dialog>
       <Dialog
         open={modal === 'held'}
         onOpenChange={(v) => !v && setModal(null)}
-        title="Held carts"
-        description="Held on this tab for the current cashier and shift."
+        title={t('Held carts')}
+        description={t('Held on this tab for the current cashier and shift.')}
       >
         {held.length ? (
           held.map((d, i) => (
             <div className="held-row" key={d.requestId}>
               <div>
                 <strong>
-                  Cart {i + 1} · {d.lines.length} products
+                  {t('Cart ')}
+                  {i + 1} · {d.lines.length} {t(' products ')}
                 </strong>
                 <small>{d.lines.map((l) => l.product.name).join(', ')}</small>
               </div>
               <Button variant="outline" onClick={() => resume(i)}>
-                Resume
+                {t('Resume ')}
               </Button>
             </div>
           ))
         ) : (
-          <p className="empty">No held carts.</p>
+          <p className="empty">{t('No held carts.')}</p>
         )}
       </Dialog>
       <Dialog
         open={modal === 'history'}
         onOpenChange={(v) => !v && setModal(null)}
-        title="Recent receipts"
-        description="Your latest 20 sales on this register."
+        title={t('Recent receipts')}
+        description={t('Your latest 20 sales on this register.')}
       >
         <ErrorMessage error={history.error} />
         {history.data?.map((r) => (
@@ -1029,7 +1056,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                   .catch((e) => setMessage(e.message));
               }}
             >
-              Reprint
+              {t('Reprint ')}
             </Button>
           </div>
         ))}
@@ -1037,8 +1064,8 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       <Dialog
         open={!!receipt}
         onOpenChange={(v) => !v && setReceipt(null)}
-        title="Sale complete"
-        description="Sale, payment, and inventory records have been saved."
+        title={t('Sale complete')}
+        description={t('Sale, payment, and inventory records have been saved.')}
       >
         {receipt && <ReceiptView receipt={receipt} reprint={isReprint} />}
         <Button
@@ -1048,19 +1075,21 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
             scan.current?.focus();
           }}
         >
-          Next customer
+          {t('Next customer ')}
           <ArrowRight size={16} />
         </Button>
       </Dialog>
       <Dialog
         open={confirmClear}
         onOpenChange={setConfirmClear}
-        title="Clear this cart?"
-        description="This cancels the unfinished cart. No payment or inventory movement has been recorded."
+        title={t('Clear this cart?')}
+        description={t(
+          'This cancels the unfinished cart. No payment or inventory movement has been recorded.',
+        )}
       >
         <div className="form-actions">
           <Button variant="outline" onClick={() => setConfirmClear(false)}>
-            Keep cart
+            {t('Keep cart ')}
           </Button>
           <Button
             onClick={() => {
@@ -1068,7 +1097,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
               setConfirmClear(false);
             }}
           >
-            Clear cart
+            {t('Clear cart ')}
           </Button>
         </div>
       </Dialog>
@@ -1090,6 +1119,7 @@ function CartLine({
   onChange: (value: string) => void;
   onRemove: () => void;
 }) {
+  useLanguage();
   const [quantityInput, setQuantityInput] = useState(line.quantity);
   useEffect(() => setQuantityInput(line.quantity), [line.quantity]);
   return (
@@ -1099,7 +1129,7 @@ function CartLine({
         <Button
           variant="ghost"
           size="icon"
-          aria-label={`Remove ${line.product.name}`}
+          aria-label={t('Remove {value0}', { value0: line.product.name })}
           disabled={disabled}
           onClick={onRemove}
         >
@@ -1107,11 +1137,11 @@ function CartLine({
         </Button>
       </div>
       <small>
-        {formatMoney(line.product.price, currency)} / {line.product.unit}
+        {formatMoney(line.product.price, currency)} / {t(line.product.unit ?? '')}
       </small>
       <div className="cart-line-bottom">
         <input
-          aria-label={`Quantity for ${line.product.name}`}
+          aria-label={t('Quantity for {value0}', { value0: line.product.name })}
           value={quantityInput}
           inputMode="decimal"
           disabled={disabled}
@@ -1122,7 +1152,7 @@ function CartLine({
             else setQuantityInput(line.quantity);
           }}
         />
-        <span>{line.product.unit}</span>
+        <span>{t(line.product.unit ?? '')}</span>
         <strong>
           {formatMoney(
             calculateLine(line.product.price, line.quantity, line.product.taxRate, discount).total,

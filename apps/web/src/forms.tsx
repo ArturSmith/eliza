@@ -1,3 +1,4 @@
+import { t, useLanguage, translateError } from './i18n';
 import {
   useState,
   useId,
@@ -25,9 +26,10 @@ import { Dialog } from './components/ui/dialog';
 import { prepareProductImage } from './product-image';
 import { BarcodeLookup } from './barcode-lookup';
 export function ErrorMessage({ error }: { error: unknown }) {
+  useLanguage();
   return error ? (
     <p className="error" role="alert">
-      {error instanceof Error ? error.message : String(error)}
+      {translateError(error instanceof Error ? error.message : String(error))}
     </p>
   ) : null;
 }
@@ -40,10 +42,11 @@ export function Field({
   children: ReactNode;
   hint?: string;
 }) {
+  useLanguage();
   const id = useId();
   return (
     <label className="field">
-      <span id={`${id}-label`}>{label}</span>
+      <span id={`${id}-label`}>{t(label)}</span>
       {Children.map(children, (child) =>
         isValidElement(child) && ['input', 'select', 'textarea'].includes(String(child.type))
           ? cloneElement(child as ReactElement<Record<string, unknown>>, {
@@ -61,6 +64,7 @@ function values(e: FormEvent<HTMLFormElement>) {
   return Object.fromEntries(new FormData(e.currentTarget));
 }
 export function AuthForm({ setup }: { setup: boolean }) {
+  useLanguage();
   const [setupToken, setSetupToken] = useState('');
   const [error, setError] = useState<unknown>(null);
   const mutation = useMutation({
@@ -95,18 +99,20 @@ export function AuthForm({ setup }: { setup: boolean }) {
           <span className="brand-mark">
             <Store size={22} />
           </span>
-          eliza<span className="brand-period">.</span>
+          {t('eliza')}
+          <span className="brand-period">.</span>
         </div>
         <div>
-          <span className="eyebrow">MADE FOR YOUR EVERYDAY</span>
+          <span className="eyebrow">{t('MADE FOR YOUR EVERYDAY')}</span>
           <h1>
-            A little less admin.
-            <br />A lot more store.
+            {t('A little less admin. ')}
+            <br />
+            {t('A lot more store. ')}
           </h1>
           <p>
-            Your products, your stock, your people.
+            {t('Your products, your stock, your people. ')}
             <br />
-            One clear place to bring it all together.
+            {t('One clear place to bring it all together. ')}
           </p>
           <div className="auth-illustration">
             <div className="shelf">
@@ -122,26 +128,28 @@ export function AuthForm({ setup }: { setup: boolean }) {
               <span />
               <span />
             </div>
-            <span className="illustration-label">Good things in store.</span>
+            <span className="illustration-label">{t('Good things in store.')}</span>
           </div>
         </div>
-        <small>Your store. Your workspace.</small>
+        <small>{t('Your store. Your workspace.')}</small>
       </section>
       <section className="auth-panel">
         <div className="auth-card">
           <div className="icon-tile">
             <Store size={25} />
           </div>
-          <h2>{setup ? 'Let’s open your store' : 'Welcome back'}</h2>
+          <h2>{setup ? t('Let’s open your store') : t('Welcome back')}</h2>
           <p className="muted">
-            {setup ? 'Create your store owner account.' : 'Sign in to your store workspace.'}
+            {setup ? t('Create your store owner account.') : t('Sign in to your store workspace.')}
           </p>
           <form onSubmit={submit}>
             {setup && (
               <>
                 <Field
-                  label="Setup token"
-                  hint="For a hosted installation, enter the token supplied by your administrator. Leave blank for local development."
+                  label={t('Setup token')}
+                  hint={t(
+                    'For a hosted installation, enter the token supplied by your administrator. Leave blank for local development.',
+                  )}
                 >
                   <input
                     type="password"
@@ -150,40 +158,40 @@ export function AuthForm({ setup }: { setup: boolean }) {
                     autoComplete="off"
                   />
                 </Field>
-                <Field label="Store name">
+                <Field label={t('Store name')}>
                   <input
                     name="storeName"
                     required
                     maxLength={120}
-                    placeholder="e.g. Eliza Market"
+                    placeholder={t('e.g. Eliza Market')}
                     autoFocus
                   />
                 </Field>
-                <Field label="Your name">
+                <Field label={t('Your name')}>
                   <input
                     name="ownerName"
                     autoComplete="name"
                     required
                     maxLength={120}
-                    placeholder="Store owner"
+                    placeholder={t('Store owner')}
                   />
                 </Field>
               </>
             )}
-            <Field label="Email address">
+            <Field label={t('Email address')}>
               <input
                 name="email"
                 type="email"
                 autoComplete="username"
                 required
-                placeholder="you@yourstore.com"
+                placeholder={t('you@yourstore.com')}
               />
             </Field>
             <Field
-              label="Password"
+              label={t('Password')}
               hint={
                 setup
-                  ? 'At least 12 characters. This account is created on your local server.'
+                  ? t('At least 12 characters. This account is created on your local server.')
                   : undefined
               }
             >
@@ -198,28 +206,28 @@ export function AuthForm({ setup }: { setup: boolean }) {
             </Field>
             {setup && (
               <div className="form-grid">
-                <Field label="Currency">
+                <Field label={t('Currency')}>
                   <select name="currency" defaultValue="NOK">
                     {['NOK', 'EUR', 'USD', 'GBP', 'SEK', 'DKK'].map((c) => (
                       <option key={c}>{c}</option>
                     ))}
                   </select>
                 </Field>
-                <Field label="Time zone">
+                <Field label={t('Time zone')}>
                   <input name="timezone" required defaultValue="Europe/Oslo" />
                 </Field>
               </div>
             )}
             <ErrorMessage error={error ?? mutation.error} />
             <Button disabled={mutation.isPending} className="full">
-              {mutation.isPending ? 'Please wait…' : setup ? 'Create my store' : 'Sign in'}
+              {mutation.isPending ? t('Please wait…') : setup ? t('Create my store') : t('Sign in')}
               <ArrowRight size={17} />
             </Button>
           </form>
           <p className="auth-foot">
             {setup
-              ? 'You can start adding products right away.'
-              : 'Forgot your password? Local account recovery is not available yet.'}
+              ? t('You can start adding products right away.')
+              : t('Forgot your password? Local account recovery is not available yet.')}
           </p>
         </div>
       </section>
@@ -235,6 +243,7 @@ export function ProductForm({
   initial?: Product;
   onCreated?: (product: Product) => void;
 }) {
+  useLanguage();
   const formRef = useRef<HTMLFormElement>(null);
   const [source, setSource] = useState(initial?.source ?? null);
   const [existingProduct, setExistingProduct] = useState<Product>();
@@ -291,7 +300,7 @@ export function ProductForm({
     mutation.mutate(result.data);
   }
   if (existingProduct) return <ProductForm initial={existingProduct} onDone={onDone} />;
-  if (!initial && profile.isPending) return <p>Loading product defaults…</p>;
+  if (!initial && profile.isPending) return <p>{t('Loading product defaults…')}</p>;
   if (!initial && profile.error) return <ErrorMessage error={profile.error} />;
   return (
     <form ref={formRef} onSubmit={submit}>
@@ -336,38 +345,44 @@ export function ProductForm({
       )}
       {source && (
         <p className="muted">
-          Source:{' '}
+          {t('Source:')}{' '}
           <a
             href={'https://world.openfoodfacts.org/product/' + source.barcode}
             target="_blank"
             rel="noreferrer"
           >
-            Open Food Facts contributors
+            {t('Open Food Facts contributors ')}
           </a>{' '}
           ·{' '}
           <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noreferrer">
-            ODbL
+            {t('ODbL ')}
           </a>
           {source.imageImported && (
             <>
               {' '}
-              · Photo resized from source,{' '}
+              {t('· Photo resized from source,')}{' '}
               <a
                 href="https://creativecommons.org/licenses/by-sa/3.0/"
                 target="_blank"
                 rel="noreferrer"
               >
-                CC BY-SA 3.0
+                {t('CC BY-SA 3.0 ')}
               </a>
             </>
           )}
           {source.brand && <> · {source.brand}</>}
-          {source.quantity && <> · Package: {source.quantity}</>}
+          {source.quantity && (
+            <>
+              {' '}
+              {t(' · Package: ')}
+              {source.quantity}
+            </>
+          )}
         </p>
       )}
       <Field
-        label="Product photo"
-        hint="Optional. JPEG, PNG, or WebP up to 10 MB. Photos are resized automatically."
+        label={t('Product photo')}
+        hint={t('Optional. JPEG, PNG, or WebP up to 10 MB. Photos are resized automatically.')}
       >
         <input
           type="file"
@@ -392,11 +407,11 @@ export function ProductForm({
           }}
         />
       </Field>
-      {imageBusy && <p role="status">Preparing photo…</p>}
+      {imageBusy && <p role="status">{t('Preparing photo…')}</p>}
       <ErrorMessage error={imageError} />
       {image && (
         <div className="product-photo-preview">
-          <img src={image} alt="Product photo preview" />
+          <img src={image} alt={t('Product photo preview')} />
           <Button
             type="button"
             variant="ghost"
@@ -406,43 +421,43 @@ export function ProductForm({
               setSource((value) => (value ? { ...value, imageImported: false } : null));
             }}
           >
-            Remove photo
+            {t('Remove photo ')}
           </Button>
         </div>
       )}
-      <Field label="Product name">
+      <Field label={t('Product name')}>
         <input
           name="name"
-          placeholder="e.g. Organic whole milk"
+          placeholder={t('e.g. Organic whole milk')}
           defaultValue={initial?.name}
           required
           maxLength={120}
         />
       </Field>
-      <Field label="Description (optional)">
+      <Field label={t('Description (optional)')}>
         <textarea
           name="description"
           defaultValue={initial?.description ?? ''}
           maxLength={2000}
           rows={3}
-          placeholder="Additional details about this product"
+          placeholder={t('Additional details about this product')}
         />
       </Field>
       <div className="form-grid">
-        <Field label="SKU">
+        <Field label={t('SKU')}>
           <input
             name="sku"
-            placeholder="e.g. MILK-001"
+            placeholder={t('e.g. MILK-001')}
             defaultValue={initial?.sku}
             required
             maxLength={120}
           />
         </Field>
-        <Field label="Category">
+        <Field label={t('Category')}>
           <input
             name="category"
             list="categories"
-            placeholder="e.g. Dairy"
+            placeholder={t('e.g. Dairy')}
             defaultValue={initial?.category}
             required
             maxLength={120}
@@ -455,18 +470,18 @@ export function ProductForm({
         </Field>
       </div>
       <div className="form-grid">
-        <Field label="Selling price">
+        <Field label={t('Selling price')}>
           <input
             name="price"
             inputMode="decimal"
-            placeholder="0.00"
+            placeholder={t('0.00')}
             defaultValue={initial?.price}
             required
           />
         </Field>
         <Field
-          label="Tax rate (%)"
-          hint="Selling prices include this tax. Set the appropriate rate for this product."
+          label={t('Tax rate (%)')}
+          hint={t('Selling prices include this tax. Set the appropriate rate for this product.')}
         >
           <input
             name="taxRate"
@@ -475,18 +490,18 @@ export function ProductForm({
             required
           />
         </Field>
-        <Field label="Purchase cost">
+        <Field label={t('Purchase cost')}>
           <input
             name="cost"
             inputMode="decimal"
-            placeholder="0.00"
+            placeholder={t('0.00')}
             defaultValue={initial?.cost ?? undefined}
             required
           />
         </Field>
       </div>
       <div className="form-grid">
-        <Field label="Unit">
+        <Field label={t('Unit')}>
           <select name="unit" defaultValue={initial?.unit ?? 'piece'}>
             {units.map((u) => (
               <option key={u} value={u}>
@@ -495,7 +510,7 @@ export function ProductForm({
             ))}
           </select>
         </Field>
-        <Field label="Low-stock threshold">
+        <Field label={t('Low-stock threshold')}>
           <input
             name="minStock"
             inputMode="decimal"
@@ -505,45 +520,46 @@ export function ProductForm({
         </Field>
       </div>
       <Field
-        label="Barcodes (optional)"
-        hint="Add one per line, or separate with commas. Products can have no barcode."
+        label={t('Barcodes (optional)')}
+        hint={t('Add one per line, or separate with commas. Products can have no barcode.')}
       >
         <textarea
           name="barcodes"
           rows={2}
           defaultValue={initial?.barcodes.join('\n')}
-          placeholder="Scan or enter a barcode"
+          placeholder={t('Scan or enter a barcode')}
         />
       </Field>
-      <Field label="PLU / short code (optional)">
-        <input name="plu" defaultValue={initial?.plu} maxLength={20} placeholder="e.g. 4011" />
+      <Field label={t('PLU / short code (optional)')}>
+        <input name="plu" defaultValue={initial?.plu} maxLength={20} placeholder={t('e.g. 4011')} />
       </Field>
       <ErrorMessage error={error ?? mutation.error} />
       <div className="form-actions">
         <Button type="button" variant="outline" onClick={onDone}>
-          Cancel
+          {t('Cancel ')}
         </Button>
         <Button disabled={mutation.isPending || imageBusy}>
           <PackagePlus size={17} />
-          {mutation.isPending ? 'Saving…' : initial ? 'Save changes' : 'Create product'}
+          {mutation.isPending ? t('Saving…') : initial ? t('Save changes') : t('Create product')}
         </Button>
       </div>
     </form>
   );
 }
 export function AddProduct() {
+  useLanguage();
   const [open, setOpen] = useState(false);
   return (
     <>
       <Button onClick={() => setOpen(true)}>
         <Plus size={17} />
-        Add product
+        {t('Add product ')}
       </Button>
       <Dialog
         open={open}
         onOpenChange={setOpen}
-        title="Add a product"
-        description="Start with the basics. Record opening stock in Inventory."
+        title={t('Add a product')}
+        description={t('Start with the basics. Record opening stock in Inventory.')}
       >
         <ProductForm onDone={() => setOpen(false)} />
       </Dialog>
@@ -567,6 +583,7 @@ export function SearchSelect({
   onCreate?: () => void;
   onSelect: (id: string) => void;
 }) {
+  useLanguage();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const container = useRef<HTMLDivElement>(null);
@@ -584,7 +601,7 @@ export function SearchSelect({
     : options;
   return (
     <div className="search-select" ref={container}>
-      <span className="search-select-label">{label}</span>
+      <span className="search-select-label">{t(label)}</span>
       <button
         type="button"
         className="search-select-trigger"
@@ -606,7 +623,7 @@ export function SearchSelect({
           <input
             autoFocus
             className="search-select-search"
-            placeholder="Search…"
+            placeholder={t('Search…')}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -651,7 +668,10 @@ export function SearchSelect({
                 </button>
               ))
             ) : (
-              <p className="search-select-empty">No matches for “{query.trim()}”.</p>
+              <p className="search-select-empty">
+                {t('No matches for “')}
+                {query.trim()}”.
+              </p>
             )}
           </div>
         </div>
@@ -660,6 +680,7 @@ export function SearchSelect({
   );
 }
 export function AdjustmentForm({ products, onDone }: { products: Product[]; onDone: () => void }) {
+  useLanguage();
   const [error, setError] = useState<unknown>(null);
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const [productId, setProductId] = useState('');
@@ -690,12 +711,12 @@ export function AdjustmentForm({ products, onDone }: { products: Product[]; onDo
       }}
     >
       <SearchSelect
-        label="Product"
-        placeholder="Select a product"
+        label={t('Product')}
+        placeholder={t('Select a product')}
         value={
           selected && {
             title: selected.name,
-            subtitle: `${Number(selected.stock)} ${selected.unit} on hand`,
+            subtitle: `${Number(selected.stock)} ${t(selected.unit)} ${t('on hand')}`,
           }
         }
         options={products
@@ -703,7 +724,7 @@ export function AdjustmentForm({ products, onDone }: { products: Product[]; onDo
           .map((p) => ({
             id: p.id,
             title: p.name,
-            subtitle: `${p.sku} · ${Number(p.stock)} ${p.unit} on hand`,
+            subtitle: `${p.sku} · ${Number(p.stock)} ${t(p.unit ?? '')} ${t('on hand')}`,
             keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
           }))}
         onSelect={(id) => {
@@ -713,40 +734,40 @@ export function AdjustmentForm({ products, onDone }: { products: Product[]; onDo
         }}
       />
       <Field
-        label="Quantity change"
-        hint="Use a positive quantity to add stock or a negative quantity to remove it."
+        label={t('Quantity change')}
+        hint={t('Use a positive quantity to add stock or a negative quantity to remove it.')}
       >
-        <input name="quantity" placeholder="e.g. 24 or -2" inputMode="decimal" required />
+        <input name="quantity" placeholder={t('e.g. 24 or -2')} inputMode="decimal" required />
       </Field>
-      <Field label="Reason">
+      <Field label={t('Reason')}>
         <select name="reason">
-          <option value="opening_balance">Opening stock</option>
-          <option value="received">Goods received (manual)</option>
-          <option value="count_correction">Count correction</option>
-          <option value="damaged">Damaged goods</option>
-          <option value="expired">Expired goods</option>
-          <option value="internal_use">Internal use</option>
-          <option value="other">Other</option>
+          <option value="opening_balance">{t('Opening stock')}</option>
+          <option value="received">{t('Goods received (manual)')}</option>
+          <option value="count_correction">{t('Count correction')}</option>
+          <option value="damaged">{t('Damaged goods')}</option>
+          <option value="expired">{t('Expired goods')}</option>
+          <option value="internal_use">{t('Internal use')}</option>
+          <option value="other">{t('Other')}</option>
         </select>
       </Field>
-      <Field label="Notes">
+      <Field label={t('Notes')}>
         <textarea
           name="notes"
           rows={3}
           maxLength={500}
-          placeholder="Add a reference or explain the change"
+          placeholder={t('Add a reference or explain the change')}
         />
       </Field>
       <div className="notice">
-        This creates a permanent stock movement attributed to your account and device.
+        {t('This creates a permanent stock movement attributed to your account and device. ')}
       </div>
       <ErrorMessage error={error ?? mutation.error} />
       <div className="form-actions">
         <Button type="button" variant="outline" onClick={onDone}>
-          Cancel
+          {t('Cancel ')}
         </Button>
         <Button disabled={mutation.isPending || !productId}>
-          {mutation.isPending ? 'Recording…' : 'Record adjustment'}
+          {mutation.isPending ? t('Recording…') : t('Record adjustment')}
         </Button>
       </div>
     </form>

@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from './i18n';
 import { useState } from 'react';
 import { ErrorMessage } from './forms';
 import type { Receipt } from '@eliza/contracts';
@@ -5,7 +6,7 @@ import { Printer, CheckCircle2 } from 'lucide-react';
 import { Button } from './components/ui/button';
 export function formatMoney(value: string, currency = 'NOK') {
   const [whole, fraction = ''] = value.split('.');
-  return new Intl.NumberFormat('en-GB', { style: 'currency', currency })
+  return new Intl.NumberFormat(getLocale(), { style: 'currency', currency })
     .formatToParts(value.startsWith('-') && BigInt(whole) === 0n ? -0 : BigInt(whole))
     .map((part) => (part.type === 'fraction' ? fraction.padEnd(2, '0').slice(0, 2) : part.value))
     .join('');
@@ -19,6 +20,7 @@ export function ReceiptView({
   reprint?: boolean;
   beforePrint?: () => Promise<unknown>;
 }) {
+  useLanguage();
   const [error, setError] = useState<unknown>(null);
   const [printing, setPrinting] = useState(false);
   async function print() {
@@ -43,11 +45,13 @@ export function ReceiptView({
           {receipt.storePhone && <p>{receipt.storePhone}</p>}
           {receipt.businessNumber && <p>{receipt.businessNumber}</p>}
           <p>
-            {reprint ? 'REPRINT · ' : ''}
+            {reprint ? t('REPRINT · ') : ''}
             {receipt.receiptNumber}
           </p>
           <small>
-            {new Date(receipt.createdAt).toLocaleString('en-GB', { timeZone: receipt.timezone })}
+            {new Date(receipt.createdAt).toLocaleString(getLocale(), {
+              timeZone: receipt.timezone,
+            })}
           </small>
         </div>
         <div className="receipt-meta">
@@ -59,11 +63,14 @@ export function ReceiptView({
             <div>
               <strong>{l.name}</strong>
               <small>
-                {l.quantity} {l.unit} × {formatMoney(l.price, receipt.currency)} · tax{' '}
-                {Number(l.taxRate)}%
+                {l.quantity} {t(l.unit ?? '')} × {formatMoney(l.price, receipt.currency)}{' '}
+                {t(' · tax')} {Number(l.taxRate)}%
               </small>
               {Number(l.discount) > 0 && (
-                <small>Discount −{formatMoney(l.discount, receipt.currency)}</small>
+                <small>
+                  {t('Discount −')}
+                  {formatMoney(l.discount, receipt.currency)}
+                </small>
               )}
             </div>
             <strong>{formatMoney(l.total, receipt.currency)}</strong>
@@ -71,35 +78,43 @@ export function ReceiptView({
         ))}
         <dl className="receipt-totals">
           <div>
-            <dt>Subtotal</dt>
+            <dt>{t('Subtotal')}</dt>
             <dd>{formatMoney(receipt.subtotal, receipt.currency)}</dd>
           </div>
           <div>
-            <dt>Discount ({Number(receipt.discountPercent)}%)</dt>
+            <dt>
+              {t('Discount (')}
+              {Number(receipt.discountPercent)}%)
+            </dt>
             <dd>−{formatMoney(receipt.discount, receipt.currency)}</dd>
           </div>
           <div>
-            <dt>Included tax</dt>
+            <dt>{t('Included tax')}</dt>
             <dd>{formatMoney(receipt.tax, receipt.currency)}</dd>
           </div>
           <div className="receipt-grand">
-            <dt>Total</dt>
+            <dt>{t('Total')}</dt>
             <dd>{formatMoney(receipt.total, receipt.currency)}</dd>
           </div>
           <div>
-            <dt>{receipt.payment.method === 'cash' ? 'Cash tendered' : 'Card recorded'}</dt>
+            <dt>{receipt.payment.method === 'cash' ? t('Cash tendered') : t('Card recorded')}</dt>
             <dd>{formatMoney(receipt.payment.tendered, receipt.currency)}</dd>
           </div>
           {receipt.payment.method === 'cash' && (
             <div>
-              <dt>Change</dt>
+              <dt>{t('Change')}</dt>
               <dd>{formatMoney(receipt.payment.change, receipt.currency)}</dd>
             </div>
           )}
         </dl>
-        {receipt.approverName && <p className="muted">Approved by {receipt.approverName}</p>}
+        {receipt.approverName && (
+          <p className="muted">
+            {t('Approved by ')}
+            {receipt.approverName}
+          </p>
+        )}
         <p className="receipt-thanks" style={{ whiteSpace: 'pre-wrap' }}>
-          {receipt.receiptFooter ?? 'Thank you for shopping with us.'}
+          {receipt.receiptFooter ?? t('Thank you for shopping with us.')}
         </p>
       </article>
       <ErrorMessage error={error} />
@@ -110,7 +125,7 @@ export function ReceiptView({
         onClick={() => void print()}
       >
         <Printer size={16} />
-        Print receipt
+        {t('Print receipt ')}
       </Button>
     </div>
   );

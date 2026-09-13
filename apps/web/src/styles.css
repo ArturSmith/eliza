@@ -2338,3 +2338,30 @@ select {
   font-size: 12px;
   line-height: 1.6;
 }
+
+.language-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 24px;
+  background: var(--bg, #f6f8f3);
+  border-bottom: 1px solid var(--border, #e3e8df);
+}
+.language-switcher {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #425a49;
+}
+.language-switcher select {
+  width: auto;
+  min-width: 110px;
+  min-height: 32px;
+  padding: 5px 28px 5px 10px;
+  font-size: 12px;
+}
+@media print {
+  .language-bar {
+    display: none !important;
+  }
+}

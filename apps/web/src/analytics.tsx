@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from './i18n';
 import { useState } from 'react';
 import {
   SalesSummary,
@@ -10,14 +11,15 @@ import {
 import { formatMoney } from './receipts';
 import { Field } from './forms';
 export function AnalyticsPage() {
+  useLanguage();
   return (
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">STORE PERFORMANCE</div>
-          <h1>Analytics</h1>
+          <div className="eyebrow">{t('STORE PERFORMANCE')}</div>
+          <h1>{t('Analytics')}</h1>
           <p className="muted">
-            Explore sales trends and compare products, shifts, and time periods.
+            {t('Explore sales trends and compare products, shifts, and time periods. ')}
           </p>
         </div>
       </div>
@@ -38,9 +40,10 @@ function Bars({
   timezone: string;
   label: string;
 }) {
+  useLanguage();
   const max = Math.max(...rows.map((r) => Number(r.total)), 1);
   return (
-    <ol className="analytics-bars" aria-label={label}>
+    <ol className="analytics-bars" aria-label={t(label)}>
       {rows.map((r) => (
         <li key={r.bucket}>
           <div className="analytics-bar-label">
@@ -51,16 +54,17 @@ function Bars({
             <div style={{ width: (Number(r.total) / max) * 100 + '%' }} />
           </div>
           <small className="muted">
-            {r.transactions} matching receipts
-            {group === 'product' ? ' · ' + r.quantity + ' ' + r.unit : ''}
+            {r.transactions} {t(' matching receipts ')}
+            {group === 'product' ? ' · ' + r.quantity + ' ' + t(r.unit ?? '') : ''}
           </small>
         </li>
       ))}
-      {!rows.length && <li className="muted">No sales to rank for these filters.</li>}
+      {!rows.length && <li className="muted">{t('No sales to rank for these filters.')}</li>}
     </ol>
   );
 }
 function Rankings({ data, dimension, name }: { data: Summary; dimension: Group; name: string }) {
+  useLanguage();
   const rows = data.groups[dimension] ?? [];
   const descending = [...rows]
     .filter((r) => Number(r.total) > 0)
@@ -71,30 +75,34 @@ function Rankings({ data, dimension, name }: { data: Summary; dimension: Group; 
     .slice(0, 5);
   return (
     <div className="analytics-comparison">
-      <section className="analytics-chart" aria-label={'Best ' + name}>
-        <h3>{dimension === 'product' ? 'Bestsellers' : 'Best ' + name}</h3>
+      <section className="analytics-chart" aria-label={t('Best ') + name}>
+        <h3>{dimension === 'product' ? t('Bestsellers') : t('Best ') + name}</h3>
         <Bars
           rows={descending}
           currency={data.currency}
           group={dimension}
           timezone={data.timezone}
-          label={'Best ' + name}
+          label={t('Best ') + name}
         />
       </section>
-      <section className="analytics-chart" aria-label={'Lowest ' + name}>
-        <h3>Lowest-selling {name}</h3>
+      <section className="analytics-chart" aria-label={t('Lowest ') + name}>
+        <h3>
+          {t('Lowest-selling ')}
+          {name}
+        </h3>
         <Bars
           rows={ascending}
           currency={data.currency}
           group={dimension}
           timezone={data.timezone}
-          label={'Lowest ' + name}
+          label={t('Lowest ') + name}
         />
       </section>
     </div>
   );
 }
 export function AnalyticsCharts({ data }: { data: Summary }) {
+  useLanguage();
   const [timeline, setTimeline] = useState<Group>('day');
   const [period, setPeriod] = useState<Group>('hour');
   const rows = data.groups[timeline] ?? [];
@@ -115,17 +123,17 @@ export function AnalyticsCharts({ data }: { data: Summary }) {
   ].filter((i) => i >= 0 && i < rows.length);
   return (
     <div className="analytics-visuals">
-      <section className="analytics-chart" aria-label="Sales over time">
+      <section className="analytics-chart" aria-label={t('Sales over time')}>
         <div className="analytics-chart-heading">
           <div>
-            <h3>Sales over time</h3>
-            <p className="muted">Sales after discounts, including tax and before refunds.</p>
+            <h3>{t('Sales over time')}</h3>
+            <p className="muted">{t('Sales after discounts, including tax and before refunds.')}</p>
           </div>
-          <Field label="Chart interval">
+          <Field label={t('Chart interval')}>
             <select value={timeline} onChange={(e) => setTimeline(e.target.value as Group)}>
               {(['day', 'month', 'year'] as Group[]).map((g) => (
                 <option key={g} value={g}>
-                  {groups[g]}
+                  {t(groups[g])}
                 </option>
               ))}
             </select>
@@ -135,14 +143,17 @@ export function AnalyticsCharts({ data }: { data: Summary }) {
           className="analytics-line-chart"
           viewBox="0 0 960 270"
           role="img"
-          aria-label={'Sales by ' + groups[timeline]}
+          aria-label={t('Sales by ') + t(groups[timeline])}
         >
           <title>
-            Sales by {groups[timeline]} in {data.currency}
+            {t('Sales by ')}
+            {t(groups[timeline])} {t(' in ')}
+            {data.currency}
           </title>
           <desc>
-            {rows.length} periods. Total sales {formatMoney(data.totals.total, data.currency)}.
-            Exact values are available in the detailed breakdown.
+            {rows.length} {t(' periods. Total sales ')}
+            {formatMoney(data.totals.total, data.currency)}
+            {t('. Exact values are available in the detailed breakdown. ')}
           </desc>
           {[0, 0.5, 1].map((fraction) => (
             <g key={fraction}>
@@ -154,7 +165,7 @@ export function AnalyticsCharts({ data }: { data: Summary }) {
                 stroke="#dfe6d7"
               />
               <text x="58" y={224 - fraction * 175} textAnchor="end" fill="#637359" fontSize="12">
-                {new Intl.NumberFormat('en', { notation: 'compact' }).format(max * fraction)}
+                {new Intl.NumberFormat(getLocale(), { notation: 'compact' }).format(max * fraction)}
               </text>
             </g>
           ))}
@@ -182,53 +193,59 @@ export function AnalyticsCharts({ data }: { data: Summary }) {
           ))}
         </svg>
         {Number(data.totals.transactions) === 0 && (
-          <p className="muted">No completed sales in this date range.</p>
+          <p className="muted">{t('No completed sales in this date range.')}</p>
         )}
       </section>
       <div className="analytics-chart-heading">
         <div>
-          <h3>Product performance</h3>
+          <h3>{t('Product performance')}</h3>
           <p className="muted">
-            Ranked by sales value. Includes active products with no sales. Quantities retain each
-            product’s unit.
+            {t(
+              'Ranked by sales value. Includes active products with no sales. Quantities retain each product’s unit. ',
+            )}
           </p>
         </div>
       </div>
-      <Rankings data={data} dimension="product" name="products" />
+      <Rankings data={data} dimension="product" name={t('products')} />
       <div className="analytics-chart-heading">
         <div>
-          <h3>Shift performance</h3>
+          <h3>{t('Shift performance')}</h3>
           <p className="muted">
-            Totals within the selected dates, including shifts with zero matching sales. Shift
-            lengths can differ.
+            {t(
+              'Totals within the selected dates, including shifts with zero matching sales. Shift lengths can differ. ',
+            )}
           </p>
         </div>
       </div>
-      <Rankings data={data} dimension="shift" name="shifts" />
+      <Rankings data={data} dimension="shift" name={t('Shifts')} />
       <div className="analytics-chart-heading">
         <div>
-          <h3>Best and quietest periods</h3>
+          <h3>{t('Best and quietest periods')}</h3>
           <p className="muted">
-            Totals in {data.timezone}. Hours with no sales include closed hours. Partial months and
-            years include only selected dates.
+            {t('Totals in ')}
+            {data.timezone}
+            {t(
+              '. Hours with no sales include closed hours. Partial months and years include only selected dates. ',
+            )}
           </p>
         </div>
-        <Field label="Compare periods">
+        <Field label={t('Compare periods')}>
           <select value={period} onChange={(e) => setPeriod(e.target.value as Group)}>
             {(
               ['hour', 'weekday', 'dayOfMonth', 'day', 'month', 'monthOfYear', 'year'] as Group[]
             ).map((g) => (
               <option key={g} value={g}>
-                {groups[g]}
+                {t(groups[g])}
               </option>
             ))}
           </select>
         </Field>
       </div>
-      <Rankings data={data} dimension={period} name="periods" />
+      <Rankings data={data} dimension={period} name={t('periods')} />
       <p className="muted">
-        Top five shown in each ranking. Equal totals share the same performance level. Zero sales
-        alone does not show whether an item was available or the shop was open.
+        {t(
+          'Top five shown in each ranking. Equal totals share the same performance level. Zero sales alone does not show whether an item was available or the shop was open. ',
+        )}
       </p>
     </div>
   );

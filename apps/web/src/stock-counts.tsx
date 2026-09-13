@@ -1,3 +1,4 @@
+import { countText, t, useLanguage, getLocale } from './i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
@@ -36,6 +37,7 @@ const countStatusTone: Record<string, string> = {
   cancelled: 'gray',
 };
 export function StockCountsPage() {
+  useLanguage();
   const list = useQuery({
     queryKey: ['stock-counts'],
     queryFn: () => api<Count[]>('/stock-counts'),
@@ -56,57 +58,57 @@ export function StockCountsPage() {
     <>
       <div className="page-heading">
         <div>
-          <div className="eyebrow">INVENTORY ACCURACY</div>
-          <h1>Stock counts</h1>
+          <div className="eyebrow">{t('INVENTORY ACCURACY')}</div>
+          <h1>{t('Stock counts')}</h1>
           <p className="muted">
-            Count physical stock, review differences, then finalize the adjustments. Latest 100
-            counts.
+            {t(
+              'Count physical stock, review differences, then finalize the adjustments. Latest 100 counts. ',
+            )}
           </p>
         </div>
-        {manage && <Button onClick={() => setCreating(true)}>New stock count</Button>}
+        {manage && <Button onClick={() => setCreating(true)}>{t('New stock count')}</Button>}
       </div>
       <p className="notice" style={{ marginBottom: 24 }}>
-        Count when stock is not moving. Sales, deliveries, or adjustments after the count starts
-        require a fresh count before finalization.
+        {t(
+          'Count when stock is not moving. Sales, deliveries, or adjustments after the count starts require a fresh count before finalization. ',
+        )}
       </p>
       <section className="panel">
         <div className="table-toolbar">
           <div className="search-box">
             <Search size={18} />
             <input
-              aria-label="Search stock counts"
-              placeholder="Search count name, creator, or notes…"
+              aria-label={t('Search stock counts')}
+              placeholder={t('Search count name, creator, or notes…')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           <select
-            aria-label="Filter count status"
+            aria-label={t('Filter count status')}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           >
             {['all', 'draft', 'counting', 'review', 'finalized', 'cancelled'].map((s) => (
               <option key={s} value={s}>
-                {s === 'all' ? 'All statuses' : s}
+                {s === 'all' ? t('All statuses') : t(s)}
               </option>
             ))}
           </select>
-          <span className="muted">
-            {rows.length} {rows.length === 1 ? 'count' : 'counts'}
-          </span>
+          <span className="muted">{countText('counts', rows.length)}</span>
         </div>
         <ErrorMessage error={list.error} />
         {list.isPending ? (
-          <p className="panel-padding">Loading counts…</p>
+          <p className="panel-padding">{t('Loading counts…')}</p>
         ) : rows.length ? (
           <div className="table-scroll">
             <table>
               <thead>
                 <tr>
-                  <th>Count</th>
-                  <th>Status</th>
-                  <th className="table-number-column">Products</th>
-                  <th className="table-actions-column">Actions</th>
+                  <th>{t('Count')}</th>
+                  <th>{t('Status')}</th>
+                  <th className="table-number-column">{t('Products')}</th>
+                  <th className="table-actions-column">{t('Actions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -116,18 +118,18 @@ export function StockCountsPage() {
                       <strong>{c.name}</strong>
                       <small>
                         {c.creator}
-                        {c.finalizer ? ` · finalized by ${c.finalizer}` : ''}
+                        {c.finalizer ? t(' · finalized by {value0}', { value0: c.finalizer }) : ''}
                       </small>
                     </td>
                     <td>
                       <span className={`badge badge-${countStatusTone[c.status] ?? 'gray'}`}>
-                        {c.status}
+                        {t(c.status)}
                       </span>
                     </td>
                     <td className="table-number-column">{c.lines.length}</td>
                     <td className="table-actions-column">
                       <Button variant="ghost" onClick={() => setSelected(c.id)}>
-                        Open
+                        {t('Open ')}
                       </Button>
                     </td>
                   </tr>
@@ -138,8 +140,8 @@ export function StockCountsPage() {
         ) : (
           <p className="panel-padding">
             {list.data?.length
-              ? 'No counts match this search or filter.'
-              : 'No stock counts yet. Create one for the products you want to count.'}
+              ? t('No counts match this search or filter.')
+              : t('No stock counts yet. Create one for the products you want to count.')}
           </p>
         )}
       </section>
@@ -147,8 +149,8 @@ export function StockCountsPage() {
       <Dialog
         open={creating}
         onOpenChange={setCreating}
-        title="New stock count"
-        description="Choose up to 500 products. Only one count can be open per store."
+        title={t('New stock count')}
+        description={t('Choose up to 500 products. Only one count can be open per store.')}
       >
         {creating && (
           <CreateCount
@@ -163,6 +165,7 @@ export function StockCountsPage() {
   );
 }
 function CreateCount({ done }: { done: (id: string) => void }) {
+  useLanguage();
   const products = useProducts();
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
@@ -198,10 +201,10 @@ function CreateCount({ done }: { done: (id: string) => void }) {
       }}
     >
       <fieldset disabled={!!payload}>
-        <Field label="Count name">
+        <Field label={t('Count name')}>
           <input required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
-        <Field label="Count notes">
+        <Field label={t('Count notes')}>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
         <div className="count-picker">
@@ -209,8 +212,8 @@ function CreateCount({ done }: { done: (id: string) => void }) {
             <div className="search-box">
               <Search size={17} />
               <input
-                aria-label="Find products"
-                placeholder="Search name or SKU…"
+                aria-label={t('Find products')}
+                placeholder={t('Search name or SKU…')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -227,15 +230,15 @@ function CreateCount({ done }: { done: (id: string) => void }) {
                 )
               }
             >
-              Select all active
+              {t('Select all active ')}
             </Button>
             <Button type="button" variant="ghost" onClick={() => setIds([])} disabled={!ids.length}>
-              Clear
+              {t('Clear ')}
             </Button>
           </div>
           <div className="count-picker-status">
             <span className={ids.length > 500 ? 'count-picker-over' : 'muted'}>
-              {ids.length} of 500 products selected
+              {ids.length} {t(' of 500 products selected ')}
             </span>
           </div>
           <div className="count-picker-list">
@@ -252,14 +255,17 @@ function CreateCount({ done }: { done: (id: string) => void }) {
                   <span className="count-picker-option-text">
                     <strong>{p.name}</strong>
                     <small>
-                      {p.sku} · {p.unit}
-                      {!p.active ? ' · Inactive' : ''}
+                      {p.sku} · {t(p.unit ?? '')}
+                      {!p.active ? t(' · Inactive') : ''}
                     </small>
                   </span>
                 </label>
               ))
             ) : (
-              <p className="count-picker-empty">No products match “{search.trim()}”.</p>
+              <p className="count-picker-empty">
+                {t('No products match “')}
+                {search.trim()}”.
+              </p>
             )}
           </div>
         </div>
@@ -267,13 +273,14 @@ function CreateCount({ done }: { done: (id: string) => void }) {
       <ErrorMessage error={products.error ?? error} />
       <div className="form-actions">
         <Button disabled={busy || !ids.length || ids.length > 500}>
-          {busy ? 'Creating…' : payload ? 'Retry creation' : 'Create draft'}
+          {busy ? t('Creating…') : payload ? t('Retry creation') : t('Create draft')}
         </Button>
       </div>
     </form>
   );
 }
 function CountDetail({ id }: { id: string }) {
+  useLanguage();
   const q = useQuery({
     queryKey: ['stock-count', id],
     queryFn: () => api<Count>('/stock-counts/' + id),
@@ -284,12 +291,13 @@ function CountDetail({ id }: { id: string }) {
       {q.data ? (
         <CountEditor key={id + ':' + q.data.version} count={q.data} />
       ) : (
-        <p>Loading count…</p>
+        <p>{t('Loading count…')}</p>
       )}
     </section>
   );
 }
 function CountEditor({ count }: { count: Count }) {
+  useLanguage();
   const session = useSession().data!;
   const manage = session.user.permissions.includes('counts.manage'),
     finalize = session.user.permissions.includes('counts.finalize');
@@ -331,40 +339,45 @@ function CountEditor({ count }: { count: Count }) {
     <>
       <h2>{count.name}</h2>
       <p>
-        {count.status} · Created by {count.creator}
+        {t(count.status)} {t(' · Created by ')}
+        {count.creator}
       </p>
       <p className="muted">{count.notes}</p>
       {count.finalized_at && (
         <p>
-          Finalized by {count.finalizer} ·{' '}
-          {new Date(count.finalized_at).toLocaleString('en-GB', {
+          {t('Finalized by ')}
+          {count.finalizer} ·{' '}
+          {new Date(count.finalized_at).toLocaleString(getLocale(), {
             timeZone: session.store.timezone,
           })}
         </p>
       )}
       {changed && !complete && (
         <p className="notice">
-          Stock moved after this count started. Restart and recount all selected products; saved
-          quantities will be cleared.
+          {t(
+            'Stock moved after this count started. Restart and recount all selected products; saved quantities will be cleared. ',
+          )}
         </p>
       )}
       <ErrorMessage error={error} />
       {pending && !busy && (
         <div className="notice">
-          <p>Confirmation is pending. Retry the same change before continuing.</p>
-          <Button onClick={() => void send(pending.path, pending.body)}>Retry same change</Button>
+          <p>{t('Confirmation is pending. Retry the same change before continuing.')}</p>
+          <Button onClick={() => void send(pending.path, pending.body)}>
+            {t('Retry same change')}
+          </Button>
         </div>
       )}
       <fieldset disabled={busy || !!pending}>
         <div className="table-scroll">
-          <table aria-label="Count quantities">
+          <table aria-label={t('Count quantities')}>
             <thead>
               <tr>
-                <th>Product</th>
-                <th>System quantity</th>
-                <th>Counted quantity</th>
-                <th>Difference</th>
-                <th>Counted by</th>
+                <th>{t('Product')}</th>
+                <th>{t('System quantity')}</th>
+                <th>{t('Counted quantity')}</th>
+                <th>{t('Difference')}</th>
+                <th>{t('Counted by')}</th>
               </tr>
             </thead>
             <tbody>
@@ -373,14 +386,14 @@ function CountEditor({ count }: { count: Count }) {
                   <td>
                     <strong>{l.product_name}</strong>
                     <small>
-                      {l.sku} · {l.unit}
+                      {l.sku} · {t(l.unit ?? '')}
                     </small>
                   </td>
                   <td>{l.system_quantity ?? '—'}</td>
                   <td>
                     {count.status === 'counting' && manage ? (
                       <input
-                        aria-label={`Counted ${l.product_name}`}
+                        aria-label={t('Counted {value0}', { value0: l.product_name })}
                         inputMode="decimal"
                         style={{ minWidth: 110 }}
                         value={values[l.product_id]}
@@ -399,14 +412,14 @@ function CountEditor({ count }: { count: Count }) {
         </div>
         {count.status === 'counting' && (
           <p className="muted">
-            Enter zero for products with no stock. Differences reflect saved quantities.
+            {t('Enter zero for products with no stock. Differences reflect saved quantities. ')}
           </p>
         )}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
           {manage && (
             <>
               {count.status === 'draft' && (
-                <Button onClick={() => void action('start')}>Start counting</Button>
+                <Button onClick={() => void action('start')}>{t('Start counting')}</Button>
               )}
               {count.status === 'counting' && (
                 <>
@@ -419,7 +432,7 @@ function CountEditor({ count }: { count: Count }) {
                       })
                     }
                   >
-                    Save quantities
+                    {t('Save quantities ')}
                   </Button>
                   <Button
                     variant="outline"
@@ -429,25 +442,25 @@ function CountEditor({ count }: { count: Count }) {
                     }
                     onClick={() => void action('review')}
                   >
-                    Review count
+                    {t('Review count ')}
                   </Button>
                 </>
               )}
               {['counting', 'review'].includes(count.status) && (
                 <Button variant="outline" onClick={() => setConfirmation('recount')}>
-                  Restart count
+                  {t('Restart count ')}
                 </Button>
               )}
               {!complete && (
                 <Button variant="ghost" onClick={() => setConfirmation('cancel')}>
-                  Cancel count
+                  {t('Cancel count ')}
                 </Button>
               )}
             </>
           )}
           {count.status === 'review' && finalize && (
             <Button disabled={changed} onClick={() => setConfirmation('finalize')}>
-              Finalize count
+              {t('Finalize count ')}
             </Button>
           )}
         </div>
@@ -457,21 +470,25 @@ function CountEditor({ count }: { count: Count }) {
         onOpenChange={(v) => !busy && !v && setConfirmation(undefined)}
         title={
           confirmation === 'finalize'
-            ? 'Finalize stock count'
+            ? t('Finalize stock count')
             : confirmation === 'recount'
-              ? 'Restart stock count'
-              : 'Cancel stock count'
+              ? t('Restart stock count')
+              : t('Cancel stock count')
         }
         description={
           confirmation === 'finalize'
-            ? 'This creates stock movements for the reviewed differences and permanently closes this count.'
+            ? t(
+                'This creates stock movements for the reviewed differences and permanently closes this count.',
+              )
             : confirmation === 'recount'
-              ? 'This clears all counted quantities and captures current stock. Count every selected product again.'
-              : 'The count stays in history and stock remains unchanged.'
+              ? t(
+                  'This clears all counted quantities and captures current stock. Count every selected product again.',
+                )
+              : t('The count stays in history and stock remains unchanged.')
         }
       >
         {confirmation !== 'finalize' && (
-          <Field label="Reason">
+          <Field label={t('Reason')}>
             <input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -486,12 +503,12 @@ function CountEditor({ count }: { count: Count }) {
             void (confirmation === 'finalize' ? send('finalize', {}) : action(confirmation!))
           }
         >
-          Confirm{' '}
+          {t('Confirm')}{' '}
           {confirmation === 'finalize'
-            ? 'finalization'
+            ? t('finalization')
             : confirmation === 'recount'
-              ? 'restart'
-              : 'cancellation'}
+              ? t('restart')
+              : t('cancellation')}
         </Button>
       </Dialog>
     </>

@@ -1,3 +1,4 @@
+import { t, useLanguage } from './i18n';
 import { useQuery } from '@tanstack/react-query';
 import { api, useSession } from './api';
 import { ErrorMessage } from './forms';
@@ -25,6 +26,7 @@ export function GrossProfit({
   productId?: string;
   shiftId?: string;
 }) {
+  useLanguage();
   const session = useSession().data!;
   const allowed =
     session.user.permissions.includes('costs.read') &&
@@ -39,24 +41,26 @@ export function GrossProfit({
   const p = q.data;
   return (
     <section
-      aria-label="Gross profit"
+      aria-label={t('Gross profit')}
       style={{ borderTop: '1px solid var(--border)', marginTop: 24, paddingTop: 20 }}
     >
-      <h3>Gross profit</h3>
+      <h3>{t('Gross profit')}</h3>
       <p className="muted">
-        {from} through {to}. Revenue excludes tax and refunds. Costs use the purchase cost saved at
-        each sale, not today’s product cost. Product and original-sale shift filters apply here too.
-        This is gross profit before operating expenses.
+        {from} {t(' through ')}
+        {to}
+        {t(
+          '. Revenue excludes tax and refunds. Costs use the purchase cost saved at each sale, not today’s product cost. Product and original-sale shift filters apply here too. This is gross profit before operating expenses. ',
+        )}
       </p>
       <ErrorMessage error={q.error} />
       {q.isFetching ? (
-        <p>Calculating gross profit…</p>
+        <p>{t('Calculating gross profit…')}</p>
       ) : (
         p && (
           <>
             {p.missingCostRecords !== '0' && (
               <p role="alert">
-                Historical cost records are missing. Profit is unavailable for this range.
+                {t('Historical cost records are missing. Profit is unavailable for this range. ')}
               </p>
             )}
             <div
@@ -76,23 +80,23 @@ export function GrossProfit({
                 ['Gross profit', p.grossProfit],
               ].map(([label, value]) => (
                 <div key={label}>
-                  <small>{label}</small>
+                  <small>{t(label ?? '')}</small>
                   <strong style={{ display: 'block', fontSize: 20 }}>
-                    {value === null ? 'Unavailable' : formatMoney(value, p.currency)}
+                    {value === null ? t('Unavailable') : formatMoney(value, p.currency)}
                   </strong>
                 </div>
               ))}
               <div>
-                <small>Gross margin</small>
+                <small>{t('Gross margin')}</small>
                 <strong style={{ display: 'block', fontSize: 20 }}>
                   {p.marginPercent === null ? '—' : p.marginPercent + '%'}
                 </strong>
               </div>
             </div>
             <p className="muted">
-              Refunds reduce revenue on the refund date. Saleable returns reverse their original
-              cost; non-saleable returns retain that cost. Stock-count adjustments and other
-              write-offs are not included. Margin is shown only when net revenue is positive.
+              {t(
+                'Refunds reduce revenue on the refund date. Saleable returns reverse their original cost; non-saleable returns retain that cost. Stock-count adjustments and other write-offs are not included. Margin is shown only when net revenue is positive. ',
+              )}
             </p>
           </>
         )

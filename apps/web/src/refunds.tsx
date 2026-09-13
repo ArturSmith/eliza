@@ -1,3 +1,4 @@
+import { t, useLanguage, getLocale } from './i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { type Receipt, type PosContext, toScaled, fromScaled } from '@eliza/contracts';
@@ -23,6 +24,7 @@ type Detail = {
   refunds: Refund[];
 };
 export function ReceiptSearch({ context }: { context?: PosContext }) {
+  useLanguage();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [from, setFrom] = useState('');
@@ -56,13 +58,15 @@ export function ReceiptSearch({ context }: { context?: PosContext }) {
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)}>
-        {context ? 'Search / refund' : 'Search all receipts'}
+        {context ? t('Search / refund') : t('Search all receipts')}
       </Button>
       <Dialog
         open={open}
         onOpenChange={setOpen}
-        title="Receipt search"
-        description="Search all stored receipts by number or transaction ID, with optional dates."
+        title={t('Receipt search')}
+        description={t(
+          'Search all stored receipts by number or transaction ID, with optional dates.',
+        )}
       >
         <form
           onSubmit={(e) => {
@@ -71,22 +75,22 @@ export function ReceiptSearch({ context }: { context?: PosContext }) {
             setFilter({ q, from, to, page: 1 });
           }}
         >
-          <Field label="Receipt number or transaction ID">
+          <Field label={t('Receipt number or transaction ID')}>
             <input value={q} onChange={(e) => setQ(e.target.value)} />
           </Field>
           <div className="form-grid">
-            <Field label="From date">
+            <Field label={t('From date')}>
               <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
             </Field>
-            <Field label="To date">
+            <Field label={t('To date')}>
               <input type="date" min={from} value={to} onChange={(e) => setTo(e.target.value)} />
             </Field>
           </div>
-          <Button>Search receipts</Button>
+          <Button>{t('Search receipts')}</Button>
         </form>
         <ErrorMessage error={query.error} />
         {query.isFetching ? (
-          <p>Searching…</p>
+          <p>{t('Searching…')}</p>
         ) : (
           <>
             {query.data?.receipts.map((r) => (
@@ -94,35 +98,38 @@ export function ReceiptSearch({ context }: { context?: PosContext }) {
                 <span>
                   {r.receiptNumber}
                   <small>
-                    {new Date(r.createdAt).toLocaleString('en-GB', { timeZone: r.timezone })} ·{' '}
+                    {new Date(r.createdAt).toLocaleString(getLocale(), { timeZone: r.timezone })} ·{' '}
                     {formatMoney(r.total, r.currency)}
                   </small>
                 </span>
                 <Button variant="ghost" onClick={() => setId(r.id)}>
-                  Open receipt
+                  {t('Open receipt ')}
                 </Button>
               </div>
             ))}
-            {query.data?.receipts.length === 0 && <p>No matching receipts.</p>}
+            {query.data?.receipts.length === 0 && <p>{t('No matching receipts.')}</p>}
             <Button
               variant="ghost"
               disabled={filter.page === 1}
               onClick={() => setFilter({ ...filter, page: filter.page - 1 })}
             >
-              Previous
+              {t('Previous ')}
             </Button>
-            <span>Page {filter.page}</span>
+            <span>
+              {t('Page ')}
+              {filter.page}
+            </span>
             <Button
               variant="ghost"
               disabled={!query.data?.hasMore}
               onClick={() => setFilter({ ...filter, page: filter.page + 1 })}
             >
-              Next
+              {t('Next ')}
             </Button>
           </>
         )}
         <ErrorMessage error={detail.error} />
-        {id && detail.isFetching && <p>Loading receipt…</p>}
+        {id && detail.isFetching && <p>{t('Loading receipt…')}</p>}
         {detail.data && (
           <>
             <ReceiptView
@@ -137,19 +144,22 @@ export function ReceiptSearch({ context }: { context?: PosContext }) {
                 )
               }
             />
-            <h3>Refund history</h3>
-            {!detail.data.refunds.length && <p>No refunds recorded.</p>}
+            <h3>{t('Refund history')}</h3>
+            {!detail.data.refunds.length && <p>{t('No refunds recorded.')}</p>}
             {detail.data.refunds.map((r) => (
               <details key={r.id}>
                 <summary>
                   {r.number} · {formatMoney(r.total, detail.data!.receipt.currency)}
                 </summary>
                 <p>
-                  {r.reason} · {r.method} · {r.cashier}, approved by {r.approver}
+                  {r.reason} · {t(r.method)} · {r.cashier}
+                  {t(', approved by ')}
+                  {r.approver}
                 </p>
                 {r.lines.map((l, i) => (
                   <p key={i}>
-                    {l.name}: {l.quantity} · {l.restock ? 'Returned to stock' : 'Not restocked'} ·{' '}
+                    {l.name}: {l.quantity} ·{' '}
+                    {l.restock ? t('Returned to stock') : t('Not restocked')} ·{' '}
                     {formatMoney(l.total, detail.data!.receipt.currency)}
                   </p>
                 ))}
@@ -159,7 +169,7 @@ export function ReceiptSearch({ context }: { context?: PosContext }) {
               <RefundForm key={id} context={context} detail={detail.data} />
             ) : (
               <p className="muted">
-                Issue refunds from an enrolled checkout register with an open shift.
+                {t('Issue refunds from an enrolled checkout register with an open shift. ')}
               </p>
             )}
           </>
@@ -169,6 +179,7 @@ export function ReceiptSearch({ context }: { context?: PosContext }) {
   );
 }
 function RefundForm({ context, detail }: { context: PosContext; detail: Detail }) {
+  useLanguage();
   const key = `eliza-refund:${context.store!.id}:${context.device!.id}:${context.operator!.id}:${detail.receipt.id}`;
   const [pending, setPending] = useState<Record<string, unknown> | undefined>(() => {
     try {
@@ -244,14 +255,17 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
   if (result)
     return (
       <div className="notice">
-        <h3>Refund recorded: {result.number}</h3>
+        <h3>
+          {t('Refund recorded: ')}
+          {result.number}
+        </h3>
         <p>
           {formatMoney(result.total, detail.receipt.currency)} · {result.method}
         </p>
         <p>
           {result.method === 'cash'
-            ? 'Return this amount from the drawer.'
-            : 'The external card refund has been recorded.'}
+            ? t('Return this amount from the drawer.')
+            : t('The external card refund has been recorded.')}
         </p>
       </div>
     );
@@ -262,7 +276,7 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
         void submit();
       }}
     >
-      <h3>Return items</h3>
+      <h3>{t('Return items')}</h3>
       <fieldset disabled={!!pending || busy}>
         {detail.receipt.lines.map((l) => {
           const remaining = fromScaled(
@@ -275,7 +289,13 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
           );
           return (
             <div key={l.productId}>
-              <Field label={`${l.name} — ${remaining} ${l.unit} remaining`}>
+              <Field
+                label={t('{value0} — {value1} {value2} remaining', {
+                  value0: l.name,
+                  value1: remaining,
+                  value2: t(l.unit ?? ''),
+                })}
+              >
                 <input
                   inputMode="decimal"
                   value={quantities[l.productId] ?? '0'}
@@ -288,15 +308,18 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
                   checked={restock[l.productId] ?? false}
                   onChange={(e) => setRestock({ ...restock, [l.productId]: e.target.checked })}
                 />{' '}
-                Saleable: restore stock
+                {t('Saleable: restore stock ')}
               </label>
             </div>
           );
         })}
         <p>
-          <strong>Refund amount: {preview}</strong>
+          <strong>
+            {t('Refund amount: ')}
+            {preview}
+          </strong>
         </p>
-        <Field label="Return reason">
+        <Field label={t('Return reason')}>
           <input required value={reason} onChange={(e) => setReason(e.target.value)} />
         </Field>
         <label>
@@ -307,16 +330,16 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
             onChange={(e) => setConfirmed(e.target.checked)}
           />
           {detail.receipt.payment.method === 'card'
-            ? ' I confirm the card refund was completed on the external terminal.'
-            : ' I confirm these items should be refunded in cash.'}
+            ? t(' I confirm the card refund was completed on the external terminal.')
+            : t(' I confirm these items should be refunded in cash.')}
         </label>
       </fieldset>
       {!context.operator!.permissions.includes('refund.approve') && (
         <>
-          <Field label="Approving manager code">
+          <Field label={t('Approving manager code')}>
             <input value={code} onChange={(e) => setCode(e.target.value)} />
           </Field>
-          <Field label="Approving manager PIN">
+          <Field label={t('Approving manager PIN')}>
             <input
               type="password"
               inputMode="numeric"
@@ -330,13 +353,15 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
       <ErrorMessage error={error} />
       {pending && (
         <p className="notice">
-          A refund confirmation is pending. Retry this same request; do not issue another payment.
+          {t(
+            'A refund confirmation is pending. Retry this same request; do not issue another payment. ',
+          )}
         </p>
       )}
       <Button disabled={busy || (!context.shift && !pending)}>
-        {pending ? 'Recover refund' : 'Confirm refund'}
+        {pending ? t('Recover refund') : t('Confirm refund')}
       </Button>
-      {!context.shift && <p>Start a shift before issuing a refund.</p>}
+      {!context.shift && <p>{t('Start a shift before issuing a refund.')}</p>}
     </form>
   );
 }
