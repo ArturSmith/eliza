@@ -15,6 +15,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { Plus, ArrowRight, Store, PackagePlus, ChevronDown } from 'lucide-react';
 import {
   productSchema,
+  productSku,
   setupSchema,
   adjustmentSchema,
   type Product,
@@ -245,6 +246,19 @@ export function ProductForm({
 }) {
   useLanguage();
   const formRef = useRef<HTMLFormElement>(null);
+  const [productName, setProductName] = useState(initial?.name ?? '');
+  const [sku, setSku] = useState(initial?.sku ?? '');
+  const [plu, setPlu] = useState(initial?.plu ?? '');
+  const [manualSku, setManualSku] = useState(!!initial);
+  const [manualPlu, setManualPlu] = useState(!!initial);
+  const nextPlu = useQuery({
+    queryKey: ['next-plu'],
+    queryFn: () => api<{ plu: string }>('/products/next-plu'),
+    enabled: !initial,
+    staleTime: 0,
+  });
+  const effectivePlu = manualPlu ? plu : (nextPlu.data?.plu ?? '');
+  const effectiveSku = manualSku ? sku : productSku(productName, effectivePlu);
   const [source, setSource] = useState(initial?.source ?? null);
   const [existingProduct, setExistingProduct] = useState<Product>();
   function fillField(name: string, value: string, append = false) {
@@ -257,7 +271,10 @@ export function ProductForm({
         .map((v) => v.trim())
         .filter(Boolean);
       if (!codes.includes(value)) field.value = [...codes, value].join('\n');
-    } else if (!field.value.trim()) field.value = value;
+    } else if (!field.value.trim()) {
+      field.value = value;
+      if (name === 'name') setProductName(value);
+    }
   }
   const [image, setImage] = useState(initial?.image ?? '');
   const [imageBusy, setImageBusy] = useState(false);
@@ -297,11 +314,16 @@ export function ProductForm({
       setError(result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('. '));
       return;
     }
-    mutation.mutate(result.data);
+    mutation.mutate({
+      ...result.data,
+      ...(!initial ? { autoPlu: !manualPlu, autoSku: !manualSku } : {}),
+    });
   }
   if (existingProduct) return <ProductForm initial={existingProduct} onDone={onDone} />;
-  if (!initial && profile.isPending) return <p>{t('Loading product defaults…')}</p>;
-  if (!initial && profile.error) return <ErrorMessage error={profile.error} />;
+  if (!initial && (profile.isPending || nextPlu.isPending))
+    return <p>{t('Loading product defaults…')}</p>;
+  if (!initial && (profile.error || nextPlu.error))
+    return <ErrorMessage error={profile.error ?? nextPlu.error} />;
   return (
     <form ref={formRef} onSubmit={submit}>
       {!initial && (
@@ -429,7 +451,8 @@ export function ProductForm({
         <input
           name="name"
           placeholder={t('e.g. Organic whole milk')}
-          defaultValue={initial?.name}
+          value={productName}
+          onChange={(e) => setProductName(e.target.value)}
           required
           maxLength={120}
         />
@@ -448,7 +471,11 @@ export function ProductForm({
           <input
             name="sku"
             placeholder={t('e.g. MILK-001')}
-            defaultValue={initial?.sku}
+            value={effectiveSku}
+            onChange={(e) => {
+              setManualSku(true);
+              setSku(e.target.value);
+            }}
             required
             maxLength={120}
           />
@@ -530,8 +557,22 @@ export function ProductForm({
           placeholder={t('Scan or enter a barcode')}
         />
       </Field>
+      {!initial && (
+        <p className="muted">
+          {t('Codes are suggested automatically. The next PLU is confirmed when you save.')}
+        </p>
+      )}
       <Field label={t('PLU / short code (optional)')}>
-        <input name="plu" defaultValue={initial?.plu} maxLength={20} placeholder={t('e.g. 4011')} />
+        <input
+          name="plu"
+          value={effectivePlu}
+          onChange={(e) => {
+            setManualPlu(true);
+            setPlu(e.target.value);
+          }}
+          maxLength={20}
+          placeholder={t('e.g. 4011')}
+        />
       </Field>
       <ErrorMessage error={error ?? mutation.error} />
       <div className="form-actions">

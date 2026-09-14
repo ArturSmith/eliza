@@ -12,8 +12,8 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import { and, eq, asc } from 'drizzle-orm';
-import { productSchema } from '@eliza/contracts';
+import { and, eq, asc, sql } from 'drizzle-orm';
+import { productSchema, productSku } from '@eliza/contracts';
 import { z } from 'zod';
 import { Database } from './database.js';
 import { AccessGuard, type AuthRequest, parse, Require } from './security.js';
@@ -24,6 +24,14 @@ import { lookupBarcode } from './barcode-lookup.js';
 @UseGuards(AccessGuard)
 export class CatalogController {
   constructor(private database: Database) {}
+  @Get('next-plu') @Require('catalog.write') async nextPlu(@Req() req: AuthRequest) {
+    return (
+      await this.database.pool.query(
+        "SELECT (COALESCE(max(CASE WHEN plu ~ '^[0-9]+$' THEN plu::numeric END),0)+1)::text AS plu FROM products WHERE store_id=$1",
+        [req.context.store.id],
+      )
+    ).rows[0];
+  }
   @Get('lookup/:barcode') @Require('catalog.write') async lookup(
     @Param('barcode') barcode: string,
     @Req() req: AuthRequest,
@@ -61,16 +69,40 @@ export class CatalogController {
     ).rows[0];
     const {
       barcodes: values,
-      plu,
+      plu: enteredPlu,
+      autoPlu,
+      autoSku,
       ...body
     } = parse(
-      productSchema,
+      productSchema.extend({
+        autoPlu: z.boolean().default(false),
+        autoSku: z.boolean().default(false),
+      }),
       typeof input === 'object' && input !== null
         ? { taxRate: defaults.default_tax_rate, ...input }
         : input,
     );
     const { store, user, device } = req.context;
     return this.database.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${store.id} || ':product-codes',0))`,
+      );
+      let plu = enteredPlu;
+      if (autoPlu) {
+        const rows = await tx.execute(
+          sql`SELECT (COALESCE(max(CASE WHEN plu ~ '^[0-9]+$' THEN plu::numeric END),0)+1)::text AS plu FROM products WHERE store_id=${store.id}`,
+        );
+        plu = String(rows.rows[0].plu);
+        const settings = await tx.execute(
+          sql`SELECT scale_barcode FROM stores WHERE id=${store.id}`,
+        );
+        const scale = settings.rows[0].scale_barcode as { enabled: boolean; productDigits: number };
+        if (plu.length > 20 || (scale.enabled && plu.length > scale.productDigits))
+          throw new BadRequestException(
+            'No automatic PLU fits the configured code length. Enter a PLU manually or review scale settings.',
+          );
+      }
+      if (autoSku) body.sku = productSku(body.name, plu);
       const [product] = await tx
         .insert(products)
         .values({ ...body, plu: plu || null, storeId: store.id })
@@ -99,6 +131,9 @@ export class CatalogController {
     const { barcodes: values, plu, ...body } = parse(productSchema, input);
     const { store, user, device } = req.context;
     return this.database.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(hashtextextended(${store.id} || ':product-codes',0))`,
+      );
       const [old] = await tx
         .select()
         .from(products)

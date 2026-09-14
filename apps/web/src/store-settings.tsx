@@ -1,3 +1,4 @@
+import { type ScaleBarcodeSettings } from '@eliza/contracts';
 import { t, useLanguage } from './i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -5,6 +6,7 @@ import { api, refresh } from './api';
 import { Field, ErrorMessage } from './forms';
 import { Button } from './components/ui/button';
 type Profile = {
+  scaleBarcode: ScaleBarcodeSettings;
   name: string;
   currency: string;
   timezone: string;
@@ -81,6 +83,95 @@ function Editor({ profile }: { profile: Profile }) {
               </Field>
             ))}
           </div>
+
+          <h3>{t('Scale barcodes')}</h3>
+          <p className="muted">
+            {t(
+              'EAN-13: two-digit prefix, product PLU, weight or price, then checksum. Match these settings to your scale. Product unit must be kilogram.',
+            )}
+          </p>
+          <label style={{ display: 'flex', gap: 10, margin: '16px 0' }}>
+            <input
+              type="checkbox"
+              checked={value.scaleBarcode.enabled}
+              onChange={(e) =>
+                setValue({
+                  ...value,
+                  scaleBarcode: { ...value.scaleBarcode, enabled: e.target.checked },
+                })
+              }
+            />
+            {t('Enable scale barcodes')}
+          </label>
+          <div className="form-grid">
+            <Field label={t('Scale prefix (20–29)')}>
+              <input
+                required
+                pattern="2[0-9]"
+                value={value.scaleBarcode.prefix}
+                onChange={(e) =>
+                  setValue({
+                    ...value,
+                    scaleBarcode: { ...value.scaleBarcode, prefix: e.target.value },
+                  })
+                }
+              />
+            </Field>
+            <Field label={t('Product code digits')}>
+              <input
+                required
+                type="number"
+                min={1}
+                max={8}
+                value={value.scaleBarcode.productDigits}
+                onChange={(e) =>
+                  setValue({
+                    ...value,
+                    scaleBarcode: { ...value.scaleBarcode, productDigits: Number(e.target.value) },
+                  })
+                }
+              />
+            </Field>
+            <Field label={t('Encoded value')}>
+              <select
+                value={value.scaleBarcode.mode}
+                onChange={(e) =>
+                  setValue({
+                    ...value,
+                    scaleBarcode: {
+                      ...value.scaleBarcode,
+                      mode: e.target.value as 'weight' | 'price',
+                      decimals: e.target.value === 'price' ? 2 : 3,
+                    },
+                  })
+                }
+              >
+                <option value="weight">{t('Weight')}</option>
+                <option value="price">{t('Price')}</option>
+              </select>
+            </Field>
+            <Field label={t('Encoded decimal places')}>
+              <input
+                required
+                type="number"
+                min={0}
+                max={3}
+                disabled={value.scaleBarcode.mode === 'price'}
+                value={value.scaleBarcode.decimals}
+                onChange={(e) =>
+                  setValue({
+                    ...value,
+                    scaleBarcode: { ...value.scaleBarcode, decimals: Number(e.target.value) },
+                  })
+                }
+              />
+            </Field>
+          </div>
+          <p className="muted">
+            {t(
+              'Price-only labels infer weight from the current price per kilogram. Keep scale prices synchronized; weight labels preserve the measured weight.',
+            )}
+          </p>
           <Field label={t('Receipt footer')}>
             <textarea
               rows={3}

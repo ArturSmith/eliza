@@ -1,3 +1,4 @@
+import { scaleBarcodeSchema } from '@eliza/contracts';
 import {
   Controller,
   Get,
@@ -14,7 +15,7 @@ import { Database } from './database.js';
 import { AuthModule } from './auth.js';
 import { AccessGuard, Require, parse, hash, cookie, type AuthRequest } from './security.js';
 import { Operations, audit } from './operations.js';
-export const profileColumns = `name,currency,timezone,address,phone,business_number AS "businessNumber",receipt_footer AS "receiptFooter",default_tax_rate AS "defaultTaxRate",settings_version AS version`;
+export const profileColumns = `name,currency,timezone,address,phone,business_number AS "businessNumber",receipt_footer AS "receiptFooter",default_tax_rate AS "defaultTaxRate",scale_barcode AS "scaleBarcode",settings_version AS version`;
 @Controller('store-profile')
 @UseGuards(AccessGuard)
 class StoreSettingsController {
@@ -32,6 +33,7 @@ class StoreSettingsController {
   @Post() @Require('settings.manage') save(@Body() input: unknown, @Req() req: AuthRequest) {
     const b = parse(
       z.object({
+        scaleBarcode: scaleBarcodeSchema.optional(),
         version: z.number().int().positive(),
         name: z.string().trim().min(1).max(120),
         address: z.string().trim().max(500),
@@ -63,7 +65,7 @@ class StoreSettingsController {
         throw new ConflictException('Store settings changed. Reload to review the saved settings.');
       const result = (
         await c.query(
-          `UPDATE stores SET name=$2,address=$3,phone=$4,business_number=$5,receipt_footer=$6,default_tax_rate=$7,settings_version=settings_version+1 WHERE id=$1 RETURNING ${profileColumns}`,
+          `UPDATE stores SET name=$2,address=$3,phone=$4,business_number=$5,receipt_footer=$6,default_tax_rate=$7,scale_barcode=$8::jsonb,settings_version=settings_version+1 WHERE id=$1 RETURNING ${profileColumns}`,
           [
             req.context.store.id,
             b.name,
@@ -72,6 +74,7 @@ class StoreSettingsController {
             b.businessNumber,
             b.receiptFooter,
             b.defaultTaxRate,
+            JSON.stringify(b.scaleBarcode ?? old.scaleBarcode),
           ],
         )
       ).rows[0];

@@ -23,6 +23,9 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import {
+  decodeScaleBarcode,
+  scalePriceQuantity,
+  type ScaleBarcodeSettings,
   calculateLine,
   fromScaled,
   toScaled,
@@ -403,6 +406,10 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   const [modal, setModal] = useState<
     'payment' | 'start' | 'close' | 'cash' | 'held' | 'history' | null
   >(null);
+  const scaleProfile = useQuery({
+    queryKey: ['pos-barcode-settings'],
+    queryFn: () => api<{ scaleBarcode: ScaleBarcodeSettings }>('/pos/barcode-settings'),
+  });
   const [weighted, setWeighted] = useState<PosProduct | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [isReprint, setReprint] = useState(false);
@@ -521,6 +528,41 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       return;
     }
     const term = search.trim();
+    if (frozen) return;
+    if (scaleProfile.isPending || scaleProfile.error) {
+      setMessage('Store barcode settings are unavailable. Retry when connected.');
+      return;
+    }
+    try {
+      const decoded =
+        term.length > 8 &&
+        scaleProfile.data?.scaleBarcode &&
+        decodeScaleBarcode(term, scaleProfile.data.scaleBarcode);
+      if (decoded) {
+        const matching =
+          catalog.data?.filter(
+            (p) => p.plu && /^\d+$/.test(p.plu) && BigInt(p.plu) === BigInt(decoded.productCode),
+          ) ?? [];
+        if (matching.length !== 1) {
+          setMessage('Scale product code is missing or ambiguous. Check the product PLU.');
+          return;
+        }
+        if (matching[0].unit !== 'kilogram') {
+          setMessage('Scale labels require a product sold by kilogram.');
+          return;
+        }
+        const amount = decoded.quantity ?? scalePriceQuantity(decoded.price!, matching[0].price);
+        if (toScaled(amount, 3) > 999999999999n) {
+          setMessage('Scale quantity is too large.');
+          return;
+        }
+        add(matching[0], amount);
+        return;
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Invalid scale barcode.');
+      return;
+    }
     const exact =
       catalog.data?.filter((p) => p.barcodes.includes(term) || p.sku === term || p.plu === term) ??
       [];
@@ -634,6 +676,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
               variant="ghost"
               onClick={() => {
                 void catalog.refetch();
+                void scaleProfile.refetch();
                 setMessage(
                   'Catalog refreshed. Existing cart prices stay unchanged; remove and re-add a line to use its new price.',
                 );

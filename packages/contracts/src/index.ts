@@ -663,3 +663,52 @@ export type ShoppingListSummary = Omit<ShoppingList, 'lines'> & {
   productCount: number;
   convertedCount: number;
 };
+
+export const scaleBarcodeSchema = z
+  .object({
+    enabled: z.boolean(),
+    prefix: z.string().regex(/^2[0-9]$/),
+    productDigits: z.number().int().min(1).max(8),
+    mode: z.enum(['weight', 'price']),
+    decimals: z.number().int().min(0).max(3),
+  })
+  .refine(
+    (value) => value.mode !== 'price' || value.decimals === 2,
+    'Price labels must use two decimal places.',
+  );
+export type ScaleBarcodeSettings = z.infer<typeof scaleBarcodeSchema>;
+export function decodeScaleBarcode(
+  code: string,
+  settings: ScaleBarcodeSettings,
+): { productCode: string; quantity?: string; price?: string } | null {
+  if (!settings.enabled || !code.startsWith(settings.prefix) || !/^\d+$/.test(code)) return null;
+  if (!/^\d{13}$/.test(code)) throw new Error('Scale barcode must contain 13 digits.');
+  const sum = [...code.slice(0, 12)].reduce(
+    (sum, digit, index) => sum + Number(digit) * (index % 2 ? 3 : 1),
+    0,
+  );
+  if ((10 - (sum % 10)) % 10 !== Number(code[12]))
+    throw new Error('Scale barcode checksum is invalid.');
+  const productCode = code.slice(2, 2 + settings.productDigits);
+  const raw = BigInt(code.slice(2 + settings.productDigits, 12));
+  if (raw === 0n) throw new Error('Scale label quantity or price must be greater than zero.');
+  if (settings.mode === 'price') return { productCode, price: fromScaled(raw, 2) };
+  return { productCode, quantity: fromScaled(raw * 10n ** BigInt(3 - settings.decimals), 3) };
+}
+export function scalePriceQuantity(price: string, unitPrice: string): string {
+  const cents = toScaled(price, 2),
+    perKg = toScaled(unitPrice, 2);
+  if (perKg <= 0n) throw new Error('Set a positive selling price before scanning a price label.');
+  const grams = (cents * 1000n + perKg / 2n) / perKg;
+  if (grams <= 0n || (grams * perKg + 500n) / 1000n !== cents)
+    throw new Error(
+      'Scale price cannot be matched to the current selling price. Weigh the product and enter its weight.',
+    );
+  return fromScaled(grams, 3);
+}
+
+export function productSku(name: string, plu: string): string {
+  const suffix = plu ? '-' + plu : '';
+  const stem = name.trim().replace(/\s+/gu, '-');
+  return stem.slice(0, 120 - suffix.length) + suffix;
+}

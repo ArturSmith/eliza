@@ -59,6 +59,16 @@ export class CheckoutController {
     private operations: Operations,
     private registers: RegisterService,
   ) {}
+  @Get('barcode-settings') barcodeSettings(@Req() req: Request) {
+    return this.operations.transaction(async (client) => {
+      const actor = await this.registers.operator(client, req);
+      return (
+        await client.query('SELECT scale_barcode AS "scaleBarcode" FROM stores WHERE id=$1', [
+          actor.storeId,
+        ])
+      ).rows[0];
+    });
+  }
   @Get('products') products(@Req() req: Request) {
     return this.operations.transaction(async (client) => {
       const actor = await this.registers.operator(client, req);
