@@ -48,6 +48,7 @@ import {
   useDevices,
 } from './api';
 import { AuthForm, AddProduct, ProductForm, AdjustmentForm, ErrorMessage, Field } from './forms';
+import { ProductSuppliers } from './supplier-products';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 const navGroups = [
@@ -685,6 +686,7 @@ export function ProductsPage() {
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All categories');
   const [edit, setEdit] = useState<Product | null>(null);
+  const [offersFor, setOffersFor] = useState<Product | null>(null);
   const [status, setStatus] = useState<Product | null>(null);
   const mutation = useMutation({
     mutationFn: (p: Product) => api(`/products/${p.id}/status`, { active: !p.active }, 'PATCH'),
@@ -809,6 +811,9 @@ export function ProductsPage() {
                           >
                             <Pencil size={15} />
                           </Button>
+                          <Button variant="ghost" size="sm" onClick={() => setOffersFor(p)}>
+                            {t('Suppliers')}
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -850,6 +855,16 @@ export function ProductsPage() {
         description={t('Price and barcode changes are recorded in your activity log.')}
       >
         {edit && <ProductForm key={edit.id} initial={edit} onDone={() => setEdit(null)} />}
+      </Dialog>
+      <Dialog
+        open={!!offersFor}
+        onOpenChange={(v) => !v && setOffersFor(null)}
+        title={t('Suppliers for {value0}', { value0: offersFor?.name ?? '' })}
+        description={t('Compare what each supplier charges for this product.')}
+      >
+        {offersFor && (
+          <ProductSuppliers productId={offersFor.id} unit={offersFor.unit ?? 'piece'} />
+        )}
       </Dialog>
       <Dialog
         open={!!status}

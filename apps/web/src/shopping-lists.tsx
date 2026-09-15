@@ -6,6 +6,7 @@ import {
   type ShoppingListLine,
   type ShoppingListSummary,
   type Supplier,
+  type SupplierProduct,
   shoppingListSaveSchema,
   initialReorderTarget,
   suggestedOrderQuantity,
@@ -14,7 +15,10 @@ import { api, ApiError, queryClient, refresh, useSession } from './api';
 import { Field, ErrorMessage, SearchSelect } from './forms';
 import { Dialog } from './components/ui/dialog';
 import { Button } from './components/ui/button';
+import { formatMoney } from './receipts';
 import { t, useLanguage, getLocale } from './i18n';
+
+type Offer = SupplierProduct & { cheapest: boolean; premiumPercent: number | null };
 
 type CatalogItem = Pick<
   ShoppingListLine,
@@ -191,6 +195,67 @@ function ShoppingDetail({ id, onDeleted }: { id: string; onDeleted: () => void }
     </section>
   );
 }
+/**
+ * Lets the manager choose which supplier to order a line from.
+ *
+ * Suppliers that list the product are offered first, cheapest per selling unit,
+ * with the price last actually paid alongside the quote. Every other supplier
+ * stays selectable underneath: the catalogue is a hint, not a restriction.
+ */
+function SupplierPicker({
+  line,
+  offers,
+  suppliers,
+  currency,
+  disabled,
+  onPick,
+}: {
+  line: ShoppingListLine;
+  offers: Offer[];
+  suppliers: Supplier[];
+  currency: string;
+  disabled: boolean;
+  onPick: (supplierId: string) => void;
+}) {
+  useLanguage();
+  const listed = new Set(offers.map((o) => o.supplierId));
+  const others = suppliers.filter((s) => s.active && !listed.has(s.id));
+  const price = (offer: Offer) => {
+    const quote = offer.unitCost === null ? t('no price') : formatMoney(offer.unitCost, currency);
+    if (offer.lastPaidCost === null) return quote;
+    return `${quote} · ${t('last paid')} ${formatMoney(offer.lastPaidCost, currency)}`;
+  };
+  return (
+    <select
+      className="shopping-supplier no-print"
+      aria-label={t('Supplier to order from')}
+      disabled={disabled}
+      value={line.supplierId ?? ''}
+      onChange={(e) => onPick(e.target.value)}
+    >
+      <option value="">{t('Choose supplier…')}</option>
+      {!!offers.length && (
+        <optgroup label={t('Supplies this product')}>
+          {offers.map((offer) => (
+            <option key={offer.supplierId} value={offer.supplierId}>
+              {offer.cheapest && offers.length > 1 ? '★ ' : ''}
+              {offer.supplierName} — {price(offer)}
+            </option>
+          ))}
+        </optgroup>
+      )}
+      {!!others.length && (
+        <optgroup label={offers.length ? t('Other suppliers') : t('All suppliers')}>
+          {others.map((supplier) => (
+            <option key={supplier.id} value={supplier.id}>
+              {supplier.name}
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </select>
+  );
+}
 function ShoppingEditor({ list, onDeleted }: { list: ShoppingList; onDeleted: () => void }) {
   useLanguage();
   const session = useSession().data!,
@@ -203,6 +268,13 @@ function ShoppingEditor({ list, onDeleted }: { list: ShoppingList; onDeleted: ()
     queryKey: ['shopping-products'],
     queryFn: () => api<CatalogItem[]>('/shopping-lists/products'),
   });
+  // Fetched once for the whole list rather than per row.
+  const offers = useQuery({
+    queryKey: ['supplier-products'],
+    queryFn: () => api<Offer[]>('/supplier-products'),
+  });
+  const offersFor = (productId: string | null) =>
+    productId ? (offers.data?.filter((o) => o.productId === productId) ?? []) : [];
   const [name, setName] = useState(list.name),
     [notes, setNotes] = useState(list.notes),
     [lines, setLines] = useState(list.lines);
@@ -591,12 +663,35 @@ function ShoppingEditor({ list, onDeleted }: { list: ShoppingList; onDeleted: ()
                             <span className="badge badge-gray">{t('Inactive')}</span>
                           )}
                           {line.supplierName && (
-                            <span className="muted shopping-line-supplier">
+                            <span className="muted shopping-line-supplier print-only">
                               {line.supplierName}
                             </span>
                           )}
                         </div>
                         <div className="shopping-line-side">
+                          {canWrite && line.productId && (
+                            <SupplierPicker
+                              line={line}
+                              offers={offersFor(line.productId)}
+                              suppliers={suppliers.data ?? []}
+                              currency={session.store.currency}
+                              disabled={locked}
+                              onPick={(supplierId) => {
+                                const offer = offersFor(line.productId).find(
+                                  (o) => o.supplierId === supplierId,
+                                );
+                                const supplier = suppliers.data?.find((s) => s.id === supplierId);
+                                change(line.id, {
+                                  supplierId: supplierId || null,
+                                  supplierName: supplier?.name ?? null,
+                                  supplierActive: supplier?.active ?? null,
+                                  // Adopt the quoted price so the draft order carries
+                                  // the price this supplier actually offered.
+                                  ...(offer ? { unitCost: offer.unitCost ?? line.unitCost } : {}),
+                                });
+                              }}
+                            />
+                          )}
                           <input
                             className="shopping-qty"
                             aria-label={t('Quantity to buy')}
@@ -613,6 +708,7 @@ function ShoppingEditor({ list, onDeleted }: { list: ShoppingList; onDeleted: ()
                               size="sm"
                               className="no-print"
                               disabled={locked || dirty || Number(line.quantity) <= 0}
+                              title={dirty ? t('Save the list before ordering.') : undefined}
                               onClick={() => void send('/convert', { lineIds: [line.id] })}
                             >
                               {t('Order from supplier')}

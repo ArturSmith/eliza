@@ -18,6 +18,9 @@ import { z } from 'zod';
 import {
   type ShoppingList,
   supplierSchema,
+  supplierProductSchema,
+  compareOffers,
+  unitCost,
   shoppingListCreateSchema,
   shoppingListSaveSchema,
   shoppingListConvertSchema,
@@ -467,6 +470,173 @@ export class PurchasingController {
       );
       return row;
     });
+  }
+
+  // Quoted offers joined with what each supplier was actually last paid, so the
+  // manager can see whether a quote is still being honoured.
+  private offerQuery(where: string) {
+    return `SELECT sp.id,sp.supplier_id AS "supplierId",s.name AS "supplierName",
+      sp.product_id AS "productId",p.name AS "productName",p.sku,p.unit,
+      sp.supplier_sku AS "supplierSku",sp.pack_size::text AS "packSize",sp.pack_cost::text AS "packCost",
+      sp.lead_time_days AS "leadTimeDays",sp.minimum_order::text AS "minimumOrder",
+      sp.notes,sp.active,sp.version,
+      h.unit_cost::text AS "lastPaidCost",h.created_at AS "lastDeliveredAt",h.deliveries
+      FROM supplier_products sp
+      JOIN suppliers s ON s.id=sp.supplier_id
+      JOIN products p ON p.id=sp.product_id
+      LEFT JOIN LATERAL (
+        SELECT l.unit_cost,r.created_at,count(*) OVER () ::int AS deliveries
+        FROM goods_receipt_lines l
+        JOIN goods_receipts r ON r.id=l.receipt_id AND r.store_id=l.store_id
+        JOIN purchases pu ON pu.id=r.purchase_id AND pu.store_id=r.store_id
+        WHERE l.product_id=sp.product_id AND pu.supplier_id=sp.supplier_id AND l.store_id=sp.store_id
+        ORDER BY r.created_at DESC LIMIT 1
+      ) h ON true
+      WHERE sp.store_id=$1 AND ${where}`;
+  }
+  @Get('suppliers/:id/products') @Require('suppliers.read') async supplierCatalog(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    const rows = (
+      await this.database.pool.query(this.offerQuery('sp.supplier_id=$2') + ' ORDER BY p.name', [
+        req.context.store.id,
+        id,
+      ])
+    ).rows;
+    // Ranking across a supplier's own catalogue would be meaningless, but every
+    // row still needs its per-unit price, so the client never has to derive it.
+    return rows.map((row) => ({
+      ...row,
+      unitCost: unitCost(row.packCost, row.packSize),
+      cheapest: false,
+      premiumPercent: null,
+    }));
+  }
+  @Get('products/:id/suppliers') @Require('suppliers.read') async productOffers(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    const rows = (
+      await this.database.pool.query(this.offerQuery('sp.product_id=$2'), [
+        req.context.store.id,
+        id,
+      ])
+    ).rows;
+    // Ranking lives in contracts so the API and the UI cannot disagree on which
+    // supplier is cheapest.
+    return compareOffers(rows);
+  }
+  // Every offer in the store, ranked per product. The shopping list needs offers
+  // for many products at once; fetching them per line would issue one request
+  // per row.
+  @Get('supplier-products') @Require('suppliers.read') async allOffers(@Req() req: AuthRequest) {
+    const rows = (
+      await this.database.pool.query(this.offerQuery('sp.active'), [req.context.store.id])
+    ).rows;
+    const byProduct = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const list = byProduct.get(row.productId);
+      if (list) list.push(row);
+      else byProduct.set(row.productId, [row]);
+    }
+    return [...byProduct.values()].flatMap((offers) => compareOffers(offers));
+  }
+  @Post('supplier-products') @Require('suppliers.manage') async saveOffer(
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(
+      supplierProductSchema.extend({
+        requestId: z.uuid(),
+        id: z.uuid().optional(),
+        version: z.number().int().positive().optional(),
+      }),
+      input,
+    );
+    return this.run(req, b.requestId, 'supplier', b, async (c) => {
+      const store = req.context.store.id;
+      const values = [
+        store,
+        b.supplierId,
+        b.productId,
+        b.supplierSku,
+        b.packSize,
+        b.packCost,
+        b.leadTimeDays,
+        b.minimumOrder,
+        b.notes,
+        b.active,
+      ];
+      let row;
+      if (b.id) {
+        row = (
+          await c.query(
+            `UPDATE supplier_products SET supplier_id=$2,product_id=$3,supplier_sku=$4,pack_size=$5,pack_cost=$6,
+             lead_time_days=$7,minimum_order=$8,notes=$9,active=$10,version=version+1,updated_at=now()
+             WHERE store_id=$1 AND id=$11 AND version=$12 RETURNING id,pack_size,pack_cost`,
+            [...values, b.id, b.version],
+          )
+        ).rows[0];
+        if (!row)
+          throw new ConflictException('This supplier price changed. Refresh and try again.');
+      } else {
+        row = (
+          await c.query(
+            `INSERT INTO supplier_products(store_id,supplier_id,product_id,supplier_sku,pack_size,pack_cost,lead_time_days,minimum_order,notes,active)
+             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+             ON CONFLICT(supplier_id,product_id) DO UPDATE SET
+               supplier_sku=EXCLUDED.supplier_sku,pack_size=EXCLUDED.pack_size,pack_cost=EXCLUDED.pack_cost,
+               lead_time_days=EXCLUDED.lead_time_days,minimum_order=EXCLUDED.minimum_order,
+               notes=EXCLUDED.notes,active=EXCLUDED.active,version=supplier_products.version+1,updated_at=now()
+             RETURNING id,pack_size,pack_cost`,
+            values,
+          )
+        ).rows[0];
+      }
+      // Only record history when the quote actually moved, so the trend is not
+      // buried under no-op edits to unrelated fields.
+      const changed = (
+        await c.query(
+          `SELECT 1 FROM supplier_price_history WHERE supplier_product_id=$1
+           AND pack_size=$2 AND pack_cost=$3
+           ORDER BY recorded_at DESC LIMIT 1`,
+          [row.id, b.packSize, b.packCost],
+        )
+      ).rowCount;
+      if (!changed)
+        await c.query(
+          'INSERT INTO supplier_price_history(store_id,supplier_product_id,pack_size,pack_cost,employee_id) VALUES($1,$2,$3,$4,$5)',
+          [store, row.id, b.packSize, b.packCost, req.context.user.id],
+        );
+      await audit(
+        c,
+        {
+          storeId: store,
+          employeeId: req.context.user.id,
+          deviceId: req.context.device.id,
+        },
+        b.id ? 'Supplier price updated' : 'Supplier product linked',
+        row.id,
+        { supplierId: b.supplierId, productId: b.productId, packCost: b.packCost },
+      );
+      return { id: row.id };
+    });
+  }
+  @Get('supplier-products/:id/history') @Require('suppliers.read') async offerHistory(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    return (
+      await this.database.pool.query(
+        `SELECT h.pack_size::text AS "packSize",h.pack_cost::text AS "packCost",
+         h.recorded_at AS "recordedAt",e.name AS "employeeName"
+         FROM supplier_price_history h LEFT JOIN employees e ON e.id=h.employee_id
+         WHERE h.supplier_product_id=$1 AND h.store_id=$2
+         ORDER BY h.recorded_at DESC LIMIT 100`,
+        [id, req.context.store.id],
+      )
+    ).rows;
   }
   @Get('purchases') @Require('purchases.read') async list(@Req() req: AuthRequest) {
     return (

@@ -130,12 +130,12 @@ describe('velocity and dead stock', () => {
   });
   it('classifies the portfolio', () => {
     const base = { revenue: '1000', grossProfit: '300', stock: '50', historyDays: 90 };
-    expect(
-      classifyProduct({ ...base, units: '900', margin: 30, daysSinceLastSale: 1 }),
-    ).toBe('star');
-    expect(
-      classifyProduct({ ...base, units: '900', margin: 5, daysSinceLastSale: 1 }),
-    ).toBe('traffic');
+    expect(classifyProduct({ ...base, units: '900', margin: 30, daysSinceLastSale: 1 })).toBe(
+      'star',
+    );
+    expect(classifyProduct({ ...base, units: '900', margin: 5, daysSinceLastSale: 1 })).toBe(
+      'traffic',
+    );
     expect(classifyProduct({ ...base, units: '9', margin: 40, daysSinceLastSale: 3 })).toBe(
       'hidden',
     );
@@ -329,6 +329,61 @@ describe('insight engine', () => {
     const insights = buildInsights({ ...emptyFacts, missingCost: 126, uncountedProducts: 84 });
     expect(insights.find((i) => i.id === 'missing-cost')!.title).toContain('126 products');
     expect(insights.find((i) => i.id === 'uncounted')!.severity).toBe('info');
+  });
+  it('reports a quoted supplier price the last invoice contradicts', () => {
+    const insights = buildInsights({
+      ...emptyFacts,
+      staleQuotes: [
+        {
+          id: 'q1',
+          label: 'Nutella',
+          supplierName: 'Rizka',
+          quotedCost: '20.00',
+          paidCost: '23.00',
+          percent: 15,
+        },
+      ],
+    });
+    const alert = insights.find((i) => i.id === 'supplier-quote-drift')!;
+    expect(alert.title).toContain('1 supplier prices differ');
+    expect(alert.entities![0].note).toBe('+15.0%');
+    // Neutral wording: the record could be stale on either side.
+    expect(alert.detail).not.toMatch(/overcharg|cheat|fraud/i);
+  });
+  it('ignores quote drift below the threshold', () => {
+    const insights = buildInsights({
+      ...emptyFacts,
+      staleQuotes: [
+        {
+          id: 'q1',
+          label: 'Nutella',
+          supplierName: 'Rizka',
+          quotedCost: '20.00',
+          paidCost: '20.20',
+          percent: 1,
+        },
+      ],
+    });
+    expect(insights.find((i) => i.id === 'supplier-quote-drift')).toBeUndefined();
+  });
+  it('reports a quote that has fallen as well as one that has risen', () => {
+    const insights = buildInsights({
+      ...emptyFacts,
+      staleQuotes: [
+        {
+          id: 'q1',
+          label: 'Nutella',
+          supplierName: 'Rizka',
+          quotedCost: '20.00',
+          paidCost: '17.00',
+          percent: -15,
+        },
+      ],
+    });
+    expect(insights.find((i) => i.id === 'supplier-quote-drift')!.entities![0].note).toBe('−15.0%');
+  });
+  it('omits quote drift entirely when no catalogue exists', () => {
+    expect(buildInsights(emptyFacts).find((i) => i.id === 'supplier-quote-drift')).toBeUndefined();
   });
   it('orders the most serious findings first', () => {
     const sorted = sortInsights([

@@ -84,7 +84,8 @@ export class OwnerDashboardController {
       const totals = await this.totals(store, baseline.range, cutoff, margin);
       // A multi-day averaging window is scaled back to one comparable period.
       const scale = baseline.key === 'weekdayAverage' ? length / 7 : length / days;
-      const divisor = baseline.key === 'weekdayAverage' || baseline.key === 'fourWeekAverage' ? scale : 1;
+      const divisor =
+        baseline.key === 'weekdayAverage' || baseline.key === 'fourWeekAverage' ? scale : 1;
       compared.push({
         ...baseline,
         available: history.days >= length,
@@ -109,6 +110,7 @@ export class OwnerDashboardController {
       employees,
       readiness,
       marginTrend,
+      staleQuotes,
     ] = await Promise.all([
       this.hourly(store, range, baselines, cutoff),
       this.categories(store, range, primary?.range ?? null, margin),
@@ -124,6 +126,8 @@ export class OwnerDashboardController {
       this.employees(store, range),
       this.readiness(store),
       margin ? this.marginTrend(store, today) : null,
+      // Quoted-versus-paid drift is cost information.
+      margin ? this.staleQuotes(store) : [],
     ]);
 
     const facts = this.facts(store, {
@@ -138,6 +142,7 @@ export class OwnerDashboardController {
       discounts,
       shifts,
       readiness,
+      staleQuotes,
       deadDays: b.deadDays,
     });
     const insights = buildInsights(facts);
@@ -575,9 +580,7 @@ SELECT p.id,p.name,p.sku,p.category,p.unit,p.stock::text,p.min_stock::text AS "m
       runningOut: enriched
         .filter(
           (p) =>
-            p.active &&
-            p.daysOfStock !== null &&
-            p.daysOfStock <= insightThresholds.runningOutDays,
+            p.active && p.daysOfStock !== null && p.daysOfStock <= insightThresholds.runningOutDays,
         )
         .sort((a, b) => (a.daysOfStock ?? 0) - (b.daysOfStock ?? 0))
         .slice(0, 10),
@@ -639,12 +642,7 @@ SELECT
   }
 
   /** Damaged, expired and internal-use removals valued at product cost. */
-  private async waste(
-    store: Store,
-    range: DateRange,
-    previous: DateRange | null,
-    margin: boolean,
-  ) {
+  private async waste(store: Store, range: DateRange, previous: DateRange | null, margin: boolean) {
     const rows = (
       await this.database.pool.query(
         `WITH windows AS (
@@ -756,7 +754,9 @@ SELECT pr.id,pr.name,pr.sku,pr.price::text,pr.cost::text,
     ).rows;
     const current = spend.find((r: any) => r.phase === 'current');
     const before = spend.find((r: any) => r.phase === 'previous');
-    const increases = changes.filter((r: any) => r.percent >= insightThresholds.costIncreasePercent);
+    const increases = changes.filter(
+      (r: any) => r.percent >= insightThresholds.costIncreasePercent,
+    );
     return {
       received: money(current?.received),
       deliveries: num(current?.deliveries),
@@ -1027,8 +1027,7 @@ SELECT COALESCE(s.phase,f.phase) AS phase,
     const products = num(row.products);
     const incomplete = new Set<string>();
     const ready =
-      products -
-      Math.max(num(row.missingCost), num(row.missingCategory), num(row.missingCode));
+      products - Math.max(num(row.missingCost), num(row.missingCategory), num(row.missingCode));
     return {
       products,
       active: num(row.active),
@@ -1040,6 +1039,36 @@ SELECT COALESCE(s.phase,f.phase) AS phase,
       uncounted: num(row.uncounted),
       incomplete: incomplete.size,
     };
+  }
+
+  /**
+   * Quoted supplier prices the most recent invoice contradicts. Both sides are
+   * normalised to one selling unit before comparison, so differing pack sizes do
+   * not register as a price change.
+   */
+  private async staleQuotes(store: any) {
+    return (
+      await this.database.pool.query(
+        `SELECT sp.id,p.name AS label,s.name AS "supplierName",
+         (sp.pack_cost/sp.pack_size)::numeric(14,4)::text AS "quotedCost",
+         h.unit_cost::text AS "paidCost",
+         ((h.unit_cost-(sp.pack_cost/sp.pack_size))/NULLIF(sp.pack_cost/sp.pack_size,0)*100)::float AS percent
+         FROM supplier_products sp
+         JOIN products p ON p.id=sp.product_id
+         JOIN suppliers s ON s.id=sp.supplier_id
+         JOIN LATERAL (
+           SELECT l.unit_cost FROM goods_receipt_lines l
+           JOIN goods_receipts r ON r.id=l.receipt_id AND r.store_id=l.store_id
+           JOIN purchases pu ON pu.id=r.purchase_id AND pu.store_id=r.store_id
+           WHERE l.product_id=sp.product_id AND pu.supplier_id=sp.supplier_id AND l.store_id=sp.store_id
+           ORDER BY r.created_at DESC LIMIT 1
+         ) h ON true
+         WHERE sp.store_id=$1 AND sp.active AND sp.pack_cost>0
+         ORDER BY abs((h.unit_cost-(sp.pack_cost/sp.pack_size))/NULLIF(sp.pack_cost/sp.pack_size,0)) DESC
+         LIMIT 20`,
+        [store.id],
+      )
+    ).rows.map((r) => ({ ...r, percent: Number(r.percent) }));
   }
 
   /** Twelve months of margin, used for the trend chart on the month view. */
@@ -1085,9 +1114,7 @@ SELECT m.month,COALESCE(sold.revenue,0)::text AS revenue,
     const { current, previous, history, products, inventory, waste, purchasing } = data;
     const outOfStock = products.byRevenue
       .filter((p: any) => num(p.stock) <= 0)
-      .concat(
-        products.runningOut.filter((p: any) => num(p.stock) <= 0),
-      );
+      .concat(products.runningOut.filter((p: any) => num(p.stock) <= 0));
     const seen = new Set<string>();
     const uniqueOut = outOfStock.filter((p: any) =>
       seen.has(p.id) ? false : (seen.add(p.id), true),
@@ -1158,6 +1185,7 @@ SELECT m.month,COALESCE(sold.revenue,0)::text AS revenue,
       })),
       missingCost: data.readiness.missingCost,
       uncountedProducts: data.readiness.uncounted,
+      staleQuotes: data.staleQuotes,
     };
   }
 }

@@ -319,11 +319,24 @@ export type InsightFacts = {
   longOpenShifts: { id: string; label: string; hours: number }[];
   missingCost: number;
   uncountedProducts: number;
+  /**
+   * Suppliers whose last invoiced price no longer matches their quoted price.
+   * Optional: stores with no supplier catalogue simply omit it.
+   */
+  staleQuotes?: {
+    id: string;
+    label: string;
+    supplierName: string;
+    quotedCost: string;
+    paidCost: string;
+    percent: number;
+  }[];
 };
 
 /** Configurable trigger points, kept in one place so thresholds are auditable. */
 export const insightThresholds = {
   costIncreasePercent: 3,
+  quoteDriftPercent: 3,
   refundRateMultiplier: 2,
   refundRateFloor: 2,
   discountIncreasePercent: 25,
@@ -412,6 +425,27 @@ export function buildInsights(facts: InsightFacts): Insight[] {
     });
   }
 
+  // A quote the last invoice contradicts usually means the supplier raised their
+  // price without the catalogue being updated. Reported neutrally: the cause could
+  // equally be a stale record on our side.
+  const drifted = (facts.staleQuotes ?? []).filter(
+    (q) => Math.abs(q.percent) >= insightThresholds.quoteDriftPercent,
+  );
+  if (drifted.length)
+    found.push({
+      id: 'supplier-quote-drift',
+      type: 'margin',
+      severity: 'attention',
+      title: `${drifted.length} supplier prices differ from the last invoice`,
+      detail: 'The recorded quote no longer matches what was last actually paid.',
+      entities: drifted.slice(0, 5).map((q) => ({
+        id: q.id,
+        label: `${q.label} · ${q.supplierName}`,
+        note: `${q.percent > 0 ? '+' : '−'}${Math.abs(q.percent).toFixed(1)}%`,
+      })),
+      action: { label: 'Review supplier prices', to: '/suppliers' },
+    });
+
   if (facts.negativeMargin.length)
     found.push({
       id: 'negative-margin',
@@ -481,7 +515,10 @@ export function buildInsights(facts: InsightFacts): Insight[] {
       action: { label: 'View sales', to: '/sales' },
     });
 
-  const wasteChange = percentChange(Number(facts.wasteValue), Number(facts.baselineWasteValue ?? 0));
+  const wasteChange = percentChange(
+    Number(facts.wasteValue),
+    Number(facts.baselineWasteValue ?? 0),
+  );
   if (
     facts.baselineWasteValue !== null &&
     wasteChange !== null &&
@@ -499,8 +536,9 @@ export function buildInsights(facts: InsightFacts): Insight[] {
 
   const cash = facts.cashDifferences.filter(
     (s) =>
-      (s.difference.startsWith('-') ? toScaled(s.difference.slice(1), 2) : toScaled(s.difference, 2)) >=
-      toScaled(insightThresholds.cashDifference, 2),
+      (s.difference.startsWith('-')
+        ? toScaled(s.difference.slice(1), 2)
+        : toScaled(s.difference, 2)) >= toScaled(insightThresholds.cashDifference, 2),
   );
   if (cash.length)
     found.push({
@@ -533,7 +571,11 @@ export function buildInsights(facts: InsightFacts): Insight[] {
       severity: 'attention',
       title: `${facts.deadStock.count} products have not sold in ${facts.deadStock.days} days`,
       detail: 'Stock is on the shelf but not moving.',
-      impact: { amount: money(facts.deadStock.value), label: 'Inventory cost tied up', estimate: false },
+      impact: {
+        amount: money(facts.deadStock.value),
+        label: 'Inventory cost tied up',
+        estimate: false,
+      },
       action: { label: 'View products', to: '/products' },
     });
 

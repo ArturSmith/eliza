@@ -483,6 +483,93 @@ export type Supplier = SupplierInput & {
   version: number;
   createdAt: string;
 };
+
+// A supplier's quoted offer for a product. Costs exclude tax, matching purchase_lines.
+export const supplierProductSchema = z.object({
+  supplierId: z.uuid(),
+  productId: z.uuid(),
+  supplierSku: z.string().trim().max(60).default(''),
+  packSize: positiveQuantity.default('1'),
+  packCost: money,
+  leadTimeDays: z.number().int().min(0).max(365).nullable().default(null),
+  minimumOrder: z.union([positiveQuantity, z.null()]).default(null),
+  notes: z.string().trim().max(500).default(''),
+  active: z.boolean().default(true),
+});
+export type SupplierProductInput = z.infer<typeof supplierProductSchema>;
+export type SupplierProduct = {
+  id: string;
+  supplierId: string;
+  supplierName: string;
+  productId: string;
+  productName: string;
+  sku: string;
+  unit: string;
+  supplierSku: string;
+  packSize: string;
+  packCost: string;
+  unitCost: string;
+  leadTimeDays: number | null;
+  minimumOrder: string | null;
+  notes: string;
+  active: boolean;
+  version: number;
+  lastPaidCost: string | null;
+  lastDeliveredAt: string | null;
+  deliveries: number;
+};
+
+/**
+ * Cost of one selling unit, derived from a pack price.
+ *
+ * Comparing pack prices directly would rank suppliers wrongly whenever their
+ * pack sizes differ: a 250.00 case of 12 is cheaper per jar than a 22.00 single,
+ * even though 250 > 22. Every supplier comparison must rank on this value.
+ */
+export function unitCost(packCost: string, packSize: string): string | null {
+  const cost = toScaled(packCost, 2);
+  const size = toScaled(packSize, 3);
+  if (size <= 0n) return null;
+  // Scale to four decimals so small-unit items (grams, millilitres) do not
+  // collapse to zero. Rounding must happen at the final scale, so the half
+  // adjustment is applied in one division rather than two.
+  return fromScaled((cost * 100000n + size / 2n) / size, 4);
+}
+
+/**
+ * Ranks supplier offers for one product, cheapest first.
+ *
+ * Offers whose unit cost cannot be determined are returned last and flagged
+ * rather than treated as free, so an incomplete row can never win a comparison.
+ */
+export function compareOffers<T extends { packCost: string; packSize: string; active: boolean }>(
+  offers: T[],
+): (T & { unitCost: string | null; cheapest: boolean; premiumPercent: number | null })[] {
+  const priced = offers.map((offer) => ({
+    ...offer,
+    unitCost: unitCost(offer.packCost, offer.packSize),
+  }));
+  const comparable = priced.filter((o) => o.active && o.unitCost !== null);
+  comparable.sort((a, b) => Number(toScaled(a.unitCost!, 4) - toScaled(b.unitCost!, 4)));
+  const best = comparable.length ? toScaled(comparable[0].unitCost!, 4) : null;
+  return priced
+    .map((offer) => {
+      const value = offer.unitCost === null ? null : toScaled(offer.unitCost, 4);
+      return {
+        ...offer,
+        cheapest: best !== null && value !== null && value === best && offer.active,
+        premiumPercent:
+          best === null || value === null || best === 0n
+            ? null
+            : Number(((value - best) * 10000n) / best) / 100,
+      };
+    })
+    .sort((a, b) => {
+      if (a.unitCost === null || !a.active) return 1;
+      if (b.unitCost === null || !b.active) return -1;
+      return Number(toScaled(a.unitCost, 4) - toScaled(b.unitCost, 4));
+    });
+}
 export type PurchaseDraftInput = z.infer<typeof purchaseDraftSchema>;
 export type ReceiptInput = z.infer<typeof receiptInputSchema>;
 export type PurchaseStatus = 'draft' | 'ordered' | 'partially_received' | 'received' | 'cancelled';

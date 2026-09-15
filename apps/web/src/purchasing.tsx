@@ -13,6 +13,7 @@ import { api, ApiError, refresh, useProducts, useSession } from './api';
 import { Field, ErrorMessage, ProductForm, SearchSelect } from './forms';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
+import { SupplierCatalog } from './supplier-products';
 import { formatMoney } from './receipts';
 type Order = {
   close_reason: string;
@@ -155,6 +156,7 @@ export function SuppliersPage() {
   useLanguage();
   const q = useQuery({ queryKey: ['suppliers'], queryFn: () => api<Supplier[]>('/suppliers') });
   const [editing, setEditing] = useState<Supplier | null | undefined>();
+  const [catalogFor, setCatalogFor] = useState<Supplier | undefined>();
   const [search, setSearch] = useState('');
   const rows = (q.data ?? []).filter((s) =>
     [s.name, s.code, s.contactName, s.email, s.phone].some((v) =>
@@ -216,6 +218,9 @@ export function SuppliersPage() {
                       </span>
                     </td>
                     <td className="table-actions-column">
+                      <Button variant="ghost" onClick={() => setCatalogFor(s)}>
+                        {t('Products')}
+                      </Button>
                       <Button variant="ghost" onClick={() => setEditing(s)}>
                         {t('Edit ')}
                       </Button>
@@ -246,6 +251,14 @@ export function SuppliersPage() {
             done={() => setEditing(undefined)}
           />
         )}
+      </Dialog>
+      <Dialog
+        open={catalogFor !== undefined}
+        onOpenChange={(v) => !v && setCatalogFor(undefined)}
+        title={t('Products from {value0}', { value0: catalogFor?.name ?? '' })}
+        description={t('What you can order, and what it costs per selling unit.')}
+      >
+        {catalogFor && <SupplierCatalog supplierId={catalogFor.id} />}
       </Dialog>
     </>
   );

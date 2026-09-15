@@ -2489,6 +2489,19 @@ select {
   align-items: center;
   gap: 8px;
 }
+.shopping-supplier {
+  max-width: 260px;
+  font-size: 13px;
+}
+/* The supplier only needs to appear on paper, where the picker is hidden. */
+.print-only {
+  display: none;
+}
+@media print {
+  .print-only {
+    display: inline;
+  }
+}
 .shopping-qty {
   width: 84px;
   text-align: right;
