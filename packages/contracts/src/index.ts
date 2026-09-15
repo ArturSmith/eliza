@@ -24,6 +24,8 @@ export const permissions = [
   'purchases.write',
   'purchases.receive',
   'purchases.cost',
+  'analytics.view',
+  'analytics.margin',
 ] as const;
 export type Permission = (typeof permissions)[number];
 const short = z.string().trim().min(1).max(120);
@@ -712,3 +714,4 @@ export function productSku(name: string, plu: string): string {
   const stem = name.trim().replace(/\s+/gu, '-');
   return stem.slice(0, 120 - suffix.length) + suffix;
 }
+export * from './analytics.js';

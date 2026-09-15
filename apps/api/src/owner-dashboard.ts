@@ -1,0 +1,1186 @@
+import { Controller, Get, Module, Query, Req, UseGuards } from '@nestjs/common';
+import { z } from 'zod';
+import { AuthModule } from './auth.js';
+import { AccessGuard, Require, parse, type AuthRequest } from './security.js';
+import { Database } from './database.js';
+import {
+  type DateRange,
+  type Period,
+  storeToday,
+  storeHour,
+  periodRange,
+  comparisons,
+  daysBetween,
+  addDays,
+  percentChange,
+  pointChange,
+  grossMargin,
+  averageBasket,
+  ratio,
+  buildInsights,
+  whatChanged,
+  ownerSummary,
+  classifyProduct,
+  dailyVelocity,
+  daysOfStock,
+  defaultThresholds,
+  insightThresholds,
+  type InsightFacts,
+} from '@eliza/contracts';
+
+const date = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((v) => !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v);
+const query = z
+  .object({
+    period: z.enum(['today', 'week', 'month', 'custom']).default('today'),
+    from: date.optional(),
+    to: date.optional(),
+    deadDays: z.coerce.number().int().min(7).max(365).default(defaultThresholds.deadDays),
+  })
+  .refine((v) => v.period !== 'custom' || (v.from && v.to), 'A custom range needs both dates')
+  .refine((v) => !v.from || !v.to || v.from <= v.to, 'Start date must not follow end date');
+
+const num = (value: unknown) => Number(value ?? 0);
+const money = (value: unknown) => String(value ?? '0');
+
+type Store = { id: string; timezone: string; currency: string };
+
+@Controller('reports')
+@UseGuards(AccessGuard)
+export class OwnerDashboardController {
+  constructor(private database: Database) {}
+
+  /**
+   * One request serves the whole dashboard. Every block is derived from the same
+   * period and baselines so the screen can never show two different versions of a
+   * number. Cost, profit and inventory valuation are omitted entirely unless the
+   * caller holds `analytics.margin` - the server decides, not the UI.
+   */
+  @Get('owner-dashboard') @Require('analytics.view') async dashboard(
+    @Query() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(query, input);
+    const store = req.context.store as Store;
+    const margin = req.context.user.permissions.includes('analytics.margin');
+    const now = new Date();
+    const today = storeToday(now, store.timezone);
+    const hour = storeHour(now, store.timezone);
+    const period = b.period as Period;
+    const range: DateRange =
+      period === 'custom' ? { from: b.from!, to: b.to! } : periodRange(period, today);
+    const baselines = period === 'custom' ? [] : comparisons(period, range);
+    const days = daysBetween(range.from, range.to);
+    // Today is only part-done, so earlier days are cut at the same clock time.
+    const cutoff = period === 'today' ? hour : null;
+
+    const history = await this.history(store);
+    const current = await this.totals(store, range, cutoff, margin);
+    const compared = [];
+    for (const baseline of baselines) {
+      const length = daysBetween(baseline.range.from, baseline.range.to);
+      const totals = await this.totals(store, baseline.range, cutoff, margin);
+      // A multi-day averaging window is scaled back to one comparable period.
+      const scale = baseline.key === 'weekdayAverage' ? length / 7 : length / days;
+      const divisor = baseline.key === 'weekdayAverage' || baseline.key === 'fourWeekAverage' ? scale : 1;
+      compared.push({
+        ...baseline,
+        available: history.days >= length,
+        totals: divisor > 1 ? scaleTotals(totals, divisor) : totals,
+      });
+    }
+    const primary = compared[0];
+    const kpis = this.kpis(current, primary?.totals ?? null, margin);
+
+    const [
+      hourly,
+      categories,
+      products,
+      inventory,
+      waste,
+      purchasing,
+      suppliers,
+      discounts,
+      refunds,
+      shifts,
+      registers,
+      employees,
+      readiness,
+      marginTrend,
+    ] = await Promise.all([
+      this.hourly(store, range, baselines, cutoff),
+      this.categories(store, range, primary?.range ?? null, margin),
+      this.products(store, range, margin, b.deadDays, history.days),
+      margin ? this.inventory(store, b.deadDays) : null,
+      this.waste(store, range, primary?.range ?? null, margin),
+      this.purchasing(store, range, primary?.range ?? null),
+      this.suppliers(store, range),
+      this.discounts(store, range, primary?.range ?? null),
+      this.refunds(store, range, primary?.range ?? null),
+      this.shifts(store, range),
+      this.registers(store, range),
+      this.employees(store, range),
+      this.readiness(store),
+      margin ? this.marginTrend(store, today) : null,
+    ]);
+
+    const facts = this.facts(store, {
+      current,
+      previous: primary?.totals ?? null,
+      history,
+      products,
+      inventory,
+      waste,
+      purchasing,
+      refunds,
+      discounts,
+      shifts,
+      readiness,
+      deadDays: b.deadDays,
+    });
+    const insights = buildInsights(facts);
+
+    const drivers: string[] = [];
+    if (purchasing.costIncreases.length) drivers.push('supplier cost increases');
+    if ((discounts.change ?? 0) > 5) drivers.push('higher discounting');
+    if ((waste.change ?? 0) > 5) drivers.push('more waste');
+    const changed = whatChanged({
+      revenueChange: kpis.revenue.change,
+      grossProfitChange: kpis.grossProfit.change,
+      marginPointChange: kpis.grossMargin.change,
+      categories: categories.rows.map((c: any) => ({
+        label: c.category,
+        change: c.change,
+        revenue: c.revenue,
+      })),
+      costIncreaseCount: purchasing.costIncreases.length,
+      discountChange: discounts.change,
+      wasteChange: waste.change,
+      refundChange: refunds.change,
+    });
+
+    return {
+      period,
+      range,
+      today,
+      hour,
+      timezone: store.timezone,
+      currency: store.currency,
+      permissions: { margin },
+      history,
+      comparisons: compared.map((c) => ({
+        key: c.key,
+        label: c.label,
+        range: c.range,
+        available: c.available,
+      })),
+      kpis,
+      pace: period === 'today' ? this.pace(current, compared, hour) : null,
+      insights,
+      whatChanged: changed,
+      summary:
+        period === 'today'
+          ? null
+          : ownerSummary({
+              period,
+              revenueChange: kpis.revenue.change,
+              grossProfitChange: kpis.grossProfit.change,
+              marginPointChange: kpis.grossMargin.change,
+              drivers,
+              wasteChange: waste.change,
+            }),
+      hourly,
+      categories,
+      products,
+      inventory,
+      waste,
+      purchasing,
+      suppliers,
+      discounts,
+      refunds,
+      shifts,
+      registers,
+      employees,
+      readiness,
+      marginTrend,
+      /** Blocks the dashboard deliberately does not show, and why. */
+      unavailable: [
+        {
+          metric: 'operatingExpenses',
+          reason: 'This application does not record operating expenses yet.',
+        },
+        ...(margin
+          ? []
+          : [{ metric: 'grossProfit', reason: 'Requires the analytics.margin permission.' }]),
+      ],
+    };
+  }
+
+  /** Sales, units, tax, discounts, refunds and - when permitted - COGS for a window. */
+  private async totals(store: Store, range: DateRange, cutoff: string | null, margin: boolean) {
+    const row = (
+      await this.database.pool.query(
+        `WITH bounds AS (
+ SELECT ($2::date::timestamp AT TIME ZONE $4) AS start,(($3::date+1)::timestamp AT TIME ZONE $4) AS finish
+), sold AS (
+ SELECT s.id,s.total,s.tax,s.discount FROM sales s CROSS JOIN bounds b
+ WHERE s.store_id=$1 AND s.created_at>=b.start AND s.created_at<b.finish
+ AND ($5::text IS NULL OR to_char(s.created_at AT TIME ZONE $4,'HH24')<=$5)
+), items AS (
+ SELECT i.product_id,i.quantity,i.cost,i.price,i.total
+ FROM sale_items i JOIN sold s ON s.id=i.sale_id WHERE i.store_id=$1
+), costs AS (
+ SELECT COALESCE(sum(round(i.cost*i.quantity,2)),0) AS cogs,
+ count(*) FILTER(WHERE i.cost IS NULL) AS missing,
+ COALESCE(sum(i.quantity),0) AS units FROM items i
+), returned AS (
+ SELECT COALESCE(sum(l.total),0) AS total,COALESCE(sum(l.tax),0) AS tax,
+ COALESCE(sum(l.quantity),0) AS units,count(DISTINCT r.id) AS count,
+ COALESCE(sum(CASE WHEN l.restock THEN round(COALESCE(c.cost,0)*l.quantity,2) ELSE 0 END),0) AS restored
+ FROM refunds r JOIN refund_lines l ON l.refund_id=r.id AND l.store_id=r.store_id
+ CROSS JOIN bounds b
+ LEFT JOIN LATERAL (SELECT i.cost FROM sale_items i WHERE i.sale_id=l.sale_id AND i.product_id=l.product_id AND i.store_id=$1 LIMIT 1) c ON true
+ WHERE r.store_id=$1 AND r.created_at>=b.start AND r.created_at<b.finish
+ AND ($5::text IS NULL OR to_char(r.created_at AT TIME ZONE $4,'HH24')<=$5)
+)
+SELECT (SELECT count(*) FROM sold)::text AS transactions,
+ COALESCE((SELECT sum(total) FROM sold),0)::text AS "grossSales",
+ COALESCE((SELECT sum(tax) FROM sold),0)::text AS tax,
+ COALESCE((SELECT sum(discount) FROM sold),0)::text AS discount,
+ (SELECT units FROM costs)::text AS units,
+ (SELECT total FROM returned)::text AS refunds,
+ (SELECT count FROM returned)::text AS "refundCount",
+ (SELECT units FROM returned)::text AS "refundUnits",
+ (SELECT missing FROM costs)::text AS "missingCost",
+ CASE WHEN $6 THEN ((SELECT cogs FROM costs)-(SELECT restored FROM returned))::text END AS cogs`,
+        [store.id, range.from, range.to, store.timezone, cutoff, margin],
+      )
+    ).rows[0];
+    // Revenue is net of tax and refunds so it can be compared against cost of goods.
+    const grossExTax = num(row.grossSales) - num(row.tax);
+    const refundsExTax = num(row.refunds) - 0;
+    const revenue = grossExTax - refundsExTax;
+    const cogs = margin && row.cogs !== null ? num(row.cogs) : null;
+    const missing = num(row.missingCost);
+    const profit = cogs === null || missing > 0 ? null : revenue - cogs;
+    return {
+      transactions: num(row.transactions),
+      grossSales: money(row.grossSales),
+      revenue,
+      tax: num(row.tax),
+      discount: num(row.discount),
+      units: num(row.units),
+      refunds: num(row.refunds),
+      refundCount: num(row.refundCount),
+      cogs,
+      grossProfit: profit,
+      grossMargin: grossMargin(profit, revenue),
+      averageBasket: averageBasket(revenue, num(row.transactions)),
+      missingCost: missing,
+    };
+  }
+
+  private kpis(current: any, previous: any, margin: boolean) {
+    const compare = (key: string, value: number | null, before: number | null) => ({
+      value,
+      previous: before,
+      change: value === null || before === null ? null : percentChange(value, before),
+      metric: key,
+    });
+    return {
+      revenue: compare('revenue', current.revenue, previous?.revenue ?? null),
+      grossProfit: margin
+        ? compare('grossProfit', current.grossProfit, previous?.grossProfit ?? null)
+        : { value: null, previous: null, change: null, metric: 'grossProfit', restricted: true },
+      grossMargin: {
+        value: current.grossMargin,
+        previous: previous?.grossMargin ?? null,
+        // Margin moves in percentage points, not percent of a percent.
+        change: pointChange(current.grossMargin, previous?.grossMargin ?? null),
+        unit: 'points',
+        metric: 'grossMargin',
+        restricted: !margin,
+      },
+      transactions: compare('transactions', current.transactions, previous?.transactions ?? null),
+      averageBasket: compare(
+        'averageBasket',
+        current.averageBasket,
+        previous?.averageBasket ?? null,
+      ),
+      refunds: compare('refunds', current.refunds, previous?.refunds ?? null),
+      discounts: compare('discounts', current.discount, previous?.discount ?? null),
+      units: compare('units', current.units, previous?.units ?? null),
+    };
+  }
+
+  /** Sales pace against the same clock time on comparable days. */
+  private pace(current: any, compared: any[], hour: string) {
+    const baseline = compared.find((c) => c.key === 'weekdayAverage') ?? compared[0];
+    if (!baseline?.available) return null;
+    return {
+      hour,
+      label: baseline.label,
+      current: current.revenue,
+      baseline: baseline.totals.revenue,
+      change: percentChange(current.revenue, baseline.totals.revenue),
+    };
+  }
+
+  /** Hourly sales for the day, with the comparable-day average overlaid. */
+  private async hourly(
+    store: Store,
+    range: DateRange,
+    baselines: { key: string; range: DateRange }[],
+    cutoff: string | null,
+  ) {
+    const overlay = baselines.find((c) => c.key === 'weekdayAverage')?.range;
+    const rows = (
+      await this.database.pool.query(
+        `SELECT to_char(s.created_at AT TIME ZONE $4,'HH24') AS hour,
+ sum(s.total)::text AS total,count(*)::text AS transactions
+ FROM sales s WHERE s.store_id=$1
+ AND s.created_at>=($2::date::timestamp AT TIME ZONE $4)
+ AND s.created_at<(($3::date+1)::timestamp AT TIME ZONE $4)
+ GROUP BY 1 ORDER BY 1`,
+        [store.id, range.from, range.to, store.timezone],
+      )
+    ).rows;
+    let comparison: Record<string, number> = {};
+    if (overlay) {
+      const weekdays = (
+        await this.database.pool.query(
+          `SELECT to_char(s.created_at AT TIME ZONE $4,'HH24') AS hour,
+ sum(s.total)/GREATEST(count(DISTINCT (s.created_at AT TIME ZONE $4)::date),1) AS average
+ FROM sales s WHERE s.store_id=$1
+ AND s.created_at>=($2::date::timestamp AT TIME ZONE $4)
+ AND s.created_at<(($3::date+1)::timestamp AT TIME ZONE $4)
+ AND extract(isodow from s.created_at AT TIME ZONE $4)=extract(isodow from $5::date)
+ GROUP BY 1`,
+          [store.id, overlay.from, overlay.to, store.timezone, range.from],
+        )
+      ).rows;
+      comparison = Object.fromEntries(weekdays.map((r: any) => [r.hour, num(r.average)]));
+    }
+    const byHour = new Map(rows.map((r: any) => [r.hour, r]));
+    return Array.from({ length: 24 }, (_, i) => {
+      const key = String(i).padStart(2, '0');
+      const row: any = byHour.get(key);
+      return {
+        hour: key,
+        total: row ? num(row.total) : 0,
+        transactions: row ? num(row.transactions) : 0,
+        comparison: comparison[key] ?? null,
+        elapsed: cutoff === null || key <= cutoff,
+      };
+    });
+  }
+
+  /** Category revenue, profit and share, with growth against the baseline window. */
+  private async categories(
+    store: Store,
+    range: DateRange,
+    previous: DateRange | null,
+    margin: boolean,
+  ) {
+    const rows = (
+      await this.database.pool.query(
+        `WITH windows AS (
+ SELECT 'current' AS phase,$2::date AS from_day,$3::date AS to_day
+ UNION ALL SELECT 'previous',$5::date,$6::date WHERE $5 IS NOT NULL
+), lines AS (
+ SELECT w.phase,COALESCE(p.category,'Uncategorised') AS category,
+ i.quantity,i.total,i.cost,i.price
+ FROM windows w JOIN sales s ON s.store_id=$1
+ AND s.created_at>=(w.from_day::timestamp AT TIME ZONE $4)
+ AND s.created_at<((w.to_day+1)::timestamp AT TIME ZONE $4)
+ JOIN sale_items i ON i.sale_id=s.id AND i.store_id=$1
+ LEFT JOIN products p ON p.id=i.product_id AND p.store_id=$1
+)
+SELECT phase,category,sum(total)::text AS revenue,sum(quantity)::text AS units,
+ CASE WHEN $7 AND count(*) FILTER(WHERE cost IS NULL)=0
+  THEN (sum(total)-sum(round(cost*quantity,2)))::text END AS "grossProfit"
+ FROM lines GROUP BY phase,category ORDER BY sum(total) DESC`,
+        [
+          store.id,
+          range.from,
+          range.to,
+          store.timezone,
+          previous?.from ?? null,
+          previous?.to ?? null,
+          margin,
+        ],
+      )
+    ).rows;
+    const before = new Map(
+      rows.filter((r: any) => r.phase === 'previous').map((r: any) => [r.category, r]),
+    );
+    const currentRows = rows.filter((r: any) => r.phase === 'current');
+    const total = currentRows.reduce((sum: number, r: any) => sum + num(r.revenue), 0);
+    return {
+      total,
+      rows: currentRows.map((r: any) => {
+        const prior: any = before.get(r.category);
+        const profit = r.grossProfit === null ? null : num(r.grossProfit);
+        return {
+          category: r.category,
+          revenue: money(r.revenue),
+          units: money(r.units),
+          grossProfit: r.grossProfit,
+          margin: grossMargin(profit, num(r.revenue)),
+          share: ratio(num(r.revenue), total),
+          change: prior ? percentChange(num(r.revenue), num(prior.revenue)) : null,
+        };
+      }),
+    };
+  }
+
+  /**
+   * Product rankings and portfolio classification in one pass. Velocity uses the
+   * selected window; dead-stock uses the product's true last sale date.
+   */
+  private async products(
+    store: Store,
+    range: DateRange,
+    margin: boolean,
+    deadDays: number,
+    historyDays: number,
+  ) {
+    const days = daysBetween(range.from, range.to);
+    const rows = (
+      await this.database.pool.query(
+        `WITH bounds AS (
+ SELECT ($2::date::timestamp AT TIME ZONE $4) AS start,(($3::date+1)::timestamp AT TIME ZONE $4) AS finish
+), sold AS (
+ SELECT i.product_id,sum(i.quantity) AS units,sum(i.total) AS revenue,
+ sum(round(i.cost*i.quantity,2)) AS cost,count(*) FILTER(WHERE i.cost IS NULL) AS missing
+ FROM sale_items i JOIN sales s ON s.id=i.sale_id AND s.store_id=$1 CROSS JOIN bounds b
+ WHERE i.store_id=$1 AND s.created_at>=b.start AND s.created_at<b.finish
+ GROUP BY i.product_id
+), returned AS (
+ SELECT l.product_id,sum(l.total) AS total,sum(l.quantity) AS units
+ FROM refund_lines l JOIN refunds r ON r.id=l.refund_id AND r.store_id=l.store_id CROSS JOIN bounds b
+ WHERE l.store_id=$1 AND r.created_at>=b.start AND r.created_at<b.finish GROUP BY l.product_id
+), last_sale AS (
+ SELECT i.product_id,max(s.created_at) AS sold_at FROM sale_items i
+ JOIN sales s ON s.id=i.sale_id AND s.store_id=$1 WHERE i.store_id=$1 GROUP BY i.product_id
+), week AS (
+ SELECT i.product_id,sum(i.quantity) AS units,sum(i.total) AS revenue
+ FROM sale_items i JOIN sales s ON s.id=i.sale_id AND s.store_id=$1
+ WHERE i.store_id=$1 AND s.created_at>=now()-interval '7 days' GROUP BY i.product_id
+)
+SELECT p.id,p.name,p.sku,p.category,p.unit,p.stock::text,p.min_stock::text AS "minStock",
+ p.price::text,p.active,
+ CASE WHEN $5 THEN p.cost::text END AS cost,
+ COALESCE(sold.units,0)::text AS units,COALESCE(sold.revenue,0)::text AS revenue,
+ COALESCE(returned.total,0)::text AS refunds,
+ COALESCE(week.units,0)::text AS "weeklyUnits",COALESCE(week.revenue,0)::text AS "weeklyRevenue",
+ CASE WHEN $5 AND COALESCE(sold.missing,0)=0 THEN COALESCE(sold.cost,0)::text END AS "soldCost",
+ CASE WHEN last_sale.sold_at IS NULL THEN NULL
+  ELSE floor(extract(epoch from now()-last_sale.sold_at)/86400)::int END AS "daysSinceLastSale"
+ FROM products p
+ LEFT JOIN sold ON sold.product_id=p.id
+ LEFT JOIN returned ON returned.product_id=p.id
+ LEFT JOIN last_sale ON last_sale.product_id=p.id
+ LEFT JOIN week ON week.product_id=p.id
+ WHERE p.store_id=$1`,
+        [store.id, range.from, range.to, store.timezone, margin],
+      )
+    ).rows;
+
+    const enriched = rows.map((r: any) => {
+      const revenue = num(r.revenue);
+      const soldCost = r.soldCost === null ? null : num(r.soldCost);
+      const profit = soldCost === null ? null : revenue - soldCost;
+      const unitMargin =
+        margin && r.cost !== null && num(r.price) > 0
+          ? ((num(r.price) - num(r.cost)) / num(r.price)) * 100
+          : null;
+      const velocity = dailyVelocity(r.units, days);
+      return {
+        id: r.id,
+        name: r.name,
+        sku: r.sku,
+        category: r.category ?? 'Uncategorised',
+        unit: r.unit,
+        active: r.active,
+        stock: r.stock,
+        minStock: r.minStock,
+        price: r.price,
+        cost: r.cost,
+        units: r.units,
+        revenue: r.revenue,
+        refunds: r.refunds,
+        weeklyUnits: r.weeklyUnits,
+        weeklyRevenue: r.weeklyRevenue,
+        grossProfit: profit,
+        margin: grossMargin(profit, revenue),
+        unitMargin,
+        velocity,
+        daysOfStock: daysOfStock(r.stock, velocity),
+        daysSinceLastSale: r.daysSinceLastSale,
+        portfolio: classifyProduct(
+          {
+            units: r.units,
+            revenue: r.revenue,
+            grossProfit: profit === null ? null : String(profit),
+            margin: unitMargin,
+            stock: r.stock,
+            daysSinceLastSale: r.daysSinceLastSale,
+            historyDays,
+          },
+          { ...defaultThresholds, deadDays },
+        ),
+      };
+    });
+
+    const top = (key: string, count = 10) =>
+      [...enriched]
+        .filter((p: any) => num(p[key]) > 0)
+        .sort((a: any, b: any) => num(b[key]) - num(a[key]))
+        .slice(0, count);
+    const buckets: Record<string, number> = {};
+    for (const p of enriched) buckets[p.portfolio] = (buckets[p.portfolio] ?? 0) + 1;
+    const totalProfit = enriched.reduce((s, p) => s + (p.grossProfit ?? 0), 0);
+    const byProfit = [...enriched]
+      .filter((p) => (p.grossProfit ?? 0) > 0)
+      .sort((a, b) => (b.grossProfit ?? 0) - (a.grossProfit ?? 0));
+    let running = 0;
+    let vital = 0;
+    for (const p of byProfit) {
+      if (running >= totalProfit * 0.8) break;
+      running += p.grossProfit ?? 0;
+      vital += 1;
+    }
+
+    return {
+      days,
+      byRevenue: top('revenue'),
+      byUnits: top('units'),
+      byProfit: margin
+        ? [...enriched]
+            .filter((p) => p.grossProfit !== null)
+            .sort((a, b) => (b.grossProfit ?? 0) - (a.grossProfit ?? 0))
+            .slice(0, 10)
+        : [],
+      byRefunds: top('refunds', 5),
+      declining: [],
+      lowMargin: margin
+        ? enriched
+            .filter((p) => p.unitMargin !== null && p.unitMargin < 5 && p.active)
+            .sort((a, b) => (a.unitMargin ?? 0) - (b.unitMargin ?? 0))
+            .slice(0, 10)
+        : [],
+      runningOut: enriched
+        .filter(
+          (p) =>
+            p.active &&
+            p.daysOfStock !== null &&
+            p.daysOfStock <= insightThresholds.runningOutDays,
+        )
+        .sort((a, b) => (a.daysOfStock ?? 0) - (b.daysOfStock ?? 0))
+        .slice(0, 10),
+      portfolio: {
+        buckets,
+        deadDays,
+        /** Products generating the first 80% of gross profit. */
+        vitalFew: margin ? { count: vital, share: ratio(running, totalProfit) } : null,
+      },
+      classified: enriched.filter((p) => p.portfolio !== 'unclassified').length,
+      all: enriched.length,
+    };
+  }
+
+  /** Stock value, cover and dead stock. Only reachable with margin permission. */
+  private async inventory(store: Store, deadDays: number) {
+    const row = (
+      await this.database.pool.query(
+        `WITH last_sale AS (
+ SELECT i.product_id,max(s.created_at) AS sold_at FROM sale_items i
+ JOIN sales s ON s.id=i.sale_id AND s.store_id=$1 WHERE i.store_id=$1 GROUP BY i.product_id
+), stocked AS (
+ SELECT p.id,p.stock,p.cost,p.min_stock,p.active,l.sold_at,
+ (p.stock>0) AS holds_stock,
+ (l.sold_at IS NULL OR l.sold_at<now()-($2||' days')::interval) AS stale
+ FROM products p LEFT JOIN last_sale l ON l.product_id=p.id WHERE p.store_id=$1
+)
+SELECT
+ COALESCE(sum(round(stock*cost,2)) FILTER(WHERE holds_stock),0)::text AS value,
+ count(*) FILTER(WHERE holds_stock)::text AS "inStock",
+ count(*) FILTER(WHERE active AND stock<=0)::text AS "outOfStock",
+ count(*) FILTER(WHERE active AND stock>0 AND stock<=min_stock)::text AS "lowStock",
+ count(*) FILTER(WHERE holds_stock AND stale)::text AS "deadCount",
+ COALESCE(sum(round(stock*cost,2)) FILTER(WHERE holds_stock AND stale),0)::text AS "deadValue",
+ count(*) FILTER(WHERE holds_stock AND cost=0)::text AS "missingCost",
+ COALESCE(sum(round(stock*cost,2)) FILTER(WHERE holds_stock AND cost=0),0)::text AS "uncostedValue"
+ FROM stocked`,
+        [store.id, String(deadDays)],
+      )
+    ).rows[0];
+    const byCategory = (
+      await this.database.pool.query(
+        `SELECT COALESCE(category,'Uncategorised') AS category,
+ sum(round(stock*cost,2))::text AS value,count(*)::text AS products
+ FROM products WHERE store_id=$1 AND stock>0 GROUP BY 1 ORDER BY 2 DESC LIMIT 12`,
+        [store.id],
+      )
+    ).rows;
+    return {
+      value: money(row.value),
+      inStock: num(row.inStock),
+      outOfStock: num(row.outOfStock),
+      lowStock: num(row.lowStock),
+      dead: { count: num(row.deadCount), value: money(row.deadValue), days: deadDays },
+      // Missing cost means the valuation is understated, so it is stated outright.
+      missingCost: num(row.missingCost),
+      byCategory,
+    };
+  }
+
+  /** Damaged, expired and internal-use removals valued at product cost. */
+  private async waste(
+    store: Store,
+    range: DateRange,
+    previous: DateRange | null,
+    margin: boolean,
+  ) {
+    const rows = (
+      await this.database.pool.query(
+        `WITH windows AS (
+ SELECT 'current' AS phase,$2::date AS from_day,$3::date AS to_day
+ UNION ALL SELECT 'previous',$5::date,$6::date WHERE $5 IS NOT NULL
+)
+SELECT w.phase,m.reason,COALESCE(p.category,'Uncategorised') AS category,
+ sum(abs(m.quantity))::text AS units,
+ sum(round(abs(m.quantity)*p.cost,2))::text AS value
+ FROM windows w JOIN movements m ON m.store_id=$1
+ AND m.created_at>=(w.from_day::timestamp AT TIME ZONE $4)
+ AND m.created_at<((w.to_day+1)::timestamp AT TIME ZONE $4)
+ JOIN products p ON p.id=m.product_id AND p.store_id=$1
+ WHERE m.reason IN ('damaged','expired','internal_use') AND m.quantity<0
+ GROUP BY w.phase,m.reason,category`,
+        [
+          store.id,
+          range.from,
+          range.to,
+          store.timezone,
+          previous?.from ?? null,
+          previous?.to ?? null,
+        ],
+      )
+    ).rows;
+    const sum = (phase: string) =>
+      rows.filter((r: any) => r.phase === phase).reduce((s: number, r: any) => s + num(r.value), 0);
+    const current = sum('current');
+    const before = previous ? sum('previous') : null;
+    const byReason: Record<string, number> = {};
+    const byCategory: Record<string, number> = {};
+    for (const r of rows.filter((r: any) => r.phase === 'current')) {
+      byReason[r.reason] = (byReason[r.reason] ?? 0) + num(r.value);
+      byCategory[r.category] = (byCategory[r.category] ?? 0) + num(r.value);
+    }
+    return {
+      value: current,
+      previous: before,
+      change: before === null ? null : percentChange(current, before),
+      byReason,
+      byCategory: Object.entries(byCategory)
+        .map(([category, value]) => ({ category, value, share: ratio(value, current) }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 8),
+      available: margin,
+    };
+  }
+
+  /** Purchase spend plus per-product cost movement between the two most recent receipts. */
+  private async purchasing(store: Store, range: DateRange, previous: DateRange | null) {
+    const spend = (
+      await this.database.pool.query(
+        `WITH windows AS (
+ SELECT 'current' AS phase,$2::date AS from_day,$3::date AS to_day
+ UNION ALL SELECT 'previous',$5::date,$6::date WHERE $5 IS NOT NULL
+)
+SELECT w.phase,COALESCE(sum(g.total),0)::text AS received,count(g.id)::text AS deliveries
+ FROM windows w LEFT JOIN goods_receipts g ON g.store_id=$1
+ AND g.created_at>=(w.from_day::timestamp AT TIME ZONE $4)
+ AND g.created_at<((w.to_day+1)::timestamp AT TIME ZONE $4)
+ GROUP BY w.phase`,
+        [
+          store.id,
+          range.from,
+          range.to,
+          store.timezone,
+          previous?.from ?? null,
+          previous?.to ?? null,
+        ],
+      )
+    ).rows;
+    const outstanding = (
+      await this.database.pool.query(
+        `SELECT COALESCE(sum((l.ordered_quantity-l.received_quantity)*l.unit_cost),0)::text AS value,
+ count(DISTINCT o.id)::text AS orders
+ FROM purchases o JOIN purchase_lines l ON l.purchase_id=o.id AND l.store_id=o.store_id
+ WHERE o.store_id=$1 AND o.status IN ('ordered','partially_received')`,
+        [store.id],
+      )
+    ).rows[0];
+    // Compare each product's two most recent received unit costs.
+    const changes = (
+      await this.database.pool.query(
+        `WITH receipts AS (
+ SELECT l.product_id,l.unit_cost,g.created_at,
+ row_number() OVER(PARTITION BY l.product_id ORDER BY g.created_at DESC) AS rank
+ FROM goods_receipt_lines l JOIN goods_receipts g ON g.id=l.receipt_id AND g.store_id=l.store_id
+ WHERE l.store_id=$1
+), paired AS (
+ SELECT c.product_id,c.unit_cost AS current_cost,p.unit_cost AS previous_cost,c.created_at
+ FROM receipts c JOIN receipts p ON p.product_id=c.product_id AND p.rank=2
+ WHERE c.rank=1 AND p.unit_cost>0 AND c.unit_cost<>p.unit_cost
+), week AS (
+ SELECT i.product_id,sum(i.quantity) AS units FROM sale_items i
+ JOIN sales s ON s.id=i.sale_id AND s.store_id=$1
+ WHERE i.store_id=$1 AND s.created_at>=now()-interval '7 days' GROUP BY i.product_id
+)
+SELECT pr.id,pr.name,pr.sku,pr.price::text,pr.cost::text,
+ paired.previous_cost::text AS "previousCost",paired.current_cost::text AS "currentCost",
+ round((paired.current_cost-paired.previous_cost)*100/paired.previous_cost,2)::float AS percent,
+ paired.created_at AS "changedAt",
+ COALESCE(week.units,0)::text AS "weeklyUnits",
+ (pr.price<=paired.previous_cost*pr.price/NULLIF(paired.previous_cost,0)) AS unchanged
+ FROM paired JOIN products pr ON pr.id=paired.product_id AND pr.store_id=$1
+ LEFT JOIN week ON week.product_id=paired.product_id
+ ORDER BY abs(paired.current_cost-paired.previous_cost)/paired.previous_cost DESC LIMIT 50`,
+        [store.id],
+      )
+    ).rows;
+    const current = spend.find((r: any) => r.phase === 'current');
+    const before = spend.find((r: any) => r.phase === 'previous');
+    const increases = changes.filter((r: any) => r.percent >= insightThresholds.costIncreasePercent);
+    return {
+      received: money(current?.received),
+      deliveries: num(current?.deliveries),
+      change: before ? percentChange(num(current?.received), num(before.received)) : null,
+      outstanding: { value: money(outstanding.value), orders: num(outstanding.orders) },
+      costIncreases: increases.map((r: any) => ({
+        id: r.id,
+        label: r.name,
+        sku: r.sku,
+        previousCost: r.previousCost,
+        currentCost: r.currentCost,
+        percent: r.percent,
+        price: r.price,
+        weeklyUnits: r.weeklyUnits,
+        // The retail price has not been raised since the cost went up.
+        priceUnchanged: num(r.price) > 0 && num(r.cost) >= num(r.currentCost),
+      })),
+      costDecreases: changes
+        .filter((r: any) => r.percent <= -insightThresholds.costIncreasePercent)
+        .map((r: any) => ({
+          id: r.id,
+          label: r.name,
+          previousCost: r.previousCost,
+          currentCost: r.currentCost,
+          percent: r.percent,
+        })),
+    };
+  }
+
+  private async suppliers(store: Store, range: DateRange) {
+    const rows = (
+      await this.database.pool.query(
+        `SELECT s.id,s.name,COALESCE(sum(g.total),0)::text AS spend,count(g.id)::text AS deliveries,
+ (SELECT count(DISTINCT l.product_id) FROM purchase_lines l JOIN purchases o ON o.id=l.purchase_id
+  WHERE o.supplier_id=s.id AND o.store_id=$1)::text AS products
+ FROM suppliers s
+ LEFT JOIN purchases o ON o.supplier_id=s.id AND o.store_id=$1
+ LEFT JOIN goods_receipts g ON g.purchase_id=o.id AND g.store_id=$1
+ AND g.created_at>=($2::date::timestamp AT TIME ZONE $4)
+ AND g.created_at<(($3::date+1)::timestamp AT TIME ZONE $4)
+ WHERE s.store_id=$1 GROUP BY s.id,s.name ORDER BY 3 DESC`,
+        [store.id, range.from, range.to, store.timezone],
+      )
+    ).rows;
+    const total = rows.reduce((s: number, r: any) => s + num(r.spend), 0);
+    return {
+      total,
+      rows: rows
+        .filter((r: any) => num(r.spend) > 0)
+        .map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          spend: r.spend,
+          deliveries: num(r.deliveries),
+          products: num(r.products),
+          share: ratio(num(r.spend), total),
+        })),
+    };
+  }
+
+  private async discounts(store: Store, range: DateRange, previous: DateRange | null) {
+    const rows = (
+      await this.database.pool.query(
+        `WITH windows AS (
+ SELECT 'current' AS phase,$2::date AS from_day,$3::date AS to_day
+ UNION ALL SELECT 'previous',$5::date,$6::date WHERE $5 IS NOT NULL
+)
+SELECT w.phase,COALESCE(sum(s.discount),0)::text AS value,
+ COALESCE(sum(s.total),0)::text AS sales,
+ count(*) FILTER(WHERE s.discount>0)::text AS "discountedSales",
+ COALESCE(s2.name,'Unknown') AS cashier,s.employee_id AS "employeeId"
+ FROM windows w LEFT JOIN sales s ON s.store_id=$1
+ AND s.created_at>=(w.from_day::timestamp AT TIME ZONE $4)
+ AND s.created_at<((w.to_day+1)::timestamp AT TIME ZONE $4)
+ LEFT JOIN employees s2 ON s2.id=s.employee_id AND s2.store_id=$1
+ GROUP BY w.phase,s2.name,s.employee_id`,
+        [
+          store.id,
+          range.from,
+          range.to,
+          store.timezone,
+          previous?.from ?? null,
+          previous?.to ?? null,
+        ],
+      )
+    ).rows;
+    const total = (phase: string) =>
+      rows.filter((r: any) => r.phase === phase).reduce((s: number, r: any) => s + num(r.value), 0);
+    const sales = rows
+      .filter((r: any) => r.phase === 'current')
+      .reduce((s: number, r: any) => s + num(r.sales), 0);
+    const current = total('current');
+    const before = previous ? total('previous') : null;
+    return {
+      value: current,
+      previous: before,
+      change: before === null ? null : percentChange(current, before),
+      rate: ratio(current, sales),
+      byCashier: rows
+        .filter((r: any) => r.phase === 'current' && num(r.value) > 0)
+        .map((r: any) => ({
+          id: r.employeeId,
+          name: r.cashier,
+          value: r.value,
+          rate: ratio(num(r.value), num(r.sales)),
+        }))
+        .sort((a: any, b: any) => num(b.value) - num(a.value)),
+    };
+  }
+
+  private async refunds(store: Store, range: DateRange, previous: DateRange | null) {
+    const rows = (
+      await this.database.pool.query(
+        `WITH windows AS (
+ SELECT 'current' AS phase,$2::date AS from_day,$3::date AS to_day
+ UNION ALL SELECT 'previous',$5::date,$6::date WHERE $5 IS NOT NULL
+), sales_by AS (
+ SELECT w.phase,s.device_id,s.employee_id,sum(s.total) AS sales
+ FROM windows w JOIN sales s ON s.store_id=$1
+ AND s.created_at>=(w.from_day::timestamp AT TIME ZONE $4)
+ AND s.created_at<((w.to_day+1)::timestamp AT TIME ZONE $4)
+ GROUP BY w.phase,s.device_id,s.employee_id
+), refunds_by AS (
+ SELECT w.phase,r.device_id,r.employee_id,sum(r.total) AS refunds,count(*) AS count
+ FROM windows w JOIN refunds r ON r.store_id=$1
+ AND r.created_at>=(w.from_day::timestamp AT TIME ZONE $4)
+ AND r.created_at<((w.to_day+1)::timestamp AT TIME ZONE $4)
+ GROUP BY w.phase,r.device_id,r.employee_id
+)
+SELECT COALESCE(s.phase,f.phase) AS phase,
+ COALESCE(d.name,'Unknown register') AS register,COALESCE(e.name,'Unknown') AS cashier,
+ COALESCE(s.device_id,f.device_id) AS "deviceId",
+ COALESCE(s.sales,0)::text AS sales,COALESCE(f.refunds,0)::text AS refunds,
+ COALESCE(f.count,0)::text AS count
+ FROM sales_by s FULL JOIN refunds_by f
+ ON f.phase=s.phase AND f.device_id=s.device_id AND f.employee_id=s.employee_id
+ LEFT JOIN devices d ON d.id=COALESCE(s.device_id,f.device_id) AND d.store_id=$1
+ LEFT JOIN employees e ON e.id=COALESCE(s.employee_id,f.employee_id) AND e.store_id=$1`,
+        [
+          store.id,
+          range.from,
+          range.to,
+          store.timezone,
+          previous?.from ?? null,
+          previous?.to ?? null,
+        ],
+      )
+    ).rows;
+    const phase = (name: string) => rows.filter((r: any) => r.phase === name);
+    const sumBy = (list: any[], key: string) =>
+      list.reduce((s: number, r: any) => s + num(r[key]), 0);
+    const current = sumBy(phase('current'), 'refunds');
+    const before = previous ? sumBy(phase('previous'), 'refunds') : null;
+    const sales = sumBy(phase('current'), 'sales');
+    const rate = ratio(current, sales);
+    const byRegister = new Map<string, { label: string; sales: number; refunds: number }>();
+    for (const r of phase('current')) {
+      const entry = byRegister.get(r.register) ?? { label: r.register, sales: 0, refunds: 0 };
+      entry.sales += num(r.sales);
+      entry.refunds += num(r.refunds);
+      byRegister.set(r.register, entry);
+    }
+    const registers = [...byRegister.entries()].map(([id, v]) => ({
+      id,
+      label: v.label,
+      rate: ratio(v.refunds, v.sales),
+      refunds: v.refunds,
+    }));
+    return {
+      value: current,
+      previous: before,
+      change: before === null ? null : percentChange(current, before),
+      count: sumBy(phase('current'), 'count'),
+      rate,
+      registers,
+      // A register only stands out against the store's own normal behaviour.
+      outliers: registers.filter(
+        (r) =>
+          rate !== null &&
+          r.rate !== null &&
+          r.rate >= insightThresholds.refundRateFloor &&
+          r.rate >= rate * insightThresholds.refundRateMultiplier,
+      ),
+    };
+  }
+
+  private async shifts(store: Store, range: DateRange) {
+    const rows = (
+      await this.database.pool.query(
+        `SELECT h.id,h.status,h.opened_at AS "openedAt",h.closed_at AS "closedAt",
+ h.expected_cash::text AS expected,h.counted_cash::text AS counted,h.difference::text AS difference,
+ e.name AS cashier,d.name AS register,
+ COALESCE((SELECT sum(total) FROM sales WHERE shift_id=h.id AND store_id=$1),0)::text AS sales,
+ COALESCE((SELECT count(*) FROM sales WHERE shift_id=h.id AND store_id=$1),0)::text AS transactions,
+ EXTRACT(epoch FROM (COALESCE(h.closed_at,now())-h.opened_at))/3600 AS hours
+ FROM shifts h
+ JOIN employees e ON e.id=h.employee_id AND e.store_id=$1
+ JOIN devices d ON d.id=h.device_id AND d.store_id=$1
+ WHERE h.store_id=$1
+ AND ((h.opened_at<(($3::date+1)::timestamp AT TIME ZONE $4) AND COALESCE(h.closed_at,now())>=($2::date::timestamp AT TIME ZONE $4)))
+ ORDER BY h.opened_at DESC LIMIT 50`,
+        [store.id, range.from, range.to, store.timezone],
+      )
+    ).rows;
+    return {
+      rows,
+      open: rows.filter((r: any) => r.status === 'open').length,
+      closed: rows.filter((r: any) => r.status === 'closed').length,
+      differences: rows.filter((r: any) => r.difference !== null && num(r.difference) !== 0),
+      longOpen: rows.filter(
+        (r: any) => r.status === 'open' && num(r.hours) >= insightThresholds.shiftHours,
+      ),
+    };
+  }
+
+  private async registers(store: Store, range: DateRange) {
+    return (
+      await this.database.pool.query(
+        `SELECT d.id,d.name,
+ COALESCE(sum(s.total),0)::text AS revenue,count(s.id)::text AS transactions,
+ CASE WHEN count(s.id)>0 THEN round(sum(s.total)/count(s.id),2)::text END AS "averageBasket",
+ COALESCE(sum(s.discount),0)::text AS discounts
+ FROM devices d LEFT JOIN sales s ON s.device_id=d.id AND s.store_id=$1
+ AND s.created_at>=($2::date::timestamp AT TIME ZONE $4)
+ AND s.created_at<(($3::date+1)::timestamp AT TIME ZONE $4)
+ WHERE d.store_id=$1 GROUP BY d.id,d.name HAVING count(s.id)>0 ORDER BY 3 DESC`,
+        [store.id, range.from, range.to, store.timezone],
+      )
+    ).rows;
+  }
+
+  /** Operational counts only - deliberately not a performance ranking. */
+  private async employees(store: Store, range: DateRange) {
+    return (
+      await this.database.pool.query(
+        `SELECT e.id,e.name,
+ COALESCE(sum(s.total),0)::text AS revenue,count(s.id)::text AS transactions,
+ COALESCE(sum(s.discount),0)::text AS discounts,
+ COALESCE((SELECT sum(r.total) FROM refunds r WHERE r.employee_id=e.id AND r.store_id=$1
+  AND r.created_at>=($2::date::timestamp AT TIME ZONE $4)
+  AND r.created_at<(($3::date+1)::timestamp AT TIME ZONE $4)),0)::text AS refunds,
+ COALESCE((SELECT sum(h.difference) FROM shifts h WHERE h.employee_id=e.id AND h.store_id=$1
+  AND h.closed_at>=($2::date::timestamp AT TIME ZONE $4)
+  AND h.closed_at<(($3::date+1)::timestamp AT TIME ZONE $4)),0)::text AS "cashDifference"
+ FROM employees e LEFT JOIN sales s ON s.employee_id=e.id AND s.store_id=$1
+ AND s.created_at>=($2::date::timestamp AT TIME ZONE $4)
+ AND s.created_at<(($3::date+1)::timestamp AT TIME ZONE $4)
+ WHERE e.store_id=$1 GROUP BY e.id,e.name HAVING count(s.id)>0 ORDER BY 4 DESC`,
+        [store.id, range.from, range.to, store.timezone],
+      )
+    ).rows;
+  }
+
+  /** Catalogue completeness, so onboarding gaps are visible rather than silent. */
+  private async readiness(store: Store) {
+    const row = (
+      await this.database.pool.query(
+        `SELECT count(*)::text AS products,
+ count(*) FILTER(WHERE active)::text AS active,
+ count(*) FILTER(WHERE cost=0)::text AS "missingCost",
+ count(*) FILTER(WHERE category='' OR category IS NULL)::text AS "missingCategory",
+ count(*) FILTER(WHERE NOT EXISTS(SELECT 1 FROM barcodes b WHERE b.product_id=p.id) AND (plu IS NULL OR plu=''))::text AS "missingCode",
+ count(*) FILTER(WHERE NOT EXISTS(SELECT 1 FROM movements m WHERE m.product_id=p.id AND m.reason='opening_balance'))::text AS uncounted
+ FROM products p WHERE p.store_id=$1`,
+        [store.id],
+      )
+    ).rows[0];
+    const products = num(row.products);
+    const incomplete = new Set<string>();
+    const ready =
+      products -
+      Math.max(num(row.missingCost), num(row.missingCategory), num(row.missingCode));
+    return {
+      products,
+      active: num(row.active),
+      ready: Math.max(ready, 0),
+      readiness: products > 0 ? Math.round((Math.max(ready, 0) / products) * 100) : null,
+      missingCost: num(row.missingCost),
+      missingCategory: num(row.missingCategory),
+      missingCode: num(row.missingCode),
+      uncounted: num(row.uncounted),
+      incomplete: incomplete.size,
+    };
+  }
+
+  /** Twelve months of margin, used for the trend chart on the month view. */
+  private async marginTrend(store: Store, today: string) {
+    const rows = (
+      await this.database.pool.query(
+        `WITH months AS (
+ SELECT to_char(generate_series(date_trunc('month',$2::date)-interval '11 months',date_trunc('month',$2::date),interval '1 month'),'YYYY-MM') AS month
+), sold AS (
+ SELECT to_char(s.created_at AT TIME ZONE $3,'YYYY-MM') AS month,
+ sum(i.total) AS revenue,sum(round(i.cost*i.quantity,2)) AS cost,
+ count(*) FILTER(WHERE i.cost IS NULL) AS missing
+ FROM sale_items i JOIN sales s ON s.id=i.sale_id AND s.store_id=$1
+ WHERE i.store_id=$1 AND s.created_at>=(date_trunc('month',$2::date)-interval '11 months')
+ GROUP BY 1
+)
+SELECT m.month,COALESCE(sold.revenue,0)::text AS revenue,
+ CASE WHEN sold.missing=0 THEN sold.cost::text END AS cost,
+ CASE WHEN sold.missing=0 AND sold.revenue>0
+  THEN round((sold.revenue-sold.cost)*100/sold.revenue,2)::float END AS margin
+ FROM months m LEFT JOIN sold ON sold.month=m.month ORDER BY m.month`,
+        [store.id, today, store.timezone],
+      )
+    ).rows;
+    return rows;
+  }
+
+  /** How much sales history exists, so premature conclusions can be suppressed. */
+  private async history(store: Store) {
+    const row = (
+      await this.database.pool.query(
+        `SELECT min(created_at) AS first,count(*)::text AS sales FROM sales WHERE store_id=$1`,
+        [store.id],
+      )
+    ).rows[0];
+    if (!row.first) return { days: 0, sales: 0, firstSale: null };
+    const days = Math.floor((Date.now() - new Date(row.first).getTime()) / 86400000) + 1;
+    return { days, sales: num(row.sales), firstSale: row.first };
+  }
+
+  /** Assembles the measured facts the deterministic rules run against. */
+  private facts(store: Store, data: any): InsightFacts {
+    const { current, previous, history, products, inventory, waste, purchasing } = data;
+    const outOfStock = products.byRevenue
+      .filter((p: any) => num(p.stock) <= 0)
+      .concat(
+        products.runningOut.filter((p: any) => num(p.stock) <= 0),
+      );
+    const seen = new Set<string>();
+    const uniqueOut = outOfStock.filter((p: any) =>
+      seen.has(p.id) ? false : (seen.add(p.id), true),
+    );
+    return {
+      currency: store.currency,
+      historyDays: history.days,
+      revenue: String(current.revenue),
+      previousRevenue: previous ? String(previous.revenue) : null,
+      grossMargin: current.grossMargin,
+      previousGrossMargin: previous?.grossMargin ?? null,
+      outOfStock: uniqueOut.map((p: any) => ({
+        id: p.id,
+        label: p.name,
+        weeklyUnits: p.weeklyUnits,
+        weeklyRevenue: p.weeklyRevenue,
+      })),
+      lowStock: products.runningOut
+        .filter((p: any) => num(p.stock) > 0)
+        .map((p: any) => ({
+          id: p.id,
+          label: p.name,
+          stock: p.stock,
+          minStock: p.minStock,
+        })),
+      runningOut: products.runningOut
+        .filter((p: any) => p.daysOfStock !== null && num(p.stock) > 0)
+        .map((p: any) => ({ id: p.id, label: p.name, days: p.daysOfStock })),
+      deadStock: inventory
+        ? { count: inventory.dead.count, value: inventory.dead.value, days: inventory.dead.days }
+        : { count: 0, value: '0', days: data.deadDays },
+      costIncreases: purchasing.costIncreases.map((p: any) => ({
+        id: p.id,
+        label: p.label,
+        previousCost: p.previousCost,
+        currentCost: p.currentCost,
+        percent: p.percent,
+        priceUnchanged: p.priceUnchanged,
+        weeklyUnits: p.weeklyUnits,
+      })),
+      negativeMargin: products.lowMargin
+        .filter((p: any) => p.unitMargin !== null && p.unitMargin < 0)
+        .map((p: any) => ({ id: p.id, label: p.name, margin: p.unitMargin })),
+      refundRate: data.refunds.rate,
+      baselineRefundRate:
+        previous && previous.revenue > 0 ? ratio(previous.refunds, previous.revenue) : null,
+      refundOutliers: data.refunds.outliers.map((r: any) => ({
+        id: r.id,
+        label: r.label,
+        rate: r.rate,
+        baseline: data.refunds.rate ?? 0,
+        kind: 'register',
+      })),
+      discountValue: String(data.discounts.value),
+      baselineDiscountValue:
+        data.discounts.previous === null ? null : String(data.discounts.previous),
+      wasteValue: String(waste.value),
+      baselineWasteValue: waste.previous === null ? null : String(waste.previous),
+      cashDifferences: data.shifts.differences.map((s: any) => ({
+        id: s.id,
+        label: `${s.register} · ${s.cashier}`,
+        difference: s.difference,
+      })),
+      longOpenShifts: data.shifts.longOpen.map((s: any) => ({
+        id: s.id,
+        label: `${s.register} · ${s.cashier}`,
+        hours: num(s.hours),
+      })),
+      missingCost: data.readiness.missingCost,
+      uncountedProducts: data.readiness.uncounted,
+    };
+  }
+}
+
+/** Averages a multi-period baseline down to a single comparable period. */
+function scaleTotals(totals: any, divisor: number) {
+  const scale = (value: number | null) => (value === null ? null : value / divisor);
+  const revenue = scale(totals.revenue)!;
+  const profit = scale(totals.grossProfit);
+  return {
+    ...totals,
+    transactions: totals.transactions / divisor,
+    revenue,
+    discount: scale(totals.discount),
+    refunds: scale(totals.refunds),
+    units: scale(totals.units),
+    cogs: scale(totals.cogs),
+    grossProfit: profit,
+    // Ratios are unaffected by scaling, so they are recomputed rather than divided.
+    grossMargin: grossMargin(profit, revenue),
+    averageBasket: averageBasket(revenue, totals.transactions / divisor),
+  };
+}
+
+@Module({ imports: [AuthModule], controllers: [OwnerDashboardController] })
+export class OwnerDashboardModule {}

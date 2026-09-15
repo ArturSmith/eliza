@@ -1,0 +1,219 @@
+import { beforeAll, afterAll, describe, it, expect } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { createApp } from '../apps/api/dist/app.js';
+import { Database } from '../apps/api/dist/database.js';
+
+const admin = new Database();
+const original = process.env.DATABASE_URL ?? 'postgresql://eliza:eliza_local@127.0.0.1:54329/eliza';
+const name = `eliza_dashboard_test_${Date.now()}`;
+let db: Database, app: Awaited<ReturnType<typeof createApp>>, url: string;
+
+class Client {
+  cookies = new Map<string, string>();
+  async request(path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST') {
+    const res = await fetch(url + '/api' + path, {
+      method,
+      headers: {
+        Origin: 'http://localhost:5173',
+        'X-Eliza-Request': '1',
+        'Content-Type': 'application/json',
+        Cookie: [...this.cookies].map(([k, v]) => `${k}=${v}`).join('; '),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    for (const cookie of res.headers.getSetCookie()) {
+      const [key, value] = cookie.split(';')[0].split('=');
+      if (value) this.cookies.set(key, value);
+      else this.cookies.delete(key);
+    }
+    return { status: res.status, body: await res.json() };
+  }
+}
+
+const owner = new Client();
+const register = new Client();
+const account = {
+  storeName: 'Dashboard test',
+  ownerName: 'Owner',
+  email: 'owner@pos.test',
+  password: 'owner-password-12345',
+  currency: 'NOK',
+  timezone: 'Europe/Oslo',
+};
+let productId: string, freeProductId: string, shiftId: string;
+
+beforeAll(async () => {
+  await admin.pool.query(`CREATE DATABASE ${name}`);
+  const parsed = new URL(original);
+  parsed.pathname = `/${name}`;
+  process.env.DATABASE_URL = parsed.toString();
+  execFileSync(process.execPath, ['apps/api/dist/migrate.js'], { env: process.env });
+  db = new Database();
+  app = await createApp();
+  await app.listen(0, '127.0.0.1');
+  url = await app.getUrl();
+});
+
+afterAll(async () => {
+  if (app) await app.close();
+  if (db) await db.onModuleDestroy();
+  process.env.DATABASE_URL = original;
+  await admin.pool.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+  await admin.onModuleDestroy();
+});
+
+describe.sequential('owner dashboard', () => {
+  it('records a sale so the dashboard has something to report', async () => {
+    expect((await owner.request('/auth/setup', account)).status).toBe(201);
+    const session = (await owner.request('/auth/session')).body;
+    const roles = (await owner.request('/team/roles')).body;
+    await owner.request(
+      '/team/' + session.user.id,
+      {
+        name: 'Owner',
+        employeeCode: 'OWNER',
+        roleId: roles.find((r: any) => r.name === 'Owner').id,
+        active: true,
+        pin: '654321',
+      },
+      'PATCH',
+    );
+    await owner.request('/team', {
+      name: 'Anna',
+      employeeCode: 'ANNA',
+      roleId: roles.find((r: any) => r.name === 'Cashier').id,
+      pin: '123456',
+    });
+    await register.request('/auth/login', { email: account.email, password: account.password });
+    await register.request('/pos/enroll', { name: 'Dashboard register' });
+    expect(
+      (await register.request('/pos/login', { employeeCode: 'ANNA', pin: '123456' })).status,
+    ).toBe(200);
+    shiftId = (
+      await register.request('/pos/shifts', { requestId: crypto.randomUUID(), openingCash: '100' })
+    ).body.id;
+
+    productId = (
+      await owner.request('/products', {
+        name: 'Milk',
+        sku: 'MILK',
+        category: 'Dairy',
+        unit: 'piece',
+        price: '100.00',
+        cost: '60.00',
+        taxRate: '0',
+        minStock: '2',
+        plu: '101',
+        barcodes: ['709100'],
+      })
+    ).body.id;
+    // A product with no cost proves the dashboard reports incomplete data instead of guessing.
+    freeProductId = (
+      await owner.request('/products', {
+        name: 'Uncosted bread',
+        sku: 'BREAD',
+        category: 'Bakery',
+        unit: 'piece',
+        price: '50.00',
+        cost: '0',
+        taxRate: '0',
+        minStock: '1',
+        plu: '102',
+        barcodes: ['709101'],
+      })
+    ).body.id;
+    await owner.request('/inventory/adjustments', {
+      requestId: crypto.randomUUID(),
+      productId,
+      quantity: '10',
+      reason: 'opening_balance',
+    });
+    const sale = await register.request('/pos/sales', {
+      requestId: crypto.randomUUID(),
+      shiftId,
+      lines: [{ productId, quantity: '2', expectedPrice: '100.00', expectedTaxRate: '0' }],
+      discountPercent: '0',
+      payment: { method: 'cash', tendered: '200.00' },
+    });
+    expect(sale.status).toBe(201);
+  });
+
+  it('reports revenue, cost of goods sold and margin for today', async () => {
+    const res = await owner.request('/reports/owner-dashboard?period=today');
+    expect(res.status).toBe(200);
+    expect(res.body.kpis.revenue.value).toBe(200);
+    expect(res.body.kpis.grossProfit.value).toBe(80);
+    expect(res.body.kpis.grossMargin.value).toBe(40);
+    expect(res.body.kpis.grossMargin.unit).toBe('points');
+    expect(res.body.kpis.transactions.value).toBe(1);
+    expect(res.body.kpis.averageBasket.value).toBe(200);
+  });
+
+  it('marks comparisons unavailable instead of inventing a baseline', async () => {
+    const res = await owner.request('/reports/owner-dashboard?period=today');
+    expect(res.body.kpis.revenue.change).toBeNull();
+    expect(res.body.comparisons.some((c: any) => c.available === false)).toBe(true);
+  });
+
+  it('declares operating expenses unavailable rather than reporting zero', async () => {
+    const res = await owner.request('/reports/owner-dashboard?period=month');
+    const expenses = res.body.unavailable.find((u: any) => u.metric === 'operatingExpenses');
+    expect(expenses).toBeTruthy();
+    expect(expenses.reason).toMatch(/operating expenses/i);
+  });
+
+  it('counts products that have no purchase cost', async () => {
+    const res = await owner.request('/reports/owner-dashboard?period=today');
+    expect(res.body.readiness.missingCost).toBeGreaterThan(0);
+    expect(res.body.readiness.products).toBe(2);
+    expect(freeProductId).toBeTruthy();
+  });
+
+  it('returns one hourly bucket per hour of the business day', async () => {
+    const res = await owner.request('/reports/owner-dashboard?period=today');
+    expect(res.body.hourly).toHaveLength(24);
+    expect(res.body.hourly.reduce((sum: number, h: any) => sum + h.total, 0)).toBe(200);
+  });
+
+  it('refuses the report to an employee without the analytics permission', async () => {
+    const roles = (await owner.request('/team/roles')).body;
+    const cashier = roles.find((r: any) => r.name === 'Cashier');
+    expect(cashier.permissions).not.toContain('analytics.view');
+    const anonymous = new Client();
+    expect((await anonymous.request('/reports/owner-dashboard?period=today')).status).toBe(401);
+  });
+
+  it('hides cost and profit from a role without the margin permission', async () => {
+    const roles = (await owner.request('/team/roles')).body;
+    const manager = roles.find((r: any) => r.name === 'Manager');
+    expect(manager.permissions).toContain('analytics.margin');
+    // No API edits role permissions, so the grant is withdrawn directly in the database.
+    await db.pool.query(
+      `UPDATE roles SET permissions = (
+         SELECT coalesce(jsonb_agg(p), '[]'::jsonb) FROM jsonb_array_elements(permissions) p
+         WHERE p <> '"analytics.margin"'::jsonb)
+       WHERE id = $1`,
+      [manager.id],
+    );
+    await owner.request('/team', {
+      name: 'Mark',
+      employeeCode: 'MARK',
+      roleId: manager.id,
+      pin: '222333',
+      email: 'mark@pos.test',
+      password: 'manager-password-12345',
+    });
+    const limited = new Client();
+    const login = await limited.request('/auth/login', {
+      email: 'mark@pos.test',
+      password: 'manager-password-12345',
+    });
+    expect(login.status).toBe(200);
+    const res = await limited.request('/reports/owner-dashboard?period=today');
+    expect(res.status).toBe(200);
+    expect(res.body.kpis.revenue.value).toBe(200);
+    expect(res.body.kpis.grossProfit.value).toBeNull();
+    expect(res.body.kpis.grossProfit.restricted).toBe(true);
+    expect(res.body.kpis.grossMargin.restricted).toBe(true);
+  });
+});

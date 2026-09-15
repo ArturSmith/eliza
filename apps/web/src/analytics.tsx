@@ -1,32 +1,8 @@
 import { t, useLanguage, getLocale } from './i18n';
 import { useState } from 'react';
-import {
-  SalesSummary,
-  type Summary,
-  type Totals,
-  type Group,
-  groups,
-  rowLabel,
-} from './sales-summary';
+import { type Summary, type Totals, type Group, groups, rowLabel } from './sales-summary';
 import { formatMoney } from './receipts';
 import { Field } from './forms';
-export function AnalyticsPage() {
-  useLanguage();
-  return (
-    <>
-      <div className="page-heading">
-        <div>
-          <div className="eyebrow">{t('STORE PERFORMANCE')}</div>
-          <h1>{t('Analytics')}</h1>
-          <p className="muted">
-            {t('Explore sales trends and compare products, shifts, and time periods. ')}
-          </p>
-        </div>
-      </div>
-      <SalesSummary />
-    </>
-  );
-}
 function Bars({
   rows,
   currency,
