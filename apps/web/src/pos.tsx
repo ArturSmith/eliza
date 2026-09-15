@@ -309,7 +309,7 @@ function ShiftForm({
     mutation.mutate(body);
   }
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} className={mode === 'close' ? 'shift-close-form' : undefined}>
       {mode === 'start' ? (
         <Field
           label={t('Opening cash')}

@@ -2628,3 +2628,19 @@ input.shopping-section-title {
 .shopping-drag-handle svg {
   pointer-events: none;
 }
+
+.shift-close-form > .notice {
+  padding: 12px;
+  margin: 0 0 24px;
+}
+.shift-close-form > .field {
+  gap: 12px;
+  margin-bottom: 24px;
+}
+.shift-close-form > .muted {
+  margin: 8px 0 24px;
+  line-height: 1.6;
+}
+.shift-close-form > .form-actions {
+  margin-top: 24px;
+}
