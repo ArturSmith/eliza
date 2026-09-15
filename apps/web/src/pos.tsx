@@ -77,14 +77,16 @@ function loadDraft(key: string): Draft {
     return fresh();
   }
 }
-function approvalFields() {
+// Kept mounted at all times: inserting these inputs while the cashier was still
+// typing an amount moved the caret into the manager code field mid-entry.
+function approvalFields(active = true) {
   return (
-    <div className="approval-fields">
+    <div className="approval-fields" hidden={!active}>
       <div className="notice">
         {t('Manager approval keeps this sale assigned to the current cashier. ')}
       </div>
       <Field label={t('Manager employee code')}>
-        <input name="employeeCode" autoComplete="off" required />
+        <input name="employeeCode" autoComplete="off" required={active} disabled={!active} />
       </Field>
       <Field label={t('Manager PIN')}>
         <input
@@ -92,7 +94,8 @@ function approvalFields() {
           type="password"
           inputMode="numeric"
           pattern="[0-9]{6}"
-          required
+          required={active}
+          disabled={!active}
           maxLength={6}
           autoComplete="off"
         />
@@ -350,7 +353,7 @@ function ShiftForm({
           <Field label={t('Closing notes')}>
             <textarea name="notes" maxLength={500} rows={2} />
           </Field>
-          {needsApproval && approvalFields()}
+          {approvalFields(needsApproval)}
           <p className="muted">
             {t(
               'Closing makes this shift’s totals permanent. Finish or hold your cart before closing. ',
@@ -1034,7 +1037,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                 </strong>
               </p>
             )}
-          {needsApproval && approvalFields()}
+          {approvalFields(needsApproval)}
           <ErrorMessage error={checkout.error} />
           <ErrorMessage error={message || storageError} />
           <Button className="full" disabled={checkout.isPending}>

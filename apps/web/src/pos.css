@@ -503,6 +503,9 @@
   margin-top: 20px;
   padding-top: 20px;
 }
+.approval-fields[hidden] {
+  display: none;
+}
 .approval-fields > .notice {
   margin-bottom: 17px;
 }
