@@ -31,7 +31,7 @@ export const extractionRequestSchema = z.object({
 export type ExtractionRequest = z.infer<typeof extractionRequestSchema>;
 
 /** How a line was tied to a catalogue product, or `null` when it was not. */
-export const matchKinds = ['supplier-sku', 'barcode', 'sku'] as const;
+export const matchKinds = ['supplier-sku', 'barcode', 'sku', 'name'] as const;
 export type MatchKind = (typeof matchKinds)[number];
 
 /** A line as read from the document, before any matching has been attempted. */
@@ -54,6 +54,9 @@ export type ExtractedLine = ReadLine & {
 };
 
 export type Extraction = {
+  supplierName: string;
+  supplierCode: string;
+  supplierCompanyNumber: string;
   supplierReference: string;
   documentDate: string;
   lines: ExtractedLine[];
@@ -68,6 +71,38 @@ export type Extraction = {
  * Control characters are dropped rather than escaped: they only ever arrive
  * from a misread, and they break table layout.
  */
+export function normalizeMatchText(value: string) {
+  return value
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase()
+    .replace(/\./g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+export function matchingTextScore(left: string, right: string) {
+  const a = normalizeMatchText(left);
+  const b = normalizeMatchText(right);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (Math.min(a.length, b.length) >= 5 && (a.includes(b) || b.includes(a))) return 0.86;
+  const aa = new Set(a.split(' '));
+  const bb = new Set(b.split(' '));
+  const common = [...aa].filter((token) => bb.has(token)).length;
+  return common / new Set([...aa, ...bb]).size;
+}
+
+/** Returns only a strong, uniquely best text match. */
+export function confidentTextMatch<T>(text: string, rows: T[], name: (row: T) => string) {
+  const ranked = rows
+    .map((row) => ({ row, score: matchingTextScore(text, name(row)) }))
+    .sort((a, b) => b.score - a.score);
+  return ranked[0] && ranked[0].score >= 0.78 && ranked[0].score - (ranked[1]?.score ?? 0) >= 0.1
+    ? ranked[0].row
+    : undefined;
+}
+
 export function cleanText(value: unknown, limit = 120) {
   if (typeof value !== 'string') return '';
   return value

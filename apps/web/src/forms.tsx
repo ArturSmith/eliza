@@ -244,7 +244,9 @@ export function ProductForm({
 }: {
   onDone: () => void;
   initial?: Product;
-  prefill?: Partial<Pick<Product, 'name' | 'description' | 'cost' | 'price' | 'barcodes'>>;
+  prefill?: Partial<
+    Pick<Product, 'name' | 'description' | 'category' | 'cost' | 'price' | 'barcodes' | 'source'>
+  >;
   onCreated?: (product: Product) => void;
 }) {
   useLanguage();
@@ -265,7 +267,7 @@ export function ProductForm({
   });
   const effectivePlu = manualPlu ? plu : (nextPlu.data?.plu ?? '');
   const effectiveSku = manualSku ? sku : productSku(productName, effectivePlu);
-  const [source, setSource] = useState(initial?.source ?? null);
+  const [source, setSource] = useState(initial?.source ?? prefill?.source ?? null);
   const [existingProduct, setExistingProduct] = useState<Product>();
   function fillField(name: string, value: string, append = false) {
     const field = formRef.current?.elements.namedItem(name) as
@@ -493,7 +495,7 @@ export function ProductForm({
             name="category"
             list="categories"
             placeholder={t('e.g. Dairy')}
-            defaultValue={initial?.category}
+            defaultValue={initial?.category ?? prefill?.category}
             required
             maxLength={120}
           />

@@ -270,17 +270,20 @@ function SupplierForm({
   supplier,
   done,
   onCreated,
+  prefill,
 }: {
   supplier: Supplier | null;
   done: () => void;
   onCreated?: (supplier: Supplier) => void;
+  prefill?: Partial<Pick<Supplier, 'name' | 'code' | 'companyNumber'>>;
 }) {
   useLanguage();
   const [value, setValue] = useState(
     supplier ?? {
       ...supplierSchema.parse({ code: 'NEW', name: 'New supplier' }),
-      code: '',
-      name: '',
+      code: prefill?.code ?? '',
+      name: prefill?.name ?? '',
+      companyNumber: prefill?.companyNumber ?? '',
       active: true,
     },
   );
@@ -529,6 +532,8 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
   const currency = useSession().data?.store.currency ?? 'NOK';
   const [supplierId, setSupplier] = useState(order?.supplier_id ?? '');
   const [addingSupplier, setAddingSupplier] = useState(false);
+  const [supplierPrefill, setSupplierPrefill] =
+    useState<Partial<Pick<Supplier, 'name' | 'code' | 'companyNumber'>>>();
   const [addingProduct, setAddingProduct] = useState<number | null>(null);
   const [scanLine, setScanLine] = useState<number | null>(null);
   const [barcode, setBarcode] = useState('');
@@ -635,7 +640,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
         supplierReference: reference,
         expectedDate,
         notes,
-        lines: lines.map(({ source: _source, ...line }) => ({
+        lines: lines.map(({ source: _source, suggestion: _suggestion, ...line }) => ({
           ...line,
           sellingPrice: line.sellingPrice || undefined,
         })),
@@ -703,8 +708,12 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
           key={supplierId}
           supplierId={supplierId}
           products={availableProducts}
-          onAddSupplier={() => setAddingSupplier(true)}
-          onApply={(reviewed, documentReference) => {
+          suppliers={availableSuppliers}
+          onAddSupplier={(prefill) => {
+            setSupplierPrefill(prefill);
+            setAddingSupplier(true);
+          }}
+          onApply={(reviewed, documentReference, matchedSupplierId) => {
             setLines((current) => [
               ...current.filter(
                 (l) =>
@@ -718,6 +727,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
               ...reviewed,
             ]);
             setHasScan(true);
+            if (matchedSupplierId && !supplierId) setSupplier(matchedSupplierId);
             if (!reference.trim()) setReference(documentReference);
             setLineError('');
           }}
@@ -961,14 +971,21 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
       <Dialog
         elevated
         open={addingSupplier}
-        onOpenChange={setAddingSupplier}
+        onOpenChange={(open) => {
+          setAddingSupplier(open);
+          if (!open) setSupplierPrefill(undefined);
+        }}
         title={t('Add supplier')}
         description={t('Keep supplier details available for your team.')}
       >
         {addingSupplier && (
           <SupplierForm
             supplier={null}
-            done={() => setAddingSupplier(false)}
+            prefill={supplierPrefill}
+            done={() => {
+              setAddingSupplier(false);
+              setSupplierPrefill(undefined);
+            }}
             onCreated={(supplier) => {
               setCreatedSuppliers((current) => [...current, supplier]);
               setSupplier(supplier.id);
@@ -991,8 +1008,21 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
             prefill={
               lines[addingProduct]?.source
                 ? {
-                    name: lines[addingProduct].source!.description.slice(0, 120),
-                    description: lines[addingProduct].source!.description,
+                    name:
+                      lines[addingProduct].suggestion?.name ||
+                      lines[addingProduct].source!.description.slice(0, 120),
+                    description:
+                      lines[addingProduct].suggestion?.description ||
+                      lines[addingProduct].source!.description,
+                    category: lines[addingProduct].suggestion?.category,
+                    source: lines[addingProduct].suggestion
+                      ? {
+                          barcode: lines[addingProduct].suggestion!.barcode,
+                          brand: lines[addingProduct].suggestion!.brand,
+                          quantity: lines[addingProduct].suggestion!.quantity,
+                          imageImported: false,
+                        }
+                      : undefined,
                     cost: lines[addingProduct].unitCost,
                     price: lines[addingProduct].sellingPrice || undefined,
                     barcodes: lines[addingProduct].source!.barcode

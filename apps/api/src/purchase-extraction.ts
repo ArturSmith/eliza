@@ -30,8 +30,29 @@ import type { Database } from './database.js';
 const responseSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['supplierReference', 'documentDate', 'lines'],
+  required: [
+    'supplierName',
+    'supplierCode',
+    'supplierCompanyNumber',
+    'supplierReference',
+    'documentDate',
+    'lines',
+  ],
   properties: {
+    supplierName: {
+      type: 'string',
+      description: 'Supplier or vendor business name exactly as printed. Empty string if absent.',
+    },
+    supplierCode: {
+      type: 'string',
+      description:
+        'Supplier, vendor, account, or customer reference code identifying the supplier. Do not use the invoice number. Empty string if absent.',
+    },
+    supplierCompanyNumber: {
+      type: 'string',
+      description:
+        'Supplier company, organization, registration, or tax number exactly as printed. Empty string if absent.',
+    },
     supplierReference: {
       type: 'string',
       description: 'Invoice or delivery note number exactly as printed. Empty string if absent.',
@@ -174,6 +195,9 @@ export async function extractPurchaseDocument(
 
   const payloadSchema = z
     .object({
+      supplierName: z.string(),
+      supplierCode: z.string(),
+      supplierCompanyNumber: z.string(),
       supplierReference: z.string(),
       documentDate: z.string(),
       lines: z.array(
@@ -294,6 +318,9 @@ export async function extractPurchaseDocument(
   const { lines, mergedCount } = mergeDuplicates(matchLines(cleaned, index));
   const documentDate = cleanText(payload.documentDate, 10);
   return {
+    supplierName: cleanText(payload.supplierName, 120),
+    supplierCode: cleanText(payload.supplierCode, 60),
+    supplierCompanyNumber: cleanText(payload.supplierCompanyNumber, 120),
     supplierReference: cleanText(payload.supplierReference, 60),
     documentDate: /^\d{4}-\d{2}-\d{2}$/.test(documentDate) ? documentDate : '',
     lines,

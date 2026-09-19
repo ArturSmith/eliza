@@ -1,10 +1,45 @@
 import { useState } from 'react';
-import { type Extraction, type Product, documentImageSchema } from '@eliza/contracts';
+import {
+  type Extraction,
+  type Product,
+  type Supplier,
+  confidentTextMatch,
+  documentImageSchema,
+  normalizeMatchText,
+} from '@eliza/contracts';
 import { api, ApiError } from './api';
 import { t, useLanguage } from './i18n';
 import { Field, ErrorMessage } from './forms';
 import { Dialog } from './components/ui/dialog';
 import { Button } from './components/ui/button';
+
+type ProductSuggestion = {
+  barcode: string;
+  name: string;
+  description?: string;
+  brand: string;
+  quantity: string;
+  category: string;
+  image: string;
+};
+type ProductLookup = {
+  existing?: { id: string; name: string };
+  suggestion?: ProductSuggestion | null;
+};
+type SupplierPrefill = { name: string; code: string; companyNumber: string };
+
+function matchSupplier(document: Extraction, suppliers: Supplier[]) {
+  const active = suppliers.filter((supplier) => supplier.active);
+  const code = normalizeMatchText(document.supplierCode);
+  const company = normalizeMatchText(document.supplierCompanyNumber);
+  const exact = active.filter(
+    (supplier) =>
+      (code && normalizeMatchText(supplier.code) === code) ||
+      (company && normalizeMatchText(supplier.companyNumber) === company),
+  );
+  if (exact.length === 1) return exact[0];
+  return confidentTextMatch(document.supplierName, active, (supplier) => supplier.name);
+}
 
 export type DocumentDraftLine = {
   productId: string;
@@ -13,18 +48,21 @@ export type DocumentDraftLine = {
   taxRate: string;
   sellingPrice: string;
   source?: Extraction['lines'][number];
+  suggestion?: ProductSuggestion;
 };
 
 export function PurchaseDocument({
   supplierId,
   products,
+  suppliers,
   onApply,
   onAddSupplier,
 }: {
   supplierId: string;
   products: Product[];
-  onApply: (lines: DocumentDraftLine[], reference: string) => void;
-  onAddSupplier: () => void;
+  suppliers: Supplier[];
+  onApply: (lines: DocumentDraftLine[], reference: string, supplierId?: string) => void;
+  onAddSupplier: (prefill: SupplierPrefill) => void;
 }) {
   useLanguage();
   const [open, setOpen] = useState(false);
@@ -32,10 +70,12 @@ export function PurchaseDocument({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [result, setResult] = useState<Extraction | null>(null);
+  const [supplierMatched, setSupplierMatched] = useState(false);
   const activeProducts = products.filter((p) => p.active);
   async function upload(file?: File) {
     setError(null);
     setResult(null);
+    setSupplierMatched(false);
     setImage('');
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
@@ -72,12 +112,47 @@ export function PurchaseDocument({
         ...(supplierId ? { supplierId } : {}),
         image,
       });
-      setResult(document);
-      onApply(
-        document.lines.map((source) => {
-          const product = activeProducts.find((p) => p.id === source.productId);
+      let supplierCandidates = suppliers;
+      if (!supplierId) {
+        try {
+          supplierCandidates = await api<Supplier[]>('/suppliers');
+        } catch {
+          // The already loaded list can still be used if refreshing it fails.
+        }
+      }
+      const matchedSupplier = supplierId
+        ? supplierCandidates.find((supplier) => supplier.id === supplierId)
+        : matchSupplier(document, supplierCandidates);
+      const enriched = await Promise.all(
+        document.lines.map(async (source) => {
+          let product =
+            activeProducts.find((item) => item.id === source.productId) ??
+            confidentTextMatch(source.description, activeProducts, (item) => item.name);
+          let suggestion: ProductSuggestion | undefined;
+          if (!product && source.barcode) {
+            try {
+              const lookup = await api<ProductLookup>(
+                '/products/lookup/' + encodeURIComponent(source.barcode),
+              );
+              product = activeProducts.find((item) => item.id === lookup.existing?.id);
+              suggestion = lookup.suggestion ?? undefined;
+            } catch {
+              // Document transcription remains usable when the optional product service is unavailable.
+            }
+          }
           return {
-            source,
+            source: {
+              ...source,
+              productId: product?.id ?? null,
+              matchedBy: product
+                ? source.productId
+                  ? source.matchedBy
+                  : source.barcode && product.barcodes.includes(source.barcode)
+                    ? ('barcode' as const)
+                    : ('name' as const)
+                : null,
+            },
+            suggestion,
             productId: product?.id ?? '',
             quantity: source.quantity,
             unitCost: source.unitCost,
@@ -85,8 +160,10 @@ export function PurchaseDocument({
             sellingPrice: product?.price ?? '',
           };
         }),
-        document.supplierReference,
       );
+      setResult({ ...document, lines: enriched.map((line) => line.source) });
+      setSupplierMatched(!!matchedSupplier);
+      onApply(enriched, document.supplierReference, matchedSupplier?.id);
       setOpen(false);
     } catch (e) {
       setError(e);
@@ -101,8 +178,18 @@ export function PurchaseDocument({
           <Button type="button" variant="outline" onClick={() => setOpen(true)}>
             {t('Read supplier document')}
           </Button>
-          {!supplierId && (
-            <Button type="button" variant="outline" onClick={onAddSupplier}>
+          {!supplierId && result && !supplierMatched && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                onAddSupplier({
+                  name: result.supplierName,
+                  code: result.supplierCode,
+                  companyNumber: result.supplierCompanyNumber,
+                })
+              }
+            >
               {t('Add new supplier')}
             </Button>
           )}

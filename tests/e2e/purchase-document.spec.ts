@@ -43,7 +43,7 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await page.getByRole('button', { name: 'New purchase order' }).click();
   const draft = page.getByRole('dialog', { name: 'New purchase order', exact: true });
   await expect(draft.getByRole('button', { name: 'Read supplier document' })).toBeEnabled();
-  await expect(draft.getByRole('button', { name: 'Add new supplier', exact: true })).toBeVisible();
+  await expect(draft.getByRole('button', { name: 'Add new supplier', exact: true })).toHaveCount(0);
   await draft.getByRole('button', { name: 'Read supplier document' }).click();
   const review = page.getByRole('dialog', { name: 'Read supplier document', exact: true });
   await review.getByLabel('Document image').setInputFiles({
@@ -59,6 +59,21 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7WQAAAAASUVORK5CYII=',
       'base64',
     ),
+  });
+  await page.route('**/api/products/lookup/4006381333931', async (route) => {
+    await route.fulfill({
+      json: {
+        suggestion: {
+          barcode: '4006381333931',
+          name: 'Open Food Bread',
+          description: 'Whole grain bread from product data',
+          brand: 'Test Bakery',
+          quantity: '500 g',
+          category: 'Bread',
+          image: '',
+        },
+      },
+    });
   });
   let calls = 0;
   await page.route('**/api/purchases/extract', async (route) => {
@@ -81,6 +96,9 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
     }
     await route.fulfill({
       json: {
+        supplierName: 'Scanned supplier',
+        supplierCode: 'SCANNED',
+        supplierCompanyNumber: 'ORG-900',
         supplierReference: 'INV-100',
         documentDate: '2026-09-16',
         mergedCount: 0,
@@ -97,7 +115,7 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
             ambiguous: false,
           },
           {
-            description: 'Bread document',
+            description: 'Special scanned loaf',
             supplierSku: 'UNKNOWN',
             barcode: '4006381333931',
             quantity: '1',
@@ -117,10 +135,14 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await expect(review.getByText('req_browser_test', { exact: true })).toBeVisible();
   await review.getByRole('button', { name: 'Read document', exact: true }).click();
   await expect(review).not.toBeVisible();
+  await expect(draft.getByRole('button', { name: 'Add new supplier', exact: true })).toBeVisible();
   await draft.getByRole('button', { name: 'Add new supplier', exact: true }).click();
   const addSupplier = page.getByRole('dialog', { name: 'Add supplier', exact: true });
-  await addSupplier.getByLabel('Supplier code', { exact: true }).fill('SCANNED');
-  await addSupplier.getByLabel('Supplier name', { exact: true }).fill('Scanned supplier');
+  await expect(addSupplier.getByLabel('Supplier code', { exact: true })).toHaveValue('SCANNED');
+  await expect(addSupplier.getByLabel('Supplier name', { exact: true })).toHaveValue(
+    'Scanned supplier',
+  );
+  await expect(addSupplier.getByLabel('Company number', { exact: true })).toHaveValue('ORG-900');
   await addSupplier.getByRole('button', { name: 'Save supplier', exact: true }).click();
   await expect(addSupplier).not.toBeVisible();
   await expect(draft.getByText('Scanned supplier', { exact: true })).toBeVisible();
@@ -142,9 +164,12 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await bread.getByRole('button', { name: 'Create new product', exact: true }).click();
   const addProduct = page.getByRole('dialog', { name: 'Add a product', exact: true });
   await expect(addProduct.getByLabel('Product name', { exact: true })).toHaveValue(
-    'Bread document',
+    'Open Food Bread',
   );
-  await expect(addProduct.getByLabel('Description (optional)')).toHaveValue('Bread document');
+  await expect(addProduct.getByLabel('Description (optional)')).toHaveValue(
+    'Whole grain bread from product data',
+  );
+  await expect(addProduct.getByLabel('Category', { exact: true })).toHaveValue('Bread');
   await expect(addProduct.getByLabel('Purchase cost', { exact: true })).toHaveValue('4');
   await expect(addProduct.getByLabel('Barcodes (optional)')).toHaveValue('4006381333931');
   await expect(addProduct.getByLabel('Selling price', { exact: true })).toHaveValue('4.60');
@@ -160,22 +185,22 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await addProduct.getByLabel('Selling price', { exact: true }).fill('10');
   await addProduct.getByRole('button', { name: 'Create product', exact: true }).click();
   await expect(addProduct).not.toBeVisible();
-  await expect(bread.getByRole('button', { name: /Bread document/ })).toBeVisible();
+  await expect(bread.getByRole('button', { name: /Open Food Bread/ })).toBeVisible();
   await expect(bread.getByLabel('Quantity', { exact: true })).toHaveValue('1');
   await expect(bread.getByLabel('Unit cost excl. tax')).toHaveValue('4');
   const created = await page.request.get('/api/products').then((r) => r.json());
-  expect(created.find((p: any) => p.name === 'Bread document')).toMatchObject({
+  expect(created.find((p: any) => p.name === 'Open Food Bread')).toMatchObject({
     stock: '0.000',
     cost: '4.00',
     barcodes: ['4006381333931'],
   });
-  await bread.getByRole('button', { name: /Bread document/ }).click();
+  await bread.getByRole('button', { name: /Open Food Bread/ }).click();
   await bread.getByRole('option', { name: /Milk/ }).click();
   await bread.getByLabel('Purchase tax %').fill('0');
   await draft.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(draft.getByRole('alert')).toContainText('combine duplicate');
   await bread.getByRole('button', { name: /Milk/ }).click();
-  await bread.getByRole('option', { name: /Bread document/ }).click();
+  await bread.getByRole('option', { name: /^Open Food Bread/ }).click();
   await expect(bread.getByLabel('Unit cost excl. tax')).toHaveValue('4'); // A new match keeps the scanned cost.
   await bread.getByLabel('Quantity', { exact: true }).fill('1.5');
   await draft.getByRole('button', { name: 'Save draft', exact: true }).click();

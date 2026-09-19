@@ -22,6 +22,9 @@ const sourceLine = {
   unitCost: '3.50',
 };
 const payload = (lines = [sourceLine]) => ({
+  supplierName: 'Test supplier',
+  supplierCode: 'SUP',
+  supplierCompanyNumber: '',
   supplierReference: 'INV-42',
   documentDate: '2026-09-16',
   lines,

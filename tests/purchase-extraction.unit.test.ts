@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   cleanNumber,
   cleanText,
+  confidentTextMatch,
+  matchingTextScore,
   countUnmatched,
   documentImageSchema,
   matchLines,
@@ -43,6 +45,24 @@ describe('cleanNumber', () => {
     expect(cleanNumber('-4', 3)).toBe('');
     expect(cleanNumber(undefined, 2)).toBe('');
     expect(cleanNumber(Number.NaN, 2)).toBe('');
+  });
+});
+
+describe('confident text matching', () => {
+  const rows = [{ name: 'North Star Foods AS' }, { name: 'South Market' }];
+  it('matches normalized names and clear description variants', () => {
+    expect(confidentTextMatch('NORTH-STAR FOODS A.S.', rows, (row) => row.name)).toBe(rows[0]);
+    expect(matchingTextScore('Organic Milk 1L', 'Organic Milk')).toBeGreaterThan(0.8);
+  });
+  it('refuses weak or ambiguous matches', () => {
+    expect(
+      confidentTextMatch(
+        'Fresh Milk',
+        [{ name: 'Fresh Milk 1L' }, { name: 'Fresh Milk 2L' }],
+        (row) => row.name,
+      ),
+    ).toBeUndefined();
+    expect(confidentTextMatch('Unrelated item', rows, (row) => row.name)).toBeUndefined();
   });
 });
 
