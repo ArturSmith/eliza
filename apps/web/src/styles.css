@@ -3135,3 +3135,12 @@ input.shopping-section-title {
   font-size: 11px;
   line-height: 1.5;
 }
+
+.purchase-unmatched {
+  display: grid;
+  gap: 12px;
+  margin: 10px 0;
+}
+.purchase-unmatched > button {
+  justify-self: start;
+}

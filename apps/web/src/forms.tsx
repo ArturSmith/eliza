@@ -238,15 +238,17 @@ export function AuthForm({ setup }: { setup: boolean }) {
 export function ProductForm({
   onDone,
   initial,
+  prefill,
   onCreated,
 }: {
   onDone: () => void;
   initial?: Product;
+  prefill?: Partial<Pick<Product, 'name' | 'description' | 'cost' | 'price' | 'barcodes'>>;
   onCreated?: (product: Product) => void;
 }) {
   useLanguage();
   const formRef = useRef<HTMLFormElement>(null);
-  const [productName, setProductName] = useState(initial?.name ?? '');
+  const [productName, setProductName] = useState(initial?.name ?? prefill?.name ?? '');
   const [sku, setSku] = useState(initial?.sku ?? '');
   const [plu, setPlu] = useState(initial?.plu ?? '');
   const [manualSku, setManualSku] = useState(!!initial);
@@ -460,7 +462,7 @@ export function ProductForm({
       <Field label={t('Description (optional)')}>
         <textarea
           name="description"
-          defaultValue={initial?.description ?? ''}
+          defaultValue={initial?.description ?? prefill?.description ?? ''}
           maxLength={2000}
           rows={3}
           placeholder={t('Additional details about this product')}
@@ -502,7 +504,7 @@ export function ProductForm({
             name="price"
             inputMode="decimal"
             placeholder={t('0.00')}
-            defaultValue={initial?.price}
+            defaultValue={initial?.price ?? prefill?.price}
             required
           />
         </Field>
@@ -522,7 +524,7 @@ export function ProductForm({
             name="cost"
             inputMode="decimal"
             placeholder={t('0.00')}
-            defaultValue={initial?.cost ?? undefined}
+            defaultValue={initial?.cost ?? prefill?.cost ?? undefined}
             required
           />
         </Field>
@@ -553,7 +555,7 @@ export function ProductForm({
         <textarea
           name="barcodes"
           rows={2}
-          defaultValue={initial?.barcodes.join('\n')}
+          defaultValue={(initial?.barcodes ?? prefill?.barcodes)?.join('\n')}
           placeholder={t('Scan or enter a barcode')}
         />
       </Field>

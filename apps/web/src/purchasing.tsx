@@ -795,9 +795,18 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
                         }}
                       />
                       {!line.productId && line.source && (
-                        <small className="error">
-                          {t('No reliable product match. Choose the correct catalogue product.')}
-                        </small>
+                        <div className="error purchase-unmatched">
+                          <p>
+                            {t('No reliable product match. Choose the correct catalogue product.')}
+                          </p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setAddingProduct(index)}
+                          >
+                            {t('Create new product')}
+                          </Button>
+                        </div>
                       )}
                       <Button
                         type="button"
@@ -954,6 +963,20 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
       >
         {addingProduct !== null && (
           <ProductForm
+            key={addingProduct}
+            prefill={
+              lines[addingProduct]?.source
+                ? {
+                    name: lines[addingProduct].source!.description.slice(0, 120),
+                    description: lines[addingProduct].source!.description,
+                    cost: lines[addingProduct].unitCost,
+                    price: lines[addingProduct].sellingPrice || undefined,
+                    barcodes: lines[addingProduct].source!.barcode
+                      ? [lines[addingProduct].source!.barcode]
+                      : [],
+                  }
+                : undefined
+            }
             onDone={() => setAddingProduct(null)}
             onCreated={(product) => {
               setCreatedProducts((current) => [...current, product]);
