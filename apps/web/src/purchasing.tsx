@@ -366,7 +366,11 @@ const statusTone: Record<string, string> = {
 };
 export function PurchasesPage() {
   useLanguage();
-  const q = useQuery({ queryKey: ['purchases'], queryFn: () => api<Order[]>('/purchases') });
+  const [search, setSearch] = useState('');
+  const q = useQuery({
+    queryKey: ['purchases', search.trim()],
+    queryFn: () => api<Order[]>('/purchases?search=' + encodeURIComponent(search.trim())),
+  });
   const currency = useSession().data?.store.currency ?? 'NOK';
   const [selected, setSelected] = useState<string | undefined>(
     () => new URLSearchParams(window.location.search).get('order') ?? undefined,
@@ -374,7 +378,6 @@ export function PurchasesPage() {
   const [create, setCreate] = useState(false);
   const [filter, setFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
-  const [search, setSearch] = useState('');
   const terms = search.trim().toLowerCase();
   const rows = (q.data ?? []).filter(
     (p) =>
@@ -401,7 +404,7 @@ export function PurchasesPage() {
             <Search size={18} />
             <input
               aria-label={t('Search purchase orders')}
-              placeholder={t('Search order number, supplier, or reference…')}
+              placeholder={t('Search order number, supplier, or supplier reference…')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -718,9 +721,28 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
             setLineError('');
           }}
         />
-        <Field label={t('Supplier reference')}>
-          <input value={reference} onChange={(e) => setReference(e.target.value)} />
-        </Field>
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+            <Field label={t('Supplier reference')}>
+              <input
+                maxLength={60}
+                value={reference}
+                onChange={(e) => setReference(e.target.value)}
+              />
+            </Field>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
+              setReference(
+                'REF-' + crypto.randomUUID().replaceAll('-', '').slice(0, 16).toUpperCase(),
+              )
+            }
+          >
+            {t('Generate reference')}
+          </Button>
+        </div>
         <Field label={t('Expected delivery')}>
           <input type="date" value={expectedDate} onChange={(e) => setDate(e.target.value)} />
         </Field>
@@ -1468,7 +1490,7 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
       }}
     >
       <fieldset disabled={!!payload}>
-        <Field label={t('Delivery reference')}>
+        <Field label={t('Delivery reference (optional)')}>
           <input value={reference} onChange={(e) => setReference(e.target.value)} />
         </Field>
         {order.lines

@@ -16,6 +16,7 @@ import { Plus, ArrowRight, Store, PackagePlus, ChevronDown } from 'lucide-react'
 import {
   productSchema,
   productSku,
+  suggestSellingPrice,
   setupSchema,
   adjustmentSchema,
   type Product,
@@ -248,6 +249,9 @@ export function ProductForm({
 }) {
   useLanguage();
   const formRef = useRef<HTMLFormElement>(null);
+  const [cost, setCost] = useState(initial?.cost ?? prefill?.cost ?? '');
+  const [price, setPrice] = useState(initial?.price ?? prefill?.price ?? '');
+  const [manualPrice, setManualPrice] = useState(!!initial || !!prefill?.price);
   const [productName, setProductName] = useState(initial?.name ?? prefill?.name ?? '');
   const [sku, setSku] = useState(initial?.sku ?? '');
   const [plu, setPlu] = useState(initial?.plu ?? '');
@@ -283,9 +287,11 @@ export function ProductForm({
   const [imageError, setImageError] = useState<unknown>(null);
   const profile = useQuery({
     queryKey: ['store-profile'],
-    queryFn: () => api<{ defaultTaxRate: string }>('/store-profile'),
+    queryFn: () => api<{ defaultTaxRate: string; defaultMarkupPercent: string }>('/store-profile'),
     enabled: !initial,
   });
+  const markup = profile.data?.defaultMarkupPercent ?? '15';
+  const suggestedPrice = suggestSellingPrice(cost, markup);
   const [error, setError] = useState<unknown>(null);
   const mutation = useMutation({
     mutationFn: (body: unknown) =>
@@ -499,15 +505,34 @@ export function ProductForm({
         </Field>
       </div>
       <div className="form-grid">
-        <Field label={t('Selling price')}>
+        <Field
+          label={t('Selling price')}
+          hint={
+            !initial
+              ? t(
+                  'Suggested using {percent}% markup on purchase cost. This price already includes VAT.',
+                  { percent: markup },
+                )
+              : undefined
+          }
+        >
           <input
             name="price"
             inputMode="decimal"
             placeholder={t('0.00')}
-            defaultValue={initial?.price ?? prefill?.price}
+            value={manualPrice ? price : suggestedPrice}
+            onChange={(e) => {
+              setPrice(e.target.value);
+              setManualPrice(true);
+            }}
             required
           />
         </Field>
+        {!initial && manualPrice && (
+          <Button type="button" variant="outline" onClick={() => setManualPrice(false)}>
+            {t('Use default markup')}
+          </Button>
+        )}
         <Field
           label={t('Tax rate (%)')}
           hint={t('Selling prices include this tax. Set the appropriate rate for this product.')}
@@ -524,7 +549,8 @@ export function ProductForm({
             name="cost"
             inputMode="decimal"
             placeholder={t('0.00')}
-            defaultValue={initial?.cost ?? prefill?.cost ?? undefined}
+            value={cost}
+            onChange={(e) => setCost(e.target.value)}
             required
           />
         </Field>

@@ -803,3 +803,19 @@ export function productSku(name: string, plu: string): string {
 }
 export * from './analytics.js';
 export * from './extraction.js';
+
+/** Markup is added once to cost; the result is already VAT-inclusive. */
+export const defaultMarkupSchema = z
+  .string()
+  .regex(/^\d{1,4}(\.\d{1,2})?$/, 'Use a markup between 0 and 1000 with at most two decimal places')
+  .refine(
+    (value) => Number(value) <= 1000,
+    'Use a markup between 0 and 1000 with at most two decimal places',
+  );
+
+export function suggestSellingPrice(cost: string, markup: string): string {
+  if (!money.safeParse(cost).success || !defaultMarkupSchema.safeParse(markup).success) return '';
+  const cents = (toScaled(cost, 2) * (10000n + toScaled(markup, 2)) + 5000n) / 10000n;
+  const result = fromScaled(cents, 2);
+  return money.safeParse(result).success ? result : '';
+}

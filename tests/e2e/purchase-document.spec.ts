@@ -125,6 +125,13 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await expect(milk.getByLabel('Quantity', { exact: true })).toHaveValue('2');
   await expect(milk.getByLabel('Purchase tax %')).toHaveValue('');
   await expect(draft.getByLabel('Supplier reference')).toHaveValue('INV-100');
+  await draft.getByRole('button', { name: 'Generate reference', exact: true }).click();
+  const generatedReference = await draft
+    .getByLabel('Supplier reference', { exact: true })
+    .inputValue();
+  expect(generatedReference).toMatch(/^REF-[A-F0-9]{16}$/);
+  await expect(draft).toBeVisible();
+  await draft.getByLabel('Supplier reference', { exact: true }).fill(generatedReference + '-EDIT');
   await milk.getByLabel('Purchase tax %').fill('0');
   await bread.getByRole('button', { name: 'Create new product', exact: true }).click();
   const addProduct = page.getByRole('dialog', { name: 'Add a product', exact: true });
@@ -134,7 +141,7 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await expect(addProduct.getByLabel('Description (optional)')).toHaveValue('Bread document');
   await expect(addProduct.getByLabel('Purchase cost', { exact: true })).toHaveValue('4');
   await expect(addProduct.getByLabel('Barcodes (optional)')).toHaveValue('4006381333931');
-  await expect(addProduct.getByLabel('Selling price', { exact: true })).toHaveValue('');
+  await expect(addProduct.getByLabel('Selling price', { exact: true })).toHaveValue('4.60');
   await expect(addProduct.getByLabel('SKU', { exact: true })).not.toHaveValue('UNKNOWN');
   await expect(addProduct.getByLabel('PLU / short code (optional)')).not.toHaveValue('');
   await addProduct.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -207,6 +214,7 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await expect(draft).not.toBeVisible();
   const orders = await page.request.get('/api/purchases').then((r) => r.json());
   expect(orders).toHaveLength(1);
+  expect(orders[0].supplier_reference).toBe(generatedReference + '-EDIT');
   expect(orders[0]).toMatchObject({ status: 'draft', total: '19.70' });
   const stock = await page.request.get('/api/products').then((r) => r.json());
   expect(stock.every((p: any) => p.stock === '0.000' && p.price === '10.00')).toBe(true);
@@ -220,6 +228,12 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await edit.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(edit).not.toBeVisible();
   await page.goto('/purchases');
+  const search = page.getByRole('textbox', { name: 'Search purchase orders', exact: true });
+  await search.fill(generatedReference.toLowerCase());
+  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await search.fill('unknown-reference-does-not-exist');
+  await expect(page.locator('tbody tr')).toHaveCount(0);
+  await search.fill('');
   await page.getByLabel('Language', { exact: true }).selectOption('ru');
   await page.getByRole('button', { name: 'Новый заказ поставщику' }).click();
   await expect(page.getByRole('button', { name: 'Прочитать документ поставщика' })).toBeVisible();

@@ -15,6 +15,7 @@ type Profile = {
   businessNumber: string;
   receiptFooter: string;
   defaultTaxRate: string;
+  defaultMarkupPercent: string;
   version: number;
 };
 export function StoreSettingsPage() {
@@ -72,11 +73,14 @@ function Editor({ profile }: { profile: Profile }) {
                 ['phone', 'Phone'],
                 ['businessNumber', 'Business / tax registration number'],
                 ['defaultTaxRate', 'Default tax rate (%)'],
+                ['defaultMarkupPercent', 'Default selling markup (%)'],
               ] as const
             ).map(([key, label]) => (
               <Field key={key} label={t(label)}>
                 <input
-                  required={key === 'name' || key === 'defaultTaxRate'}
+                  required={
+                    key === 'name' || key === 'defaultTaxRate' || key === 'defaultMarkupPercent'
+                  }
                   value={value[key]}
                   onChange={(e) => setValue({ ...value, [key]: e.target.value })}
                 />
@@ -84,6 +88,11 @@ function Editor({ profile }: { profile: Profile }) {
             ))}
           </div>
 
+          <p className="muted" style={{ marginBottom: 24 }}>
+            {t(
+              'New product selling price = purchase cost + markup. The result includes VAT; no extra VAT is added. Existing products keep their prices.',
+            )}
+          </p>
           <h3>{t('Scale barcodes')}</h3>
           <p className="muted">
             {t(

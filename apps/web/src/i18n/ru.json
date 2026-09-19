@@ -1311,5 +1311,13 @@
   "Upload a purchase photo to fill the table. Review and edit every row before saving.": "Загрузите фото закупки, чтобы заполнить таблицу. Проверьте и отредактируйте каждую строку перед сохранением.",
   "Check every row: choose a product, enter valid quantities, costs and tax, and combine duplicate products. Piece, pack and box quantities must be whole numbers.": "Проверьте каждую строку: выберите товар, укажите корректные количество, цену и налог, объедините повторяющиеся товары. Для штук, упаковок и коробок количество должно быть целым.",
   "Review the scanned rows and confirm the document check before saving.": "Проверьте распознанные строки и подтвердите сверку с документом перед сохранением.",
-  "Tax": "Налог"
+  "Tax": "Налог",
+  "Default selling markup (%)": "Наценка по умолчанию (%)",
+  "New product selling price = purchase cost + markup. The result includes VAT; no extra VAT is added. Existing products keep their prices.": "Цена продажи нового товара = закупочная цена + наценка. Результат уже включает НДС; дополнительный НДС не начисляется. Цены существующих товаров не меняются.",
+  "Suggested using {percent}% markup on purchase cost. This price already includes VAT.": "Рассчитано с наценкой {percent}% на закупочную цену. Цена уже включает НДС.",
+  "Use default markup": "Применить наценку по умолчанию",
+  "Use a markup between 0 and 1000 with at most two decimal places": "Укажите наценку от 0 до 1000, не более двух знаков после запятой",
+  "Search order number, supplier, or supplier reference…": "Поиск по номеру заказа, поставщику или номеру документа поставщика…",
+  "Generate reference": "Сгенерировать номер",
+  "Delivery reference (optional)": "Номер документа поставки (необязательно)"
 }

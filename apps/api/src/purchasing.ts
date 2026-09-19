@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Post,
   Req,
+  Query,
   UseGuards,
   BadRequestException,
   ConflictException,
@@ -640,12 +641,16 @@ export class PurchasingController {
       )
     ).rows;
   }
-  @Get('purchases') @Require('purchases.read') async list(@Req() req: AuthRequest) {
+  @Get('purchases') @Require('purchases.read') async list(
+    @Req() req: AuthRequest,
+    @Query('search') search?: string,
+  ) {
+    const term = parse(z.string().max(200).default(''), search).trim().toLowerCase();
     return (
       await this.database.pool.query(
-        `SELECT p.id,p.number,p.status,p.version,p.total,p.payment_status,p.payment_due_date::text,p.paid_at,
-(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received','closed') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,p.created_at AS "createdAt",s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.store_id=$1 ORDER BY p.created_at DESC LIMIT 200`,
-        [req.context.store.id],
+        `SELECT p.id,p.number,p.supplier_reference,p.status,p.version,p.total,p.payment_status,p.payment_due_date::text,p.paid_at,
+(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received','closed') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,p.created_at AS "createdAt",s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.store_id=$1 AND ($2='' OR strpos(lower(p.number),$2)>0 OR strpos(lower(s.name),$2)>0 OR strpos(lower(p.supplier_reference),$2)>0) ORDER BY p.created_at DESC LIMIT 200`,
+        [req.context.store.id, term],
       )
     ).rows;
   }
