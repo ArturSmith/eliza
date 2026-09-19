@@ -25,7 +25,7 @@ export const documentImageSchema = z
   );
 
 export const extractionRequestSchema = z.object({
-  supplierId: z.uuid(),
+  supplierId: z.uuid().optional(),
   image: documentImageSchema,
 });
 export type ExtractionRequest = z.infer<typeof extractionRequestSchema>;

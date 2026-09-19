@@ -109,7 +109,7 @@ async function bounded(response: Response, limit: number) {
 export async function catalogueIndex(
   database: Database,
   storeId: string,
-  supplierId: string,
+  supplierId: string | undefined,
   keys: string[],
 ) {
   const index = new Map<string, string[]>();
@@ -128,7 +128,7 @@ export async function catalogueIndex(
        SELECT 'sku', lower(p.sku), p.id
          FROM products p
         WHERE p.store_id=$1 AND p.active AND lower(p.sku) = ANY($3)`,
-      [storeId, supplierId, keys],
+      [storeId, supplierId ?? null, keys],
     )
   ).rows as { kind: string; key: string; productId: string }[];
   for (const row of rows) {
@@ -140,7 +140,7 @@ export async function catalogueIndex(
 
 export async function extractPurchaseDocument(
   image: string,
-  supplierId: string,
+  supplierId: string | undefined,
   storeId: string,
   database: Database,
 ): Promise<Extraction> {

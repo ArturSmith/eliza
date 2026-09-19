@@ -140,7 +140,17 @@ describe.sequential('purchase document extraction', () => {
       (await db.pool.query('SELECT stock,price FROM products WHERE id=$1', [productId])).rows[0],
     ).toEqual({ stock: '0.000', price: '10.00' });
   });
-  it('requires authentication and a supplier belonging to the shop', async () => {
+  it('extracts without a supplier and leaves supplier-only codes unmatched', async () => {
+    const result = await request('/purchases/extract', { image });
+    expect(result.status).toBe(201);
+    expect(result.body.lines[0]).toMatchObject({
+      productId: null,
+      matchedBy: null,
+      supplierSku: 'SUP-1',
+    });
+    expect(providerCalls).toBe(1);
+  });
+  it('requires authentication and validates a supplier when one is provided', async () => {
     expect((await request('/purchases/extract', { supplierId, image }, false)).status).toBe(401);
     expect(
       (await request('/purchases/extract', { supplierId: crypto.randomUUID(), image })).status,

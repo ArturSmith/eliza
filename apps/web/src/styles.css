@@ -1154,6 +1154,19 @@ tr:last-child td {
   color: #9ea892;
   line-height: 1.5;
 }
+.purchase-reference-row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+.purchase-reference-row > div {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.purchase-reference-generate {
+  margin-bottom: 16px;
+}
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2935,6 +2948,11 @@ input.shopping-section-title {
 .purchase-document-entry > button,
 .purchase-document > button {
   align-self: flex-start;
+}
+.purchase-document-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 .purchase-document-preview {
   display: grid;

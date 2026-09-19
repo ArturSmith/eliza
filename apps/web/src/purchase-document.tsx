@@ -19,10 +19,12 @@ export function PurchaseDocument({
   supplierId,
   products,
   onApply,
+  onAddSupplier,
 }: {
   supplierId: string;
   products: Product[];
   onApply: (lines: DocumentDraftLine[], reference: string) => void;
+  onAddSupplier: () => void;
 }) {
   useLanguage();
   const [open, setOpen] = useState(false);
@@ -66,7 +68,10 @@ export function PurchaseDocument({
     setError(null);
     setResult(null);
     try {
-      const document = await api<Extraction>('/purchases/extract', { supplierId, image });
+      const document = await api<Extraction>('/purchases/extract', {
+        ...(supplierId ? { supplierId } : {}),
+        image,
+      });
       setResult(document);
       onApply(
         document.lines.map((source) => {
@@ -92,16 +97,20 @@ export function PurchaseDocument({
   return (
     <>
       <div className="purchase-document-entry">
-        <Button
-          type="button"
-          variant="outline"
-          disabled={!supplierId}
-          onClick={() => setOpen(true)}
-        >
-          {t('Read supplier document')}
-        </Button>
+        <div className="purchase-document-actions">
+          <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+            {t('Read supplier document')}
+          </Button>
+          {!supplierId && (
+            <Button type="button" variant="outline" onClick={onAddSupplier}>
+              {t('Add new supplier')}
+            </Button>
+          )}
+        </div>
         <small className="muted">
-          {t('Choose a supplier, then upload a document to prepare purchase lines.')}
+          {supplierId
+            ? t('Upload a document to prepare purchase lines.')
+            : t('You can read the document first. Add or select a supplier before saving.')}
         </small>
         {result && image && (
           <details className="purchase-document-preview">

@@ -1255,6 +1255,8 @@
   "Loading…": "Загрузка…",
   "Read supplier document": "Прочитать документ поставщика",
   "Choose a supplier, then upload a document to prepare purchase lines.": "Выберите поставщика и загрузите документ, чтобы подготовить позиции закупки.",
+  "Upload a document to prepare purchase lines.": "Загрузите документ, чтобы подготовить позиции закупки.",
+  "You can read the document first. Add or select a supplier before saving.": "Документ можно распознать сразу. Добавьте или выберите поставщика перед сохранением.",
   "Review supplier document": "Проверка документа поставщика",
   "Upload one invoice or delivery-note image. Review the suggestions before adding them to your draft.": "Загрузите одно изображение счёта или накладной. Проверьте данные перед добавлением в черновик.",
   "Reading sends this image to OpenAI. Eliza does not save the image. Nothing is ordered or received automatically.": "Для распознавания изображение отправляется в OpenAI. Eliza не сохраняет изображение. Заказ и приёмка не выполняются автоматически.",

@@ -739,11 +739,13 @@ export class PurchasingController {
   ) {
     const b = parse(extractionRequestSchema, input);
     const store = req.context.store.id;
-    const supplier = await this.database.pool.query(
-      'SELECT id FROM suppliers WHERE id=$1 AND store_id=$2 AND active',
-      [b.supplierId, store],
-    );
-    if (!supplier.rowCount) throw new NotFoundException('This supplier no longer exists.');
+    if (b.supplierId) {
+      const supplier = await this.database.pool.query(
+        'SELECT id FROM suppliers WHERE id=$1 AND store_id=$2 AND active',
+        [b.supplierId, store],
+      );
+      if (!supplier.rowCount) throw new NotFoundException('This supplier no longer exists.');
+    }
     return extractPurchaseDocument(b.image, b.supplierId, store, this.database);
   }
   @Post('purchases') @Require('purchases.write') async draft(

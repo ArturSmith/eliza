@@ -42,9 +42,8 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await page.goto('/purchases');
   await page.getByRole('button', { name: 'New purchase order' }).click();
   const draft = page.getByRole('dialog', { name: 'New purchase order', exact: true });
-  await expect(draft.getByRole('button', { name: 'Read supplier document' })).toBeDisabled();
-  await draft.getByRole('button', { name: 'Select a supplier', exact: true }).click();
-  await page.getByRole('option', { name: /Document supplier/ }).click();
+  await expect(draft.getByRole('button', { name: 'Read supplier document' })).toBeEnabled();
+  await expect(draft.getByRole('button', { name: 'Add new supplier', exact: true })).toBeVisible();
   await draft.getByRole('button', { name: 'Read supplier document' }).click();
   const review = page.getByRole('dialog', { name: 'Read supplier document', exact: true });
   await review.getByLabel('Document image').setInputFiles({
@@ -63,7 +62,7 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   });
   let calls = 0;
   await page.route('**/api/purchases/extract', async (route) => {
-    expect(route.request().postDataJSON().supplierId).toBe(supplier.id);
+    expect(route.request().postDataJSON().supplierId).toBeUndefined();
     calls++;
     if (calls === 1) {
       await route.fulfill({
@@ -118,6 +117,13 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await expect(review.getByText('req_browser_test', { exact: true })).toBeVisible();
   await review.getByRole('button', { name: 'Read document', exact: true }).click();
   await expect(review).not.toBeVisible();
+  await draft.getByRole('button', { name: 'Add new supplier', exact: true }).click();
+  const addSupplier = page.getByRole('dialog', { name: 'Add supplier', exact: true });
+  await addSupplier.getByLabel('Supplier code', { exact: true }).fill('SCANNED');
+  await addSupplier.getByLabel('Supplier name', { exact: true }).fill('Scanned supplier');
+  await addSupplier.getByRole('button', { name: 'Save supplier', exact: true }).click();
+  await expect(addSupplier).not.toBeVisible();
+  await expect(draft.getByText('Scanned supplier', { exact: true })).toBeVisible();
   const table = draft.getByRole('table', { name: 'Purchase items' });
   const milk = table.getByRole('row', { name: 'Purchase row 1', exact: true });
   const bread = table.getByRole('row', { name: 'Purchase row 2', exact: true });

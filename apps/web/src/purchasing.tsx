@@ -703,6 +703,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
           key={supplierId}
           supplierId={supplierId}
           products={availableProducts}
+          onAddSupplier={() => setAddingSupplier(true)}
           onApply={(reviewed, documentReference) => {
             setLines((current) => [
               ...current.filter(
@@ -721,8 +722,8 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
             setLineError('');
           }}
         />
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+        <div className="purchase-reference-row">
+          <div>
             <Field label={t('Supplier reference')}>
               <input
                 maxLength={60}
@@ -732,6 +733,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
             </Field>
           </div>
           <Button
+            className="purchase-reference-generate"
             type="button"
             variant="outline"
             onClick={() =>
