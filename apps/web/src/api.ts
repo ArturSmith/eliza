@@ -1,9 +1,11 @@
+import type { DocumentErrorDetails } from '@eliza/contracts';
 import { QueryClient, useQuery } from '@tanstack/react-query';
 import type { Session, Product, Movement, AuditEvent, Device, Employee } from '@eliza/contracts';
 export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public details?: DocumentErrorDetails,
   ) {
     super(message);
   }
@@ -36,7 +38,7 @@ export async function api<T>(
       void queryClient.invalidateQueries({ queryKey: ['pos-context'] });
     if (response.status === 401 && path !== '/auth/session' && path !== '/auth/login')
       void queryClient.invalidateQueries({ queryKey: ['session'] });
-    throw new ApiError(data.message ?? 'Request failed.', response.status);
+    throw new ApiError(data.message ?? 'Request failed.', response.status, data.details);
   }
   return data;
 }

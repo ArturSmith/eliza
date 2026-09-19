@@ -9,6 +9,7 @@ export function Dialog({
   description,
   children,
   elevated = false,
+  wide = false,
 }: {
   open: boolean;
   onOpenChange: (value: boolean) => void;
@@ -16,6 +17,7 @@ export function Dialog({
   description: string;
   children: ReactNode;
   elevated?: boolean;
+  wide?: boolean;
 }) {
   useLanguage();
   return (
@@ -25,7 +27,13 @@ export function Dialog({
           className={elevated ? 'dialog-overlay dialog-overlay-elevated' : 'dialog-overlay'}
         />
         <DialogPrimitive.Content
-          className={elevated ? 'dialog-content dialog-content-elevated' : 'dialog-content'}
+          className={[
+            'dialog-content',
+            elevated && 'dialog-content-elevated',
+            wide && 'dialog-content-wide',
+          ]
+            .filter(Boolean)
+            .join(' ')}
         >
           <DialogPrimitive.Title className="dialog-title">{title}</DialogPrimitive.Title>
           <DialogPrimitive.Description className="muted">{description}</DialogPrimitive.Description>

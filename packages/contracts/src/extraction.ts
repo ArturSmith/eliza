@@ -174,3 +174,10 @@ export function mergeDuplicates(lines: ExtractedLine[]) {
 export function countUnmatched(lines: ExtractedLine[]) {
   return lines.filter((line) => !line.productId).length;
 }
+
+/** Safe diagnostic fields, never provider prose, keys or document content. */
+export type DocumentErrorDetails = {
+  providerStatus?: number;
+  providerCode?: string;
+  requestId?: string;
+};

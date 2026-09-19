@@ -1,3 +1,4 @@
+import { PurchaseDocumentError } from './purchase-document-error.js';
 import 'reflect-metadata';
 import {
   Catch,
@@ -40,7 +41,12 @@ class Errors implements ExceptionFilter {
   catch(error: unknown, host: ArgumentsHost) {
     const res = host.switchToHttp().getResponse<Response>();
     if (error instanceof HttpException) {
-      res.status(error.getStatus()).json({ message: error.message });
+      res
+        .status(error.getStatus())
+        .json({
+          message: error.message,
+          ...(error instanceof PurchaseDocumentError ? { details: error.details } : {}),
+        });
       return;
     }
     const err = error as {

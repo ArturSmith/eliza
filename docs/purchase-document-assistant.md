@@ -13,15 +13,15 @@ Set `OPENAI_API_KEY` in the **backend service's runtime environment**, then rede
 1. Open **Purchases → New purchase order**, or edit a draft.
 2. Choose the supplier and select **Read supplier document**.
 3. Upload one JPEG, PNG, or WebP image, at most 4.4 MB.
-4. Select **Read document**. The image is sent to OpenAI only at this step.
-5. Expand **Open original image** to compare the suggestions with the document.
-6. Review every product, quantity and unit cost. Supplier article codes, barcodes and internal SKUs are matched against active records in this store. Conflicting or missing matches require manual selection.
-7. Enter the tax rate for each row. Convert carton quantities and costs into the product's stock unit yourself; Eliza does not infer pack conversions or tax.
-8. Correct duplicates before continuing. Same-product, same-cost rows may be combined using exact decimal quantities. Different-cost rows remain separate until a person resolves them.
-9. Confirm the review and select **Add reviewed lines to draft**. This appends to existing selected products; an existing supplier reference is retained.
-10. Check the normal purchase form and select **Save draft**. Ordering, receiving, price changes and payment recording still use their existing explicit actions.
+4. Select **Read document**. The image is sent to OpenAI, and extracted rows are added directly to the purchase table. Existing filled rows are preserved.
+5. Expand **Open original image** in the purchase form to compare the suggestions with the document.
+6. Edit products, quantities, unit costs, proposed selling prices and tax directly in the table. Unmatched items remain visible until you select or create their catalogue product.
+7. Quantities and costs must use the product's stock unit. Convert cartons yourself and enter the tax rate from the document.
+8. Resolve duplicates; rows with different costs remain visible. Remove unwanted rows or add items manually.
+9. Review the calculated line totals, subtotal, tax and overall total. Incomplete rows show a dash instead of a misleading total.
+10. Confirm the document review and select **Save draft**. Editing a row clears the confirmation. Ordering, receiving and payment recording remain separate actions.
 
-To create an unknown product, close the review, use **Create new product** in the purchase form, and reopen the review. The review remains in memory while the purchase form stays mounted and the supplier stays unchanged. Changing supplier clears it to prevent importing another supplier's suggestions.
+New and existing drafts use the same editable table, with horizontal scrolling on smaller screens. Scanned descriptions and codes stay beside each product during the editing session. Draft saving rejects unresolved products, duplicate products and fractional quantities for whole-unit products. An existing supplier reference is retained when another image is read.
 
 ## Scope and limits
 
@@ -42,3 +42,9 @@ To create an unknown product, close the review, use **Create new product** in th
 Unit tests cover decimal merging, conflicting identifiers and different-cost duplicates. Integration tests use an isolated database and mocked provider responses. Browser coverage exercises invalid uploads, provider retry, matching corrections, tax entry, whole-unit validation and explicit draft saving without stock or selling-price changes.
 
 A live provider smoke test still needs to run on the configured server: use a synthetic invoice with a known supplier article code, confirm the review opens, and verify extracted fields before saving. No real OpenAI request was made during local verification because the key is configured only on the deployed server.
+
+## Troubleshooting document reading
+
+Failures now identify API authentication, credits/quota, permissions, model access, rate limits, provider downtime, network failures, timeouts, refusals and invalid/incomplete responses. Expand **Technical details** to see the provider HTTP status, error code and OpenAI request ID when available. These identifiers can help investigate a failed request.
+
+Provider authentication errors do not sign the Eliza user out: the app returns a service error while retaining the actual provider status in diagnostics. Raw provider prose, API keys and document content are not forwarded. English and Russian messages are available. Deploy this version before retrying to see the new diagnostics; it cannot recover details from earlier failed requests.

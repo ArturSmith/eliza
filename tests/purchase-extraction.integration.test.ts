@@ -240,6 +240,62 @@ describe.sequential('purchase document extraction', () => {
     provider = () => new Response('{}', { status: 429 });
     expect((await extract()).status).toBe(503);
   });
+  it.each([
+    [401, 'invalid_api_key', 'rejected the API key'],
+    [429, 'insufficient_quota', 'credits or spending quota'],
+    [429, 'credit_balance_exhausted', 'credits or spending quota'],
+    [429, 'rate_limit_exceeded', 'rate limit reached'],
+    [403, 'permission_denied', 'denied access'],
+    [404, 'model_not_found', 'model is unavailable'],
+    [400, 'invalid_request_error', 'image or request settings'],
+    [503, 'server_error', 'temporarily unavailable'],
+  ])(
+    'explains provider HTTP %s / %s without exposing provider prose',
+    async (status, code, message) => {
+      provider = () =>
+        new Response(
+          JSON.stringify({
+            error: { code, message: 'SECRET API key: test-only-key. Private invoice data.' },
+          }),
+          { status: Number(status), headers: { 'x-request-id': 'req_test123' } },
+        );
+      const result = await extract();
+      expect(result.status).toBe(503);
+      expect(result.body.message).toContain(message);
+      expect(result.body.details).toEqual({
+        providerStatus: status,
+        providerCode: code,
+        requestId: 'req_test123',
+      });
+      expect(JSON.stringify(result.body)).not.toContain('test-only-key');
+      expect(JSON.stringify(result.body)).not.toContain('Private invoice');
+    },
+  );
+  it('handles non-JSON provider errors and excludes invalid diagnostic fields', async () => {
+    provider = () => new Response('<html>Bad gateway</html>', { status: 502 });
+    const gateway = await extract();
+    expect(gateway.body.message).toContain('temporarily unavailable');
+    expect(gateway.body.details).toEqual({ providerStatus: 502 });
+    provider = () =>
+      new Response(JSON.stringify({ error: { code: 'sk-secret-key', message: 'SECRET' } }), {
+        status: 400,
+        headers: { 'x-request-id': 'sk-secret-key' },
+      });
+    expect((await extract()).body.details).toEqual({ providerStatus: 400 });
+  });
+  it('distinguishes a timeout from a network failure', async () => {
+    provider = () => {
+      throw new DOMException('SECRET', 'TimeoutError');
+    };
+    expect((await extract()).body.details.providerCode).toBe('request_timeout');
+    provider = () => {
+      throw new TypeError('SECRET connection string');
+    };
+    const result = await extract();
+    expect(result.body.details.providerCode).toBe('connection_error');
+    expect(result.body.message).toContain('could not connect');
+    expect(JSON.stringify(result.body)).not.toContain('SECRET');
+  });
   it('limits provider calls per store and retains the ordinary endpoint body limit', async () => {
     for (let i = 0; i < 6; i++) expect((await extract()).status).toBe(201);
     expect((await extract()).status).toBe(429);

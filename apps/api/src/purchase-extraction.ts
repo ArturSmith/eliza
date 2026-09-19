@@ -1,3 +1,8 @@
+import {
+  PurchaseDocumentError,
+  providerFailure,
+  safeProviderRequestId,
+} from './purchase-document-error.js';
 import { BadRequestException, HttpException } from '@nestjs/common';
 import {
   type Extraction,
@@ -185,6 +190,8 @@ export async function extractPurchaseDocument(
     })
     .strict();
   let payload: z.infer<typeof payloadSchema>;
+  let providerStatus: number | undefined;
+  let requestId: string | undefined;
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -211,22 +218,48 @@ export async function extractPurchaseDocument(
         ],
       }),
     });
-    if (!response.ok) throw new Error(`Provider returned ${response.status}`);
+    providerStatus = response.status;
+    requestId = safeProviderRequestId(response.headers.get('x-request-id'));
+    if (!response.ok) {
+      let code: unknown;
+      try {
+        const errorBody = JSON.parse((await bounded(response, 64_000)).toString());
+        code = errorBody?.error?.code ?? errorBody?.error?.type;
+      } catch {
+        /* The HTTP status remains useful even for non-JSON errors. */
+      }
+      throw providerFailure(response.status, code, requestId);
+    }
     const body = JSON.parse((await bounded(response, 1_000_000)).toString());
     const choice = body.choices?.[0];
-    if (
-      choice?.finish_reason !== 'stop' ||
-      choice.message?.refusal ||
-      typeof choice.message?.content !== 'string'
-    )
-      throw new Error('Incomplete document');
+    if (choice?.message?.refusal || choice?.finish_reason === 'content_filter')
+      throw new PurchaseDocumentError(
+        'OpenAI declined to read this document. Try another image or enter the purchase manually.',
+        { providerStatus, providerCode: 'document_refused', requestId },
+      );
+    if (choice?.finish_reason === 'length')
+      throw new PurchaseDocumentError(
+        'OpenAI could not finish reading within the response limit. Split the document into smaller images.',
+        { providerStatus, providerCode: 'incomplete_response', requestId },
+      );
+    if (choice?.finish_reason !== 'stop' || typeof choice?.message?.content !== 'string')
+      throw new Error('Invalid response');
     payload = payloadSchema.parse(JSON.parse(choice.message.content));
-  } catch {
-    // The manual path is always available, so a provider outage degrades the
-    // feature rather than blocking the delivery being recorded.
-    throw new HttpException(
-      'The document could not be read just now. Try again, or enter the purchase manually.',
-      503,
+  } catch (error) {
+    if (error instanceof PurchaseDocumentError) throw error;
+    if (error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name))
+      throw new PurchaseDocumentError(
+        'OpenAI took too long to respond. Try again or use a smaller image.',
+        { providerStatus, providerCode: 'request_timeout', requestId },
+      );
+    if (providerStatus === undefined)
+      throw new PurchaseDocumentError(
+        'The server could not connect to OpenAI. Check its internet connection and try again.',
+        { providerCode: 'connection_error' },
+      );
+    throw new PurchaseDocumentError(
+      'OpenAI returned an unreadable or invalid response. Try again or enter the purchase manually.',
+      { providerStatus, providerCode: 'invalid_response', requestId },
     );
   }
 

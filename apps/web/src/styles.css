@@ -2967,3 +2967,171 @@ input.shopping-section-title {
   flex: 0 0 auto;
   margin-top: 4px;
 }
+
+.purchase-document-diagnostics dl {
+  margin-top: 12px;
+  display: grid;
+  gap: 6px;
+}
+.purchase-document-diagnostics dd {
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+  font-family: monospace;
+}
+
+.dialog-content-wide {
+  max-width: 1380px;
+}
+.purchase-draft-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.purchase-draft-form > .field {
+  margin-bottom: 0;
+}
+.purchase-draft-scroll {
+  overflow-x: auto;
+  border: 1px solid #e1e6dc;
+  border-radius: 10px;
+}
+.purchase-draft-table {
+  width: 100%;
+  min-width: 1120px;
+  border-collapse: collapse;
+}
+.purchase-draft-table th,
+.purchase-draft-table td {
+  padding: 12px;
+  vertical-align: top;
+}
+.purchase-draft-table th {
+  white-space: normal;
+}
+.purchase-draft-table input {
+  width: 100%;
+  min-width: 80px;
+}
+.purchase-draft-table .purchase-draft-product {
+  min-width: 260px;
+  width: 28%;
+}
+.purchase-draft-table .search-select-label {
+  display: none;
+}
+.purchase-draft-table .search-select-panel {
+  position: relative;
+  top: auto !important;
+  bottom: auto !important;
+  width: 100%;
+  margin-top: 6px;
+}
+.purchase-draft-table .search-select {
+  margin-bottom: 8px;
+}
+.purchase-draft-source {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+.purchase-draft-source small {
+  color: #798374;
+}
+.purchase-draft-amount {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.purchase-draft-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.purchase-draft-totals {
+  display: grid;
+  gap: 10px;
+  min-width: 260px;
+  margin: 0;
+}
+.purchase-draft-totals > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+}
+.purchase-draft-totals dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+.purchase-draft-totals > div:last-child {
+  border-top: 1px solid #e1e6dc;
+  padding-top: 10px;
+  font-weight: 650;
+}
+.purchase-draft-form .purchase-document-preview img {
+  max-height: 65vh;
+  object-fit: contain;
+}
+
+.purchase-draft-table caption {
+  text-align: left;
+  padding: 14px 12px;
+  font-weight: 600;
+}
+
+.purchase-draft-table {
+  table-layout: fixed;
+  min-width: 1180px;
+}
+.purchase-draft-table th,
+.purchase-draft-table td {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.purchase-draft-table th:nth-child(1) {
+  width: 3%;
+}
+.purchase-draft-table th:nth-child(2) {
+  width: 25%;
+}
+.purchase-draft-table th:nth-child(3) {
+  width: 7%;
+}
+.purchase-draft-table th:nth-child(4) {
+  width: 8%;
+}
+.purchase-draft-table th:nth-child(5) {
+  width: 14%;
+}
+.purchase-draft-table th:nth-child(6) {
+  width: 11%;
+}
+.purchase-draft-table th:nth-child(7) {
+  width: 8%;
+}
+.purchase-draft-table th:nth-child(8) {
+  width: 12%;
+}
+.purchase-draft-table th:nth-child(9) {
+  width: 12%;
+}
+.purchase-draft-table input {
+  min-width: 0;
+  min-height: 40px;
+  padding: 9px 10px;
+  border: 1px solid #dce3d4;
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  color: inherit;
+}
+.purchase-draft-table input:focus {
+  outline: 2px solid #a5c0a5;
+  outline-offset: 1px;
+}
+.purchase-draft-table .muted {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+}

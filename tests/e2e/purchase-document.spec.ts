@@ -46,14 +46,12 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await draft.getByRole('button', { name: 'Select a supplier', exact: true }).click();
   await page.getByRole('option', { name: /Document supplier/ }).click();
   await draft.getByRole('button', { name: 'Read supplier document' }).click();
-  const review = page.getByRole('dialog', { name: 'Review supplier document', exact: true });
-  await review
-    .getByLabel('Document image')
-    .setInputFiles({
-      name: 'invoice.pdf',
-      mimeType: 'application/pdf',
-      buffer: Buffer.from('not a PDF'),
-    });
+  const review = page.getByRole('dialog', { name: 'Read supplier document', exact: true });
+  await review.getByLabel('Document image').setInputFiles({
+    name: 'invoice.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('not a PDF'),
+  });
   await expect(review.getByRole('alert')).toContainText('Upload a JPEG');
   await review.getByLabel('Document image').setInputFiles({
     name: 'invoice.png',
@@ -72,7 +70,12 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
         status: 503,
         json: {
           message:
-            'The document could not be read just now. Try again, or enter the purchase manually.',
+            'OpenAI API credits or spending quota are exhausted. Check API billing and usage limits, then try again.',
+          details: {
+            providerStatus: 429,
+            providerCode: 'insufficient_quota',
+            requestId: 'req_browser_test',
+          },
         },
       });
       return;
@@ -109,40 +112,83 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
     });
   });
   await review.getByRole('button', { name: 'Read document', exact: true }).click();
-  await expect(review.getByRole('alert')).toContainText('could not be read');
+  await expect(review.getByRole('alert')).toContainText('credits or spending quota');
+  await review.getByText('Technical details', { exact: true }).click();
+  await expect(review.getByText('insufficient_quota', { exact: true })).toBeVisible();
+  await expect(review.getByText('req_browser_test', { exact: true })).toBeVisible();
   await review.getByRole('button', { name: 'Read document', exact: true }).click();
-  const milk = review.getByRole('region', { name: 'Document line 1' });
-  const bread = review.getByRole('region', { name: 'Document line 2' });
-  await expect(milk).toBeVisible();
-  await expect(milk.getByLabel('Tax %')).toHaveValue('');
-  const apply = review.getByRole('button', { name: 'Add reviewed lines to draft' });
-  await expect(apply).toBeDisabled();
-  await milk.getByLabel('Tax %').fill('0');
-  await bread.getByRole('button', { name: 'Select a product', exact: true }).click();
-  await page.getByRole('option', { name: /Milk/ }).click();
-  await bread.getByLabel('Tax %').fill('0');
-  await expect(review.getByRole('alert')).toContainText('appears more than once');
-  await bread.getByRole('button', { name: /Milk/ }).click();
-  await page.getByRole('option', { name: /Bread/ }).click();
-  await bread.getByLabel('Quantity', { exact: true }).fill('1.5');
-  await review.getByRole('checkbox').check();
-  await expect(apply).toBeDisabled(); // Pieces must be whole.
-  await bread.getByLabel('Quantity', { exact: true }).fill('3');
-  await review.getByRole('checkbox').check();
-  await expect(apply).toBeEnabled();
-  await review.screenshot({ path: test.info().outputPath('document-review.png') });
-  expect(await page.request.get('/api/purchases').then((r) => r.json())).toHaveLength(0);
-  await apply.click();
   await expect(review).not.toBeVisible();
+  const table = draft.getByRole('table', { name: 'Purchase items' });
+  const milk = table.getByRole('row', { name: 'Purchase row 1', exact: true });
+  const bread = table.getByRole('row', { name: 'Purchase row 2', exact: true });
+  await expect(milk).toBeVisible();
+  await expect(milk.getByLabel('Quantity', { exact: true })).toHaveValue('2');
+  await expect(milk.getByLabel('Purchase tax %')).toHaveValue('');
   await expect(draft.getByLabel('Supplier reference')).toHaveValue('INV-100');
+  await milk.getByLabel('Purchase tax %').fill('0');
+  await bread.getByRole('button', { name: 'Select a product', exact: true }).click();
+  await bread.getByRole('option', { name: /Milk/ }).click();
+  await bread.getByLabel('Purchase tax %').fill('0');
+  await draft.getByRole('button', { name: 'Save draft', exact: true }).click();
+  await expect(draft.getByRole('alert')).toContainText('combine duplicate');
+  await bread.getByRole('button', { name: /Milk/ }).click();
+  await bread.getByRole('option', { name: /Bread/ }).click();
+  await expect(bread.getByLabel('Unit cost excl. tax')).toHaveValue('4'); // A new match keeps the scanned cost.
+  await bread.getByLabel('Quantity', { exact: true }).fill('1.5');
+  await draft.getByRole('button', { name: 'Save draft', exact: true }).click();
+  await expect(draft.getByRole('alert')).toContainText('whole numbers');
+  await bread.getByLabel('Quantity', { exact: true }).fill('3');
+  await milk.getByLabel('Unit cost excl. tax').fill('3.50');
+  await milk.getByLabel('Purchase tax %').fill('10');
+  await milk.getByLabel('Proposed selling price incl. tax (optional)').fill('11');
+  await expect(draft.locator('.purchase-draft-totals')).toContainText('19.70');
+  await draft.getByRole('button', { name: 'Add product', exact: true }).click();
+  await expect(table.getByRole('row')).toHaveCount(4);
+  await table
+    .getByRole('row', { name: 'Purchase row 3', exact: true })
+    .getByRole('button', { name: 'Remove line', exact: true })
+    .click();
+  await expect(table.getByRole('row')).toHaveCount(3);
+  await draft.getByRole('button', { name: 'Save draft', exact: true }).click();
+  await expect(draft.getByRole('alert')).toContainText('confirm the document check');
   expect(await page.request.get('/api/purchases').then((r) => r.json())).toHaveLength(0);
+  await draft.getByRole('checkbox').check();
+  await milk.getByLabel('Quantity', { exact: true }).fill('2');
+  // Editing a row invalidates the review confirmation.
+  await milk.getByLabel('Quantity', { exact: true }).fill('4');
+  await expect(draft.getByRole('checkbox')).not.toBeChecked();
+  await milk.getByLabel('Quantity', { exact: true }).fill('2');
+  await draft.getByRole('checkbox').check();
+  await draft.locator('.purchase-draft-scroll').evaluate((el) => {
+    el.scrollLeft = 0;
+  });
+  await draft
+    .locator('.purchase-draft-scroll')
+    .screenshot({ path: test.info().outputPath('purchase-table-desktop.png') });
+  await page.setViewportSize({ width: 390, height: 844 });
+  const scroll = draft.locator('.purchase-draft-scroll');
+  expect(await scroll.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  await scroll.evaluate((el) => {
+    el.scrollLeft = 0;
+  });
+  await scroll.screenshot({ path: test.info().outputPath('purchase-table-mobile.png') });
+  await page.setViewportSize({ width: 1280, height: 900 });
   await draft.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(draft).not.toBeVisible();
   const orders = await page.request.get('/api/purchases').then((r) => r.json());
   expect(orders).toHaveLength(1);
-  expect(orders[0]).toMatchObject({ status: 'draft', total: '18.00' });
+  expect(orders[0]).toMatchObject({ status: 'draft', total: '19.70' });
   const stock = await page.request.get('/api/products').then((r) => r.json());
   expect(stock.every((p: any) => p.stock === '0.000' && p.price === '10.00')).toBe(true);
+  await page.getByRole('button', { name: 'Edit draft', exact: true }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit purchase draft', exact: true });
+  await expect(edit.getByRole('table', { name: 'Purchase items' })).toBeVisible();
+  await edit
+    .getByRole('row', { name: 'Purchase row 2', exact: true })
+    .getByLabel('Quantity', { exact: true })
+    .fill('4');
+  await edit.getByRole('button', { name: 'Save draft', exact: true }).click();
+  await expect(edit).not.toBeVisible();
   await page.goto('/purchases');
   await page.getByLabel('Language', { exact: true }).selectOption('ru');
   await page.getByRole('button', { name: 'Новый заказ поставщику' }).click();

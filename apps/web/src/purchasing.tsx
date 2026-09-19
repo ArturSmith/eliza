@@ -1,10 +1,12 @@
-import { PurchaseDocument } from './purchase-document';
+import { PurchaseDocument, type DocumentDraftLine } from './purchase-document';
 import { countText, t, useLanguage, getLocale } from './i18n';
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Search, X } from 'lucide-react';
 import {
   supplierSchema,
+  purchaseDraftSchema,
+  calculatePurchaseLine,
   fromScaled,
   toScaled,
   type Supplier,
@@ -494,6 +496,7 @@ export function PurchasesPage() {
       </section>
       {selected && <OrderDetail id={selected} close={() => setSelected(undefined)} />}
       <Dialog
+        wide
         open={create}
         onOpenChange={setCreate}
         title={t('New purchase order')}
@@ -541,7 +544,9 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
   const [reference, setReference] = useState(order?.supplier_reference ?? '');
   const [expectedDate, setDate] = useState(order?.expected_date?.slice(0, 10) ?? '');
   const [notes, setNotes] = useState(order?.notes ?? '');
-  const [lines, setLines] = useState(
+  const [reviewed, setReviewed] = useState(false);
+  const [hasScan, setHasScan] = useState(false);
+  const [lines, setLines] = useState<DocumentDraftLine[]>(
     order?.lines.map((l) => ({
       productId: l.product_id,
       quantity: l.ordered_quantity,
@@ -558,45 +563,64 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
           ? {
               ...line,
               productId: product.id,
-              unitCost: product.cost ?? '0',
+              unitCost: line.source ? line.unitCost : (product.cost ?? '0'),
               sellingPrice: product.price,
             }
           : line,
       ),
     );
   }
-  const [activeIndex, setActiveIndex] = useState(lines.length - 1);
-  const [lineError, setLineError] = useState('');
-  const decimal = /^\d{1,9}(\.\d{1,3})?$/;
-  function lineComplete(line: (typeof lines)[number]) {
-    return (
-      !!line.productId &&
-      decimal.test(line.quantity.trim()) &&
-      Number(line.quantity) > 0 &&
-      decimal.test(line.unitCost.trim()) &&
-      decimal.test(line.taxRate.trim())
-    );
-  }
-  function nextProduct() {
-    const current = lines[activeIndex];
-    if (!current || !lineComplete(current)) {
-      setLineError('Choose a product and enter a valid quantity, unit cost, and tax rate first.');
-      return;
-    }
+  useEffect(() => {
+    setReviewed(false);
     setLineError('');
-    setLines([
-      ...lines,
+  }, [lines, supplierId]);
+  const [lineError, setLineError] = useState('');
+  function nextProduct() {
+    setLineError('');
+    setLines((current) => [
+      ...current,
       { productId: '', quantity: '1', unitCost: '0', taxRate: '0', sellingPrice: '' },
     ]);
-    setActiveIndex(lines.length);
   }
   function removeLine(index: number) {
-    setLines(lines.filter((_, i) => i !== index));
-    setActiveIndex((current) => {
-      if (index === current) return -1;
-      return index < current ? current - 1 : current;
-    });
+    setLines((current) => current.filter((_, i) => i !== index));
   }
+  function updateLine(
+    index: number,
+    field: 'quantity' | 'unitCost' | 'sellingPrice' | 'taxRate',
+    value: string,
+  ) {
+    setLines((current) =>
+      current.map((line, i) => (i === index ? { ...line, [field]: value } : line)),
+    );
+  }
+  const lineAmounts = lines.map((line) => {
+    if (
+      !purchaseDraftSchema.shape.lines.element.safeParse({
+        ...line,
+        sellingPrice: line.sellingPrice || undefined,
+      }).success
+    )
+      return null;
+    return calculatePurchaseLine(line.unitCost, line.quantity, line.taxRate);
+  });
+  const totals =
+    lineAmounts.every(Boolean) && lines.length
+      ? {
+          subtotal: fromScaled(
+            lineAmounts.reduce((sum, item) => sum + toScaled(item!.subtotal, 2), 0n),
+            2,
+          ),
+          tax: fromScaled(
+            lineAmounts.reduce((sum, item) => sum + toScaled(item!.tax, 2), 0n),
+            2,
+          ),
+          total: fromScaled(
+            lineAmounts.reduce((sum, item) => sum + toScaled(item!.total, 2), 0n),
+            2,
+          ),
+        }
+      : null;
   const [requestId] = useState(() => crypto.randomUUID());
   const mutation = useMutation({
     mutationFn: () =>
@@ -608,9 +632,10 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
         supplierReference: reference,
         expectedDate,
         notes,
-        lines: lines
-          .filter((line) => line.productId)
-          .map((line) => ({ ...line, sellingPrice: line.sellingPrice || undefined })),
+        lines: lines.map(({ source: _source, ...line }) => ({
+          ...line,
+          sellingPrice: line.sellingPrice || undefined,
+        })),
       }),
     onSuccess: (p) => {
       void refresh();
@@ -620,10 +645,32 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
   return (
     <>
       <form
+        className="purchase-draft-form"
         onSubmit={(e) => {
           e.preventDefault();
-          if (!lines.some((line) => line.productId)) {
-            setLineError('Add at least one product to this order.');
+          const parsed = purchaseDraftSchema.safeParse({
+            supplierId,
+            supplierReference: reference,
+            expectedDate,
+            notes,
+            lines: lines.map((line) => ({ ...line, sellingPrice: line.sellingPrice || undefined })),
+          });
+          const whole = lines.every((line) => {
+            const product = availableProducts.find((p) => p.id === line.productId && p.active);
+            return (
+              product &&
+              (!['piece', 'pack', 'box'].includes(product.unit) ||
+                Number.isInteger(Number(line.quantity)))
+            );
+          });
+          if (!parsed.success || !whole) {
+            setLineError(
+              'Check every row: choose a product, enter valid quantities, costs and tax, and combine duplicate products. Piece, pack and box quantities must be whole numbers.',
+            );
+            return;
+          }
+          if (hasScan && !reviewed) {
+            setLineError('Review the scanned rows and confirm the document check before saving.');
             return;
           }
           setLineError('');
@@ -653,11 +700,21 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
           key={supplierId}
           supplierId={supplierId}
           products={availableProducts}
-          existingLines={lines}
           onApply={(reviewed, documentReference) => {
-            setLines((current) => [...current.filter((l) => l.productId), ...reviewed]);
+            setLines((current) => [
+              ...current.filter(
+                (l) =>
+                  l.productId ||
+                  l.source ||
+                  l.quantity !== '1' ||
+                  l.unitCost !== '0' ||
+                  l.taxRate !== '0' ||
+                  l.sellingPrice,
+              ),
+              ...reviewed,
+            ]);
+            setHasScan(true);
             if (!reference.trim()) setReference(documentReference);
-            setActiveIndex(-1);
             setLineError('');
           }}
         />
@@ -667,172 +724,197 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
         <Field label={t('Expected delivery')}>
           <input type="date" value={expectedDate} onChange={(e) => setDate(e.target.value)} />
         </Field>
-        {lines.map((line, index) => {
-          const product = availableProducts.find((p) => p.id === line.productId);
-          if (index !== activeIndex)
-            return (
-              <div key={index} className="purchase-line-summary">
-                <div className="purchase-line-summary-text">
-                  <strong>{product ? product.name : t('Product not selected')}</strong>
-                  <span className="muted">
-                    {product
-                      ? t('{value0} {value1} · {value2} {value3}', {
-                          value0: line.quantity,
-                          value1: t(product.unit),
-                          value2: formatMoney(line.unitCost || '0', currency),
-                          value3: t('excl. tax'),
-                        })
-                      : t('Incomplete line')}
-                  </span>
-                </div>
-                <div className="purchase-line-summary-actions">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setLineError('');
-                      setActiveIndex(index);
-                    }}
-                  >
-                    {t('Edit ')}
-                  </Button>
-                  <Button type="button" variant="ghost" onClick={() => removeLine(index)}>
-                    {t('Remove ')}
-                  </Button>
-                </div>
-              </div>
-            );
-          return (
-            <fieldset key={index} className="purchase-line">
-              <div className="purchase-product-picker">
-                <SearchSelect
-                  label={t('Product')}
-                  placeholder={t('Select a product')}
-                  value={
-                    product && {
-                      title: product.name,
-                      subtitle: `${product.sku} (${t(product.unit)})`,
-                    }
-                  }
-                  options={availableProducts
-                    .filter((p) => p.active)
-                    .map((p) => ({
-                      id: p.id,
-                      title: p.name,
-                      subtitle: `${p.sku} · ${t(p.unit ?? '')}`,
-                      keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
-                    }))}
-                  createLabel={t('Create new product')}
-                  onCreate={() => setAddingProduct(index)}
-                  onSelect={(id) => {
-                    const selected = availableProducts.find((p) => p.id === id);
-                    if (selected) selectProduct(index, selected);
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setBarcode('');
-                    setScanError('');
-                    setScanLine(index);
-                  }}
-                >
-                  {t('Scan barcode ')}
-                </Button>
-              </div>
-              <Field label={t('Quantity')}>
-                <input
-                  required
-                  inputMode="decimal"
-                  value={line.quantity}
-                  onChange={(e) =>
-                    setLines(
-                      lines.map((l, i) => (i === index ? { ...l, quantity: e.target.value } : l)),
-                    )
-                  }
-                />
-              </Field>
-              <Field label={t('Unit cost excl. tax')}>
-                <input
-                  required
-                  inputMode="decimal"
-                  value={line.unitCost}
-                  onChange={(e) =>
-                    setLines(
-                      lines.map((l, i) => (i === index ? { ...l, unitCost: e.target.value } : l)),
-                    )
-                  }
-                />
-              </Field>
-              {line.productId && (
-                <CostComparison
-                  cost={line.unitCost}
-                  previous={product?.cost}
-                  price={product?.price}
-                />
-              )}
-              <Field
-                label={t('Proposed selling price incl. tax (optional)')}
-                hint={t(
-                  'Leave blank to keep the current selling price. Confirm any proposed price when receiving the delivery. Saving this order does not change checkout prices.',
-                )}
-              >
-                <input
-                  inputMode="decimal"
-                  value={line.sellingPrice}
-                  onChange={(e) =>
-                    setLines(
-                      lines.map((l, i) =>
-                        i === index ? { ...l, sellingPrice: e.target.value } : l,
-                      ),
-                    )
-                  }
-                />
-              </Field>
-              <Field label={t('Purchase tax %')}>
-                <input
-                  required
-                  inputMode="decimal"
-                  value={line.taxRate}
-                  onChange={(e) =>
-                    setLines(
-                      lines.map((l, i) => (i === index ? { ...l, taxRate: e.target.value } : l)),
-                    )
-                  }
-                />
-              </Field>
-              {lines.length > 1 && (
-                <Button type="button" variant="ghost" onClick={() => removeLine(index)}>
-                  {t('Remove line ')}
-                </Button>
-              )}
-            </fieldset>
-          );
-        })}
-        {lineError && <p className="field-error">{lineError}</p>}
-        <div className="purchase-line-controls">
-          {activeIndex === -1 ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setLineError('');
-                setLines([
-                  ...lines,
-                  { productId: '', quantity: '1', unitCost: '0', taxRate: '0', sellingPrice: '' },
-                ]);
-                setActiveIndex(lines.length);
-              }}
-            >
-              {t('Add product ')}
-            </Button>
-          ) : (
-            <Button type="button" variant="outline" onClick={nextProduct}>
-              {t('Next product ')}
-            </Button>
-          )}
+        {hasScan && (
+          <p className="notice">
+            {t(
+              'Check every line against the image. Quantities must use the product’s stock unit; convert cartons yourself. Costs are per stock unit, excluding tax. Enter the tax shown on the document.',
+            )}
+          </p>
+        )}
+        <div
+          className="purchase-draft-scroll"
+          tabIndex={0}
+          role="region"
+          aria-label={t('Purchase items')}
+        >
+          <table className="purchase-draft-table">
+            <caption className="sr-only">{t('Purchase items')}</caption>
+            <thead>
+              <tr>
+                <th scope="col">#</th>
+                <th scope="col">{t('Product')}</th>
+                <th scope="col">{t('Stock unit')}</th>
+                <th scope="col">{t('Quantity')}</th>
+                <th scope="col">{t('Unit cost excl. tax')}</th>
+                <th scope="col">{t('Selling price incl. tax')}</th>
+                <th scope="col">{t('Purchase tax %')}</th>
+                <th scope="col">{t('Total incl. tax')}</th>
+                <th scope="col">{t('Actions')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((line, index) => {
+                const product = availableProducts.find((p) => p.id === line.productId);
+                return (
+                  <tr key={index} aria-label={t('Purchase row {number}', { number: index + 1 })}>
+                    <td>{index + 1}</td>
+                    <td className="purchase-draft-product">
+                      {line.source && (
+                        <div className="purchase-draft-source">
+                          <strong>{line.source.description || t('Unreadable description')}</strong>
+                          <small>
+                            {[line.source.supplierSku, line.source.barcode]
+                              .filter(Boolean)
+                              .join(' · ')}
+                          </small>
+                          <small>
+                            {t('Read quantity: {quantity}; unit cost: {cost}', {
+                              quantity: line.source.quantity || '—',
+                              cost: line.source.unitCost || '—',
+                            })}
+                          </small>
+                        </div>
+                      )}
+                      <SearchSelect
+                        label={t('Product')}
+                        placeholder={t('Select a product')}
+                        value={product && { title: product.name, subtitle: product.sku }}
+                        options={availableProducts
+                          .filter((p) => p.active)
+                          .map((p) => ({
+                            id: p.id,
+                            title: p.name,
+                            subtitle: p.sku,
+                            keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
+                          }))}
+                        createLabel={t('Create new product')}
+                        onCreate={() => setAddingProduct(index)}
+                        onSelect={(id) => {
+                          const p = availableProducts.find((p) => p.id === id);
+                          if (p) selectProduct(index, p);
+                        }}
+                      />
+                      {!line.productId && line.source && (
+                        <small className="error">
+                          {t('No reliable product match. Choose the correct catalogue product.')}
+                        </small>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setBarcode('');
+                          setScanError('');
+                          setScanLine(index);
+                        }}
+                      >
+                        {t('Scan barcode')}
+                      </Button>
+                    </td>
+                    <td>{product ? t(product.unit) : '—'}</td>
+                    <td>
+                      <input
+                        aria-label={t('Quantity')}
+                        required
+                        inputMode="decimal"
+                        value={line.quantity}
+                        onChange={(e) => updateLine(index, 'quantity', e.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        aria-label={t('Unit cost excl. tax')}
+                        required
+                        inputMode="decimal"
+                        value={line.unitCost}
+                        onChange={(e) => updateLine(index, 'unitCost', e.target.value)}
+                      />
+                      {product && (
+                        <CostComparison
+                          cost={line.unitCost}
+                          previous={product.cost}
+                          price={product.price}
+                        />
+                      )}
+                    </td>
+                    <td>
+                      <input
+                        aria-label={t('Proposed selling price incl. tax (optional)')}
+                        inputMode="decimal"
+                        value={line.sellingPrice}
+                        onChange={(e) => updateLine(index, 'sellingPrice', e.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        aria-label={t('Purchase tax %')}
+                        required
+                        inputMode="decimal"
+                        value={line.taxRate}
+                        onChange={(e) => updateLine(index, 'taxRate', e.target.value)}
+                      />
+                    </td>
+                    <td className="purchase-draft-amount">
+                      {lineAmounts[index] ? formatMoney(lineAmounts[index]!.total, currency) : '—'}
+                    </td>
+                    <td>
+                      <Button type="button" variant="ghost" onClick={() => removeLine(index)}>
+                        {t('Remove line')}
+                      </Button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
+        <div className="purchase-draft-footer">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={lines.length >= 100}
+            onClick={nextProduct}
+          >
+            {t('Add product')}
+          </Button>
+          <dl className="purchase-draft-totals">
+            <div>
+              <dt>{t('Subtotal excl. tax')}</dt>
+              <dd>{totals ? formatMoney(totals.subtotal, currency) : '—'}</dd>
+            </div>
+            <div>
+              <dt>{t('Tax')}</dt>
+              <dd>{totals ? formatMoney(totals.tax, currency) : '—'}</dd>
+            </div>
+            <div>
+              <dt>{t('Total incl. tax')}</dt>
+              <dd>{totals ? formatMoney(totals.total, currency) : '—'}</dd>
+            </div>
+          </dl>
+        </div>
+        <p className="muted">
+          {t(
+            'Leave blank to keep the current selling price. Confirm any proposed price when receiving the delivery. Saving this order does not change checkout prices.',
+          )}
+        </p>
+        <ErrorMessage error={lineError} />
+        {hasScan && (
+          <label className="purchase-document-confirm">
+            <input
+              type="checkbox"
+              checked={reviewed}
+              onChange={(e) => {
+                setReviewed(e.target.checked);
+                setLineError('');
+              }}
+            />
+            <span>
+              {t(
+                'I checked the products, stock units, quantities, costs and tax against the document.',
+              )}
+            </span>
+          </label>
+        )}
         <Field label={t('Order notes')}>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
@@ -1288,6 +1370,7 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
             </form>
           </Dialog>
           <Dialog
+            wide
             open={editing}
             onOpenChange={setEditing}
             title={t('Edit purchase draft')}
