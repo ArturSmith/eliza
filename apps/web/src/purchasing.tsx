@@ -1,3 +1,4 @@
+import { PurchaseDocument } from './purchase-document';
 import { countText, t, useLanguage, getLocale } from './i18n';
 import { useState, type ReactNode } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -390,7 +391,7 @@ export function PurchasesPage() {
         description={t(
           'Order stock, then record each delivery when it arrives. Costs exclude tax.',
         )}
-        action={<Button onClick={() => setCreate(true)}>New purchase order</Button>}
+        action={<Button onClick={() => setCreate(true)}>{t('New purchase order')}</Button>}
       />
       <section className="panel">
         <div className="table-toolbar">
@@ -648,6 +649,18 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
           onSelect={setSupplier}
         />
         {selectedSupplier && <SupplierSummary supplier={selectedSupplier} />}
+        <PurchaseDocument
+          key={supplierId}
+          supplierId={supplierId}
+          products={availableProducts}
+          existingLines={lines}
+          onApply={(reviewed, documentReference) => {
+            setLines((current) => [...current.filter((l) => l.productId), ...reviewed]);
+            if (!reference.trim()) setReference(documentReference);
+            setActiveIndex(-1);
+            setLineError('');
+          }}
+        />
         <Field label={t('Supplier reference')}>
           <input value={reference} onChange={(e) => setReference(e.target.value)} />
         </Field>

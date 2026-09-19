@@ -43,8 +43,21 @@ class Errors implements ExceptionFilter {
       res.status(error.getStatus()).json({ message: error.message });
       return;
     }
-    const err = error as { code?: string; cause?: { code?: string }; stack?: string };
+    const err = error as {
+      code?: string;
+      type?: string;
+      cause?: { code?: string };
+      stack?: string;
+    };
     const code = err.code ?? err.cause?.code;
+    // Previously surfaced as an opaque 500, which told the user nothing about
+    // what to do next.
+    if (err.type === 'entity.too.large') {
+      res
+        .status(413)
+        .json({ message: 'This upload is too large. Use a smaller or lower-resolution file.' });
+      return;
+    }
     if (code === '23505') {
       res.status(409).json({
         message:
@@ -116,6 +129,23 @@ export async function createApp() {
   validateProduction();
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: ['error', 'warn', 'log'],
+    // Configured below instead, so the document upload route can carry a photo
+    // without widening the limit for every other endpoint.
+    bodyParser: false,
+  });
+  // Document photos only. Everything else keeps the tight default: `verify`
+  // sees the fully buffered body, so the cap is enforced on actual bytes rather
+  // than on a Content-Length header the client controls.
+  app.useBodyParser('json', {
+    limit: '6mb',
+    verify: (req: Request, _res: Response, buf: Buffer) => {
+      if (
+        (req.method === 'POST' && req.url?.split('?')[0] === '/api/purchases/extract') ||
+        buf.length <= 100 * 1024
+      )
+        return;
+      throw Object.assign(new Error('request entity too large'), { type: 'entity.too.large' });
+    },
   });
   // Only opt in behind a controlled ingress. Never trust arbitrary forwarded headers.
   const proxy = process.env.TRUST_PROXY;

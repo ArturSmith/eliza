@@ -47,3 +47,7 @@ New-product forms can query Open Food Facts. Read lookups need no paid key. Set 
 Only the scanned barcode is sent; prices, employee details and stock are not uploaded. Outbound HTTPS access to world.openfoodfacts.org and images.openfoodfacts.org is needed. Requests have timeouts and response-size limits, a bounded process cache and a PostgreSQL-shared budget of 12 uncached product requests per minute. Multiple independent databases behind one public IP must share an additional provider budget. Errors leave manual product creation available.
 
 Imported fields retain source barcode, brand, package size and image provenance. Data is attributed to Open Food Facts contributors (ODbL / Database Contents License); imported photos are resized and credited under CC BY-SA 3.0. Preserve attribution in exports and follow the provider's database reuse terms when distributing derived catalogs; importing does not upload private inventory to Open Food Facts. Before public rollout review https://openfoodfacts.github.io/openfoodfacts-server/api/ and complete its API usage form.
+
+## Optional purchase document assistant
+
+Set `OPENAI_API_KEY` on the backend service and redeploy/restart it. `OPENAI_MODEL` is optional (default `gpt-4o-mini`). Keep these variables out of the frontend. See [Purchase document assistant](purchase-document-assistant.md) for supported files, limits, review workflow and the deployment smoke test.

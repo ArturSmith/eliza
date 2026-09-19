@@ -28,6 +28,7 @@ import {
   initialReorderTarget,
   purchasePaymentSchema,
   purchaseDraftSchema,
+  extractionRequestSchema,
   receiptInputSchema,
   calculatePurchaseLine,
   toScaled,
@@ -39,6 +40,7 @@ import { AccessGuard, Require, parse, hash, cookie, type AuthRequest } from './s
 import { Operations, audit } from './operations.js';
 import type { PoolClient } from 'pg';
 import { shoppingProducts } from './shopping-list-data.js';
+import { extractPurchaseDocument } from './purchase-extraction.js';
 const command = z.object({ requestId: z.uuid(), version: z.number().int().positive() });
 const supplierColumns = `id,code,name,contact_name AS "contactName",email,phone,address,company_number AS "companyNumber",payment_terms AS "paymentTerms",notes,active,version,created_at AS "createdAt"`;
 @Controller()
@@ -716,6 +718,28 @@ export class PurchasingController {
       );
       return this.details(c, id, req.context.store.id);
     });
+  }
+  /**
+   * Proposes purchase lines from a photo of a supplier document.
+   *
+   * Deliberately read-only: it creates nothing and changes nothing. The
+   * response is a suggestion for a person to review on screen, and saving it
+   * means calling `POST /purchases` as normal. `purchases.write` is required
+   * even so, because the feature must not let anyone reach a purchase workflow
+   * they could not already reach by typing.
+   */
+  @Post('purchases/extract') @Require('purchases.write') async extract(
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(extractionRequestSchema, input);
+    const store = req.context.store.id;
+    const supplier = await this.database.pool.query(
+      'SELECT id FROM suppliers WHERE id=$1 AND store_id=$2 AND active',
+      [b.supplierId, store],
+    );
+    if (!supplier.rowCount) throw new NotFoundException('This supplier no longer exists.');
+    return extractPurchaseDocument(b.image, b.supplierId, store, this.database);
   }
   @Post('purchases') @Require('purchases.write') async draft(
     @Body() input: unknown,

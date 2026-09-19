@@ -802,3 +802,4 @@ export function productSku(name: string, plu: string): string {
   return stem.slice(0, 120 - suffix.length) + suffix;
 }
 export * from './analytics.js';
+export * from './extraction.js';

@@ -2923,3 +2923,47 @@ input.shopping-section-title {
     visibility: hidden;
   }
 }
+
+/* Reviewed document import uses the same purchase form and never saves on upload. */
+.purchase-document-entry,
+.purchase-document {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 20px 0;
+}
+.purchase-document-entry > button,
+.purchase-document > button {
+  align-self: flex-start;
+}
+.purchase-document-preview {
+  display: grid;
+  gap: 8px;
+}
+.purchase-document-preview img {
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  border: 1px solid #e6ebde;
+  border-radius: 8px;
+}
+.purchase-document-line {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #e6ebde;
+  padding: 16px;
+  border-radius: 10px;
+}
+.purchase-document-line .field {
+  margin-bottom: 0;
+}
+.purchase-document-confirm {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  line-height: 1.5;
+}
+.purchase-document-confirm input {
+  flex: 0 0 auto;
+  margin-top: 4px;
+}

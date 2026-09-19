@@ -145,3 +145,7 @@ Uploading a document must not automatically receive stock or mark the supplier a
 ### Recommended sequence
 
 Start with **document-to-purchase drafts** and **natural-language Analytics**. Build reliable shopping-list calculations using stock, incoming orders, targets, and sales history before adding AI explanations. Scheduled summaries depend on the reporting schedule and delivery-channel work proposed above.
+
+### Implementation update — 19 September 2026
+
+The first document-to-purchase increment is implemented: image upload, server-side extraction, catalogue matching, editable human review, and explicit draft saving. English and Russian are supported. PDF import, conversational editing, tax extraction, pack conversion, invoice-total reconciliation and duplicate-document detection remain follow-ups. See [implementation and setup](purchase-document-assistant.md).
