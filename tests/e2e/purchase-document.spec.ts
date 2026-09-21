@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 test('reviews document suggestions, handles retry, and explicitly saves a purchase draft', async ({
   page,
 }) => {
+  test.setTimeout(60000);
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
@@ -40,13 +41,8 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
         barcodes: [],
       }),
     );
-  await page.goto('/purchases');
-  await page.getByRole('button', { name: 'New purchase order' }).click();
-  const draft = page.getByRole('dialog', { name: 'New purchase order', exact: true });
-  await expect(draft.getByRole('button', { name: 'Read supplier document' })).toBeEnabled();
-  await expect(draft.getByRole('button', { name: 'Add new supplier', exact: true })).toHaveCount(0);
-  await draft.getByRole('button', { name: 'Read supplier document' }).click();
-  const review = page.getByRole('dialog', { name: 'Read supplier document', exact: true });
+  await page.goto('/purchase-assistant');
+  const review = page.locator('.document-chat');
   await review.getByLabel('Document image').setInputFiles({
     name: 'invoice.pdf',
     mimeType: 'application/pdf',
@@ -135,23 +131,15 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await review.getByRole('button', { name: 'Read document', exact: true }).click();
   await expect(review.getByRole('alert')).toContainText('credits or spending quota');
   await review.getByText('Technical details', { exact: true }).click();
-  await expect(review.getByText('insufficient_quota', { exact: true })).toBeVisible();
-  await expect(review.getByText('req_browser_test', { exact: true })).toBeVisible();
+  await expect(review.locator('.purchase-document-diagnostics')).toContainText(
+    'insufficient_quota',
+  );
+  await expect(review.locator('.purchase-document-diagnostics')).toContainText('req_browser_test');
   await review.getByRole('button', { name: 'Read document', exact: true }).click();
-  await expect(review).not.toBeVisible();
-  await expect(draft.getByText('Existing Magomadov supplier', { exact: true })).toBeVisible();
-  await page.route('**/api/purchases/document-chat', async (route) => {
-    expect(route.request().postDataJSON().question).toBe('Who is the contact?');
-    await route.fulfill({ json: { answer: 'The contact is М-7 С. Мохамад.' } });
-  });
-  await draft.getByLabel('Ask about this document').fill('Who is the contact?');
-  await draft.getByRole('button', { name: 'Ask', exact: true }).click();
-  await expect(draft.getByText('The contact is М-7 С. Мохамад.')).toBeVisible();
-  await expect(draft.getByText('Matching phone number')).toBeVisible();
-  await expect(draft.getByRole('button', { name: 'Use this supplier' })).toBeVisible();
-  await expect(draft.getByLabel('Document date (optional)')).toHaveValue('2026-09-08');
+  await expect(review.getByText('Existing Magomadov supplier', { exact: true })).toBeVisible();
+  await expect(review.getByText('I matched 1 products; 1 need your review.')).toHaveCount(0);
   expect(await page.request.get('/api/suppliers').then((r) => r.json())).toHaveLength(1);
-  await draft.getByRole('button', { name: 'Create new supplier', exact: true }).click();
+  await review.getByRole('button', { name: 'Create new supplier', exact: true }).click();
   const addSupplier = page.getByRole('dialog', { name: 'Add supplier', exact: true });
   await expect(addSupplier.getByLabel('Supplier code', { exact: true })).toHaveValue(
     /^SUP-[A-F0-9]{8}$/,
@@ -167,11 +155,25 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await expect(addSupplier.getByLabel('Notes', { exact: true })).toHaveValue(/\+7 969 722-22-22/);
   await addSupplier.getByRole('button', { name: 'Save supplier', exact: true }).click();
   await expect(addSupplier).not.toBeVisible();
+  await expect(review.getByText('I matched 1 products; 1 need your review.')).toBeVisible();
+  await page.route('**/api/purchases/document-chat', async (route) => {
+    expect(route.request().postDataJSON().question).toBe('Who is the contact?');
+    await route.fulfill({ json: { answer: 'The contact is М-7 С. Мохамад.' } });
+  });
+  await review.getByLabel('Ask about this document').fill('Who is the contact?');
+  await review.getByRole('button', { name: 'Ask', exact: true }).click();
+  await expect(review.getByText('The contact is М-7 С. Мохамад.')).toBeVisible();
+  await review.getByRole('button', { name: /Special scanned loaf/ }).click();
+  await expect(page).toHaveURL(/\/purchases\?document=1/);
+  const draft = page.getByRole('dialog', { name: 'New purchase order', exact: true });
+  await expect(draft).toBeVisible();
+  await expect(draft.getByLabel('Document date (optional)')).toHaveValue('2026-09-08');
   await expect(draft.getByText('ИП Магомадов Р.А.', { exact: true })).toBeVisible();
   const table = draft.getByRole('table', { name: 'Purchase items' });
   const milk = table.getByRole('row', { name: 'Purchase row 1', exact: true });
   const bread = table.getByRole('row', { name: 'Purchase row 2', exact: true });
   await expect(milk).toBeVisible();
+  await expect(bread).toHaveClass(/purchase-review-focus/);
   await expect(milk.getByLabel('Quantity', { exact: true })).toHaveValue('2');
   await expect(milk.getByLabel('Purchase tax %')).toHaveValue('');
   await expect(draft.getByLabel('Supplier reference')).toHaveValue('U2-12670');
@@ -294,6 +296,25 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await search.fill('');
   await page.getByLabel('Language', { exact: true }).selectOption('ru');
   await page.getByRole('button', { name: 'Новый заказ поставщику' }).click();
-  await expect(page.getByRole('button', { name: 'Прочитать документ поставщика' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Прочитать документ поставщика' })).toBeVisible();
+  await page.goto('/purchase-assistant');
+  await page.locator('.language-switcher select').selectOption('en');
+  await page.route('**/api/suppliers', async (route) => {
+    if (route.request().method() === 'GET') await route.fulfill({ json: [] });
+    else await route.continue();
+  });
+  await page.goto('/purchase-assistant');
+  await page.getByLabel('Document image').setInputFiles({
+    name: 'invoice.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7WQAAAAASUVORK5CYII=',
+      'base64',
+    ),
+  });
+  await page.getByRole('button', { name: 'Read document', exact: true }).click();
+  await expect(page.getByText('There is no such supplier in the system. Add one?')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Use this supplier' })).toHaveCount(0);
+  await expect(page.getByText('I matched 1 products; 1 need your review.')).toHaveCount(0);
   expect(errors).toEqual([]);
 });

@@ -1,4 +1,5 @@
-import { PurchaseDocument, type DocumentDraftLine } from './purchase-document';
+import type { DocumentDraftLine } from './purchase-document';
+import { readDocumentHandoff } from './purchase-assistant';
 import { countText, t, useLanguage, getLocale } from './i18n';
 import { useState, useEffect, type ReactNode } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -267,7 +268,7 @@ export function SuppliersPage() {
     </>
   );
 }
-function SupplierForm({
+export function SupplierForm({
   supplier,
   done,
   onCreated,
@@ -384,7 +385,9 @@ export function PurchasesPage() {
   const [selected, setSelected] = useState<string | undefined>(
     () => new URLSearchParams(window.location.search).get('order') ?? undefined,
   );
-  const [create, setCreate] = useState(false);
+  const [create, setCreate] = useState(() =>
+    new URLSearchParams(window.location.search).has('document'),
+  );
   const [filter, setFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const terms = search.trim().toLowerCase();
@@ -405,7 +408,14 @@ export function PurchasesPage() {
         description={t(
           'Order stock, then record each delivery when it arrives. Costs exclude tax.',
         )}
-        action={<Button onClick={() => setCreate(true)}>{t('New purchase order')}</Button>}
+        action={
+          <div className="purchase-heading-actions">
+            <a className="button button-outline" href="/purchase-assistant">
+              {t('Document assistant')}
+            </a>
+            <Button onClick={() => setCreate(true)}>{t('New purchase order')}</Button>
+          </div>
+        }
       />
       <section className="panel">
         <div className="table-toolbar">
@@ -536,10 +546,9 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
   });
   const products = useProducts();
   const currency = useSession().data?.store.currency ?? 'NOK';
-  const [supplierId, setSupplier] = useState(order?.supplier_id ?? '');
+  const [handoff] = useState(() => (order ? null : readDocumentHandoff()));
+  const [supplierId, setSupplier] = useState(order?.supplier_id ?? handoff?.supplierId ?? '');
   const [addingSupplier, setAddingSupplier] = useState(false);
-  const [supplierPrefill, setSupplierPrefill] =
-    useState<Partial<Pick<Supplier, 'name' | 'code' | 'companyNumber'>>>();
   const [addingProduct, setAddingProduct] = useState<number | null>(null);
   const [scanLine, setScanLine] = useState<number | null>(null);
   const [barcode, setBarcode] = useState('');
@@ -555,22 +564,33 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
     ...createdSuppliers.filter((s) => !suppliers.data?.some((item) => item.id === s.id)),
   ];
   const selectedSupplier = availableSuppliers.find((s) => s.id === supplierId);
-  const [reference, setReference] = useState(order?.supplier_reference ?? '');
-  const [documentDate, setDocumentDate] = useState(order?.document_date?.slice(0, 10) ?? '');
+  const [reference, setReference] = useState(order?.supplier_reference ?? handoff?.reference ?? '');
+  const [documentDate, setDocumentDate] = useState(
+    order?.document_date?.slice(0, 10) ?? handoff?.date ?? '',
+  );
   const [expectedDate, setDate] = useState(order?.expected_date?.slice(0, 10) ?? '');
   const [notes, setNotes] = useState(order?.notes ?? '');
   const [reviewed, setReviewed] = useState(false);
-  const [hasScan, setHasScan] = useState(false);
+  const hasScan = !!handoff;
   const [lines, setLines] = useState<DocumentDraftLine[]>(
-    order?.lines.map((l) => ({
-      productId: l.product_id,
-      quantity: l.ordered_quantity,
-      unitCost: l.unit_cost,
-      taxRate: l.tax_rate,
-      sellingPrice:
-        l.proposed_selling_price ?? products.data?.find((p) => p.id === l.product_id)?.price ?? '',
-    })) ?? [{ productId: '', quantity: '1', unitCost: '0', taxRate: '0', sellingPrice: '' }],
+    handoff?.lines ??
+      order?.lines.map((l) => ({
+        productId: l.product_id,
+        quantity: l.ordered_quantity,
+        unitCost: l.unit_cost,
+        taxRate: l.tax_rate,
+        sellingPrice:
+          l.proposed_selling_price ??
+          products.data?.find((p) => p.id === l.product_id)?.price ??
+          '',
+      })) ?? [{ productId: '', quantity: '1', unitCost: '0', taxRate: '0', sellingPrice: '' }],
   );
+  useEffect(() => {
+    if (handoff)
+      document
+        .getElementById('purchase-review-row-' + handoff.focusLine)
+        ?.scrollIntoView({ block: 'center' });
+  }, [handoff]);
   function selectProduct(index: number, product: Product) {
     setLines((current) =>
       current.map((line, i) =>
@@ -713,43 +733,9 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
           onSelect={setSupplier}
         />
         {selectedSupplier && <SupplierSummary supplier={selectedSupplier} />}
-        <PurchaseDocument
-          supplierId={supplierId}
-          products={availableProducts}
-          suppliers={availableSuppliers}
-          onAddSupplier={(prefill) => {
-            setSupplierPrefill({
-              ...prefill,
-              code:
-                prefill.code &&
-                !availableSuppliers.some(
-                  (supplier) => supplier.code.toLowerCase() === prefill.code.toLowerCase(),
-                )
-                  ? prefill.code
-                  : 'SUP-' + crypto.randomUUID().slice(0, 8).toUpperCase(),
-            });
-            setAddingSupplier(true);
-          }}
-          onSelectSupplier={setSupplier}
-          onApply={(reviewed, documentReference, date) => {
-            setLines((current) => [
-              ...current.filter(
-                (l) =>
-                  l.productId ||
-                  l.source ||
-                  l.quantity !== '1' ||
-                  l.unitCost !== '0' ||
-                  l.taxRate !== '0' ||
-                  l.sellingPrice,
-              ),
-              ...reviewed,
-            ]);
-            setHasScan(true);
-            if (!reference.trim()) setReference(documentReference);
-            if (!documentDate) setDocumentDate(date);
-            setLineError('');
-          }}
-        />
+        <a className="button button-outline" href="/purchase-assistant">
+          {t('Read supplier document')}
+        </a>
         <div className="purchase-reference-row">
           <div>
             <Field label={t('Supplier reference')}>
@@ -815,7 +801,12 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
               {lines.map((line, index) => {
                 const product = availableProducts.find((p) => p.id === line.productId);
                 return (
-                  <tr key={index} aria-label={t('Purchase row {number}', { number: index + 1 })}>
+                  <tr
+                    key={index}
+                    id={'purchase-review-row-' + index}
+                    className={handoff?.focusLine === index ? 'purchase-review-focus' : undefined}
+                    aria-label={t('Purchase row {number}', { number: index + 1 })}
+                  >
                     <td>{index + 1}</td>
                     <td className="purchase-draft-product">
                       {line.source && (
@@ -996,20 +987,15 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
       <Dialog
         elevated
         open={addingSupplier}
-        onOpenChange={(open) => {
-          setAddingSupplier(open);
-          if (!open) setSupplierPrefill(undefined);
-        }}
+        onOpenChange={setAddingSupplier}
         title={t('Add supplier')}
         description={t('Keep supplier details available for your team.')}
       >
         {addingSupplier && (
           <SupplierForm
             supplier={null}
-            prefill={supplierPrefill}
             done={() => {
               setAddingSupplier(false);
-              setSupplierPrefill(undefined);
             }}
             onCreated={(supplier) => {
               setCreatedSuppliers((current) => [...current, supplier]);

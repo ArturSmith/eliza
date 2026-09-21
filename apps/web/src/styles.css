@@ -3219,3 +3219,111 @@ input.shopping-section-title {
 .purchase-unmatched > button {
   justify-self: start;
 }
+
+/* Guided supplier-document chat */
+.document-chat-page {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+.document-chat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 24px;
+  background: #f7faf5;
+  border: 1px solid #dce7d8;
+  border-radius: 18px;
+  min-height: 60vh;
+}
+.document-chat-bubble {
+  max-width: min(90%, 760px);
+  padding: 16px 20px;
+  border-radius: 16px;
+  line-height: 1.55;
+}
+.document-chat-bubble.assistant {
+  background: #fff;
+  border: 1px solid #dce7d8;
+}
+.document-chat-bubble.user {
+  background: #e6f1e6;
+  align-self: flex-end;
+}
+.document-chat-bubble p {
+  margin: 0 0 12px;
+}
+.document-chat-bubble p:last-child {
+  margin-bottom: 0;
+}
+.document-chat-bubble small,
+.document-chat-product small {
+  display: block;
+  color: #637359;
+  margin-top: 8px;
+}
+.document-chat-bubble .purchase-assistant-candidate {
+  margin: 10px 0;
+}
+.document-chat-upload {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.document-chat-product {
+  width: min(90%, 760px);
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  text-align: left;
+  padding: 16px 20px;
+  background: white;
+  border: 1px solid #dce7d8;
+  border-radius: 14px;
+  color: #263b32;
+  cursor: pointer;
+  font: inherit;
+}
+.document-chat-product:hover,
+.document-chat-product:focus-visible {
+  border-color: #4f785a;
+  box-shadow: 0 0 0 2px #dce7d8;
+}
+.document-chat .purchase-assistant-question {
+  width: min(100%, 760px);
+}
+.document-chat .purchase-document-preview {
+  width: min(100%, 760px);
+}
+.document-chat .thinking-dots {
+  display: inline-block;
+  animation: document-thinking 1.2s ease-in-out infinite;
+  color: #4f785a;
+}
+@keyframes document-thinking {
+  50% {
+    opacity: 0.35;
+    transform: translateY(-2px);
+  }
+}
+@media (max-width: 640px) {
+  .document-chat {
+    padding: 14px;
+  }
+  .document-chat-bubble,
+  .document-chat-product {
+    max-width: 100%;
+    width: 100%;
+  }
+}
+
+.purchase-heading-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.purchase-review-focus {
+  background: #f2f8eb;
+}

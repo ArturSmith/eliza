@@ -28,6 +28,7 @@ function CheckoutRoute() {
 import { StoreSettingsPage } from './store-settings';
 import { StockCountsPage } from './stock-counts';
 import { SuppliersPage, PurchasesPage } from './purchasing';
+import { PurchaseAssistantPage } from './purchase-assistant';
 import { TeamManagementPage } from './team';
 import { OwnerDashboardPage } from './owner-dashboard';
 import { SalesPage, ShiftsPage } from './reports';
@@ -59,6 +60,11 @@ const routes = [
   createRoute({ getParentRoute: () => root, path: '/stock-counts', component: StockCountsPage }),
   createRoute({ getParentRoute: () => root, path: '/suppliers', component: SuppliersPage }),
   createRoute({ getParentRoute: () => root, path: '/purchases', component: PurchasesPage }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/purchase-assistant',
+    component: PurchaseAssistantPage,
+  }),
   createRoute({ getParentRoute: () => root, path: '/pos', component: CheckoutRoute }),
   createRoute({ getParentRoute: () => root, path: '/analytics', component: OwnerDashboardPage }),
   createRoute({ getParentRoute: () => root, path: '/sales', component: SalesPage }),

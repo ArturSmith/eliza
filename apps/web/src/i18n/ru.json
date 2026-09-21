@@ -1342,5 +1342,17 @@
   "You": "Вы",
   "Eliza": "Eliza",
   "A purchase with reference {reference} already exists. Check it before saving another.": "Закупка с номером {reference} уже существует. Проверьте её перед сохранением ещё одной.",
-  "Previous purchase with this reference": "Предыдущая закупка с этим номером"
+  "Previous purchase with this reference": "Предыдущая закупка с этим номером",
+  "Upload a supplier document. Confirm the supplier first, then review the purchase and products.": "Загрузите документ поставщика. Сначала подтвердите поставщика, затем проверьте заказ и товары.",
+  "Upload a supplier document and I will help prepare the purchase.": "Загрузите документ поставщика, и я помогу подготовить заказ.",
+  "Reading sends the image to OpenAI. No supplier, product or purchase is saved without your approval.": "Изображение отправляется в OpenAI для чтения. Поставщик, товар или заказ не сохраняются без вашего подтверждения.",
+  "There is no such supplier in the system. Add one?": "Такого поставщика нет в системе. Добавить?",
+  "Checking suppliers…": "Проверяю поставщиков…",
+  "Checking products…": "Проверяю товары…",
+  "Supplier confirmed.": "Поставщик подтверждён.",
+  "Select a product below to open the prefilled purchase order and review that row.": "Выберите товар ниже, чтобы открыть заполненный заказ и проверить эту строку.",
+  "Matched to product in catalogue": "Найден в каталоге товаров",
+  "Needs product review": "Требует проверки товара",
+  "Review full purchase order": "Проверить весь заказ",
+  "Upload a JPEG, PNG, or WebP photo smaller than 4.4 MB.": "Загрузите фото JPEG, PNG или WebP размером до 4,4 МБ."
 }
