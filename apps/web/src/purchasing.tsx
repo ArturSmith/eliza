@@ -733,9 +733,6 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
           onSelect={setSupplier}
         />
         {selectedSupplier && <SupplierSummary supplier={selectedSupplier} />}
-        <a className="button button-outline" href="/purchase-assistant">
-          {t('Read supplier document')}
-        </a>
         <div className="purchase-reference-row">
           <div>
             <Field label={t('Supplier reference')}>
