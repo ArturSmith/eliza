@@ -1413,5 +1413,8 @@
   "Attach document": "Прикрепить документ",
   "Remove attachment": "Удалить вложение",
   "Send": "Отправить",
-  "Reading your document…": "Читаю ваш документ…"
+  "Reading your document…": "Читаю ваш документ…",
+  "Prepare purchase order": "Подготовить заказ поставщику",
+  "This document has more than 100 product rows. Split it before preparing a purchase order.": "В документе более 100 товарных строк. Разделите его перед созданием заказа.",
+  "Some unit costs were estimated from line total divided by quantity. Check tax and costs against the original document before saving.": "Некоторые цены за единицу рассчитаны как сумма строки, делённая на количество. Перед сохранением проверьте налог и цены по оригиналу."
 }

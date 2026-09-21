@@ -1,5 +1,5 @@
 import type { DocumentDraftLine } from './purchase-document';
-import { readDocumentHandoff } from './purchase-assistant';
+import { readDocumentHandoff } from './document-purchase';
 import { countText, t, useLanguage, getLocale } from './i18n';
 import { useState, useEffect, type ReactNode } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
@@ -410,7 +410,7 @@ export function PurchasesPage() {
         )}
         action={
           <div className="purchase-heading-actions">
-            <a className="button button-outline" href="/purchase-assistant">
+            <a className="button button-outline" href="/documents">
               {t('Document assistant')}
             </a>
             <Button onClick={() => setCreate(true)}>{t('New purchase order')}</Button>

@@ -3784,3 +3784,9 @@ input.shopping-section-title {
 .document-attach-menu { position: absolute; left: 0; bottom: 48px; z-index: 6; min-width: 170px; padding: 6px; border: 1px solid #dce5da; border-radius: 12px; background: #fff; box-shadow: 0 12px 30px rgba(34, 55, 43, .13); }
 .document-attach-menu button { display: block; width: 100%; border: 0; border-radius: 8px; padding: 10px 12px; background: transparent; color: #263f33; text-align: left; font: inherit; cursor: pointer; }
 .document-attach-menu button:hover { background: #f2f5f1; }
+.document-purchase-preparation { margin: 24px 0 0; padding: 18px 0 0; border-top: 1px solid #e4e9e2; }
+.document-purchase-step { max-width: 700px; }
+.document-purchase-step > p { margin: 0 0 16px; }
+.document-purchase-step .document-chat-product { width: 100%; }
+.document-purchase-step > .button { margin-top: 16px; }
+@media print { .document-purchase-preparation { display: none !important; } }

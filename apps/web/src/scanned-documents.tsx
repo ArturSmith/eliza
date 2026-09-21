@@ -5,6 +5,7 @@ import { api, queryClient } from './api';
 import { t, useLanguage } from './i18n';
 import { ErrorMessage } from './forms';
 import { Button } from './components/ui/button';
+import { DocumentPurchasePreparation } from './document-purchase';
 
 type DocumentRecord = {
   id: string;
@@ -711,6 +712,7 @@ export function ScannedDocumentsPage() {
                     void queryClient.invalidateQueries({ queryKey: ['scanned-document', next.id] });
                   }} />
                 )}
+                {record?.id === message.documentId && <DocumentPurchasePreparation data={record.edited} documentId={record.id} />}
               </div>
             ) : (
               <div key={message.id} className={'document-message document-message-' + message.role}>
