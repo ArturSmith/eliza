@@ -804,6 +804,7 @@ export function productSku(name: string, plu: string): string {
 }
 export * from './analytics.js';
 export * from './extraction.js';
+export * from './scanned-document.js';
 
 /** Markup is added once to cost; the result is already VAT-inclusive. */
 export const defaultMarkupSchema = z

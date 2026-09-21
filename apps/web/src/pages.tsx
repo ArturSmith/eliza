@@ -84,6 +84,12 @@ const navGroups = [
       },
       { to: '/purchases', label: 'Purchases', icon: Truck, permission: 'purchases.read' },
       {
+        to: '/documents',
+        label: 'Scanned documents',
+        icon: ClipboardCheck,
+        permission: 'purchases.read',
+      },
+      {
         to: '/purchase-assistant',
         label: 'Document assistant',
         icon: CircleHelp,

@@ -259,6 +259,7 @@ export function PurchaseAssistantPage() {
         <div>
           <div className="eyebrow">{t('PURCHASING')}</div>
           <h1>{t('Document assistant')}</h1>
+          <a href="/documents">{t('Scan and reconstruct any document')}</a>
           <p className="muted">
             {t(
               'Upload a supplier document. Confirm the supplier first, then review the purchase and products.',

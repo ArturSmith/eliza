@@ -35,18 +35,17 @@ import { AnalyticsModule } from './analytics.js';
 import { OwnerDashboardModule } from './owner-dashboard.js';
 import { SalesSummaryModule } from './sales-summary.js';
 import { PurchasingModule } from './purchasing.js';
+import { ScannedDocumentsModule } from './scanned-documents.js';
 import { CheckoutModule } from './checkout.js';
 @Catch()
 class Errors implements ExceptionFilter {
   catch(error: unknown, host: ArgumentsHost) {
     const res = host.switchToHttp().getResponse<Response>();
     if (error instanceof HttpException) {
-      res
-        .status(error.getStatus())
-        .json({
-          message: error.message,
-          ...(error instanceof PurchaseDocumentError ? { details: error.details } : {}),
-        });
+      res.status(error.getStatus()).json({
+        message: error.message,
+        ...(error instanceof PurchaseDocumentError ? { details: error.details } : {}),
+      });
       return;
     }
     const err = error as {
@@ -121,6 +120,7 @@ class HealthController {
     RegisterModule,
     CheckoutModule,
     PurchasingModule,
+    ScannedDocumentsModule,
     SalesSummaryModule,
     AnalyticsModule,
     OwnerDashboardModule,
@@ -143,10 +143,12 @@ export async function createApp() {
   // sees the fully buffered body, so the cap is enforced on actual bytes rather
   // than on a Content-Length header the client controls.
   app.useBodyParser('json', {
-    limit: '6mb',
+    limit: '12mb',
     verify: (req: Request, _res: Response, buf: Buffer) => {
+      const route = req.method === 'POST' ? req.url?.split('?')[0] : '';
       if (
-        (req.method === 'POST' && req.url?.split('?')[0] === '/api/purchases/extract') ||
+        (route === '/api/purchases/extract' && buf.length <= 6 * 1024 * 1024) ||
+        (route === '/api/documents/scan' && buf.length <= 12 * 1024 * 1024) ||
         buf.length <= 100 * 1024
       )
         return;

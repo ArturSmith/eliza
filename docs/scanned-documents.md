@@ -1,0 +1,13 @@
+# Scanned documents
+
+Open **Scanned documents** (`/documents`) to upload a JPEG, PNG, WebP, or PDF up to 8 MB, or take a photo on a device that supports camera capture. Select **Scan document**. The backend sends the actual image/PDF bytes to the OpenAI Responses API using strict structured output; `OPENAI_API_KEY` stays on the server. The model is `OPENAI_DOCUMENT_MODEL` when set, otherwise `OPENAI_MODEL`, otherwise `gpt-4o-mini`.
+
+The result displays the original file beside an editable digital reconstruction. It can show parties, fields, paragraphs, one or more tables, annotations, printed totals, and warnings; documents without tables remain valid. Editing creates a separate saved version of the extracted data. Printed totals are never overwritten by calculated row sums. The **Previous scans** list reopens documents without another model call. **Export PDF** opens the browser print dialog, where the digital reconstruction can be saved as a PDF; use a Unicode-capable browser font for Cyrillic.
+
+The original bytes and the extracted/edited JSON are stored in PostgreSQL by migration `0021_scanned_documents.sql`. The original file endpoint and document endpoints require an authenticated user with purchasing read access. Scanning and saving require purchasing write access. The app caps scans at five per minute per store. Files are store-scoped and included in database backups. If scans become numerous or large, move original files to private object storage and keep only references in PostgreSQL.
+
+The existing **Document assistant** (`/purchase-assistant`) remains the guided supplier-to-purchase workflow. **Scanned documents** is for reconstruction and correction of arbitrary documents; saving a scan does not create a supplier, product, or purchase order.
+
+Run `pnpm build`, `pnpm db:migrate`, then `pnpm dev`. Set `OPENAI_API_KEY` on the backend. To verify without calling OpenAI, run `pnpm exec vitest run tests/scanned-document.unit.test.ts` and `pnpm exec vitest run --config vitest.integration.config.ts tests/scanned-documents.integration.test.ts`; the integration test stubs the provider. Run `pnpm exec playwright test tests/e2e/scanned-documents.spec.ts` for the browser flow. For a live smoke test, scan a real image/PDF and compare every field and row to its original before using the result.
+
+Limits: model transcription may be wrong, especially for low-quality scans, handwriting, or long PDFs. The output schema supports up to 100 pages, 30 tables, and 500 rows per table, but long documents can exceed the model response limit. PDF export uses the browser print dialog rather than server-side PDF generation. The reconstruction keeps logical document structure, not the original page geometry.
