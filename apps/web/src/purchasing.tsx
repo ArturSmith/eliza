@@ -28,6 +28,7 @@ type Order = {
   payment_overdue: boolean;
   supplier_id: string;
   supplier_reference: string;
+  document_date: string | null;
   expected_date: string | null;
   id: string;
   number: string;
@@ -275,7 +276,9 @@ function SupplierForm({
   supplier: Supplier | null;
   done: () => void;
   onCreated?: (supplier: Supplier) => void;
-  prefill?: Partial<Pick<Supplier, 'name' | 'code' | 'companyNumber'>>;
+  prefill?: Partial<
+    Pick<Supplier, 'name' | 'code' | 'companyNumber' | 'contactName' | 'phone' | 'notes'>
+  >;
 }) {
   useLanguage();
   const [value, setValue] = useState(
@@ -284,6 +287,9 @@ function SupplierForm({
       code: prefill?.code ?? '',
       name: prefill?.name ?? '',
       companyNumber: prefill?.companyNumber ?? '',
+      contactName: prefill?.contactName ?? '',
+      phone: prefill?.phone ?? '',
+      notes: prefill?.notes ?? '',
       active: true,
     },
   );
@@ -550,6 +556,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
   ];
   const selectedSupplier = availableSuppliers.find((s) => s.id === supplierId);
   const [reference, setReference] = useState(order?.supplier_reference ?? '');
+  const [documentDate, setDocumentDate] = useState(order?.document_date?.slice(0, 10) ?? '');
   const [expectedDate, setDate] = useState(order?.expected_date?.slice(0, 10) ?? '');
   const [notes, setNotes] = useState(order?.notes ?? '');
   const [reviewed, setReviewed] = useState(false);
@@ -638,6 +645,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
         version: order?.version,
         supplierId,
         supplierReference: reference,
+        documentDate,
         expectedDate,
         notes,
         lines: lines.map(({ source: _source, suggestion: _suggestion, ...line }) => ({
@@ -659,6 +667,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
           const parsed = purchaseDraftSchema.safeParse({
             supplierId,
             supplierReference: reference,
+            documentDate,
             expectedDate,
             notes,
             lines: lines.map((line) => ({ ...line, sellingPrice: line.sellingPrice || undefined })),
@@ -705,15 +714,24 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
         />
         {selectedSupplier && <SupplierSummary supplier={selectedSupplier} />}
         <PurchaseDocument
-          key={supplierId}
           supplierId={supplierId}
           products={availableProducts}
           suppliers={availableSuppliers}
           onAddSupplier={(prefill) => {
-            setSupplierPrefill(prefill);
+            setSupplierPrefill({
+              ...prefill,
+              code:
+                prefill.code &&
+                !availableSuppliers.some(
+                  (supplier) => supplier.code.toLowerCase() === prefill.code.toLowerCase(),
+                )
+                  ? prefill.code
+                  : 'SUP-' + crypto.randomUUID().slice(0, 8).toUpperCase(),
+            });
             setAddingSupplier(true);
           }}
-          onApply={(reviewed, documentReference, matchedSupplierId) => {
+          onSelectSupplier={setSupplier}
+          onApply={(reviewed, documentReference, date) => {
             setLines((current) => [
               ...current.filter(
                 (l) =>
@@ -727,8 +745,8 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
               ...reviewed,
             ]);
             setHasScan(true);
-            if (matchedSupplierId && !supplierId) setSupplier(matchedSupplierId);
             if (!reference.trim()) setReference(documentReference);
+            if (!documentDate) setDocumentDate(date);
             setLineError('');
           }}
         />
@@ -755,6 +773,13 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
             {t('Generate reference')}
           </Button>
         </div>
+        <Field label={t('Document date (optional)')}>
+          <input
+            type="date"
+            value={documentDate}
+            onChange={(e) => setDocumentDate(e.target.value)}
+          />
+        </Field>
         <Field label={t('Expected delivery')}>
           <input type="date" value={expectedDate} onChange={(e) => setDate(e.target.value)} />
         </Field>

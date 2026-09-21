@@ -19,10 +19,11 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
     expect(response.ok(), await response.text()).toBe(true);
     return response.json();
   }
-  const supplier = await post('/suppliers', {
+  await post('/suppliers', {
     requestId: crypto.randomUUID(),
-    name: 'Document supplier',
-    code: 'DOC',
+    name: 'Existing Magomadov supplier',
+    code: 'EAST',
+    phone: '+7 969 722-22-22',
   });
   const products = [];
   for (const name of ['Milk', 'Bread'])
@@ -96,11 +97,14 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
     }
     await route.fulfill({
       json: {
-        supplierName: 'Scanned supplier',
-        supplierCode: 'SCANNED',
-        supplierCompanyNumber: 'ORG-900',
-        supplierReference: 'INV-100',
-        documentDate: '2026-09-16',
+        supplierName: 'ИП Магомадов Р.А.',
+        supplierCode: '',
+        supplierCompanyNumber: '',
+        supplierPhone: '+7 969 722-22-22',
+        contactName: 'М-7 С. Мохамад',
+        contactPhone: '89292088095',
+        supplierReference: 'U2-12670',
+        documentDate: '2026-09-08',
         mergedCount: 0,
         unmatched: 1,
         lines: [
@@ -135,24 +139,42 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await expect(review.getByText('req_browser_test', { exact: true })).toBeVisible();
   await review.getByRole('button', { name: 'Read document', exact: true }).click();
   await expect(review).not.toBeVisible();
-  await expect(draft.getByRole('button', { name: 'Add new supplier', exact: true })).toBeVisible();
-  await draft.getByRole('button', { name: 'Add new supplier', exact: true }).click();
+  await expect(draft.getByText('Existing Magomadov supplier', { exact: true })).toBeVisible();
+  await page.route('**/api/purchases/document-chat', async (route) => {
+    expect(route.request().postDataJSON().question).toBe('Who is the contact?');
+    await route.fulfill({ json: { answer: 'The contact is М-7 С. Мохамад.' } });
+  });
+  await draft.getByLabel('Ask about this document').fill('Who is the contact?');
+  await draft.getByRole('button', { name: 'Ask', exact: true }).click();
+  await expect(draft.getByText('The contact is М-7 С. Мохамад.')).toBeVisible();
+  await expect(draft.getByText('Matching phone number')).toBeVisible();
+  await expect(draft.getByRole('button', { name: 'Use this supplier' })).toBeVisible();
+  await expect(draft.getByLabel('Document date (optional)')).toHaveValue('2026-09-08');
+  expect(await page.request.get('/api/suppliers').then((r) => r.json())).toHaveLength(1);
+  await draft.getByRole('button', { name: 'Create new supplier', exact: true }).click();
   const addSupplier = page.getByRole('dialog', { name: 'Add supplier', exact: true });
-  await expect(addSupplier.getByLabel('Supplier code', { exact: true })).toHaveValue('SCANNED');
-  await expect(addSupplier.getByLabel('Supplier name', { exact: true })).toHaveValue(
-    'Scanned supplier',
+  await expect(addSupplier.getByLabel('Supplier code', { exact: true })).toHaveValue(
+    /^SUP-[A-F0-9]{8}$/,
   );
-  await expect(addSupplier.getByLabel('Company number', { exact: true })).toHaveValue('ORG-900');
+  await expect(addSupplier.getByLabel('Supplier name', { exact: true })).toHaveValue(
+    'ИП Магомадов Р.А.',
+  );
+  await expect(addSupplier.getByLabel('Company number', { exact: true })).toHaveValue('');
+  await expect(addSupplier.getByLabel('Contact name', { exact: true })).toHaveValue(
+    'М-7 С. Мохамад',
+  );
+  await expect(addSupplier.getByLabel('Phone', { exact: true })).toHaveValue('89292088095');
+  await expect(addSupplier.getByLabel('Notes', { exact: true })).toHaveValue(/\+7 969 722-22-22/);
   await addSupplier.getByRole('button', { name: 'Save supplier', exact: true }).click();
   await expect(addSupplier).not.toBeVisible();
-  await expect(draft.getByText('Scanned supplier', { exact: true })).toBeVisible();
+  await expect(draft.getByText('ИП Магомадов Р.А.', { exact: true })).toBeVisible();
   const table = draft.getByRole('table', { name: 'Purchase items' });
   const milk = table.getByRole('row', { name: 'Purchase row 1', exact: true });
   const bread = table.getByRole('row', { name: 'Purchase row 2', exact: true });
   await expect(milk).toBeVisible();
   await expect(milk.getByLabel('Quantity', { exact: true })).toHaveValue('2');
   await expect(milk.getByLabel('Purchase tax %')).toHaveValue('');
-  await expect(draft.getByLabel('Supplier reference')).toHaveValue('INV-100');
+  await expect(draft.getByLabel('Supplier reference')).toHaveValue('U2-12670');
   await draft.getByRole('button', { name: 'Generate reference', exact: true }).click();
   const generatedReference = await draft
     .getByLabel('Supplier reference', { exact: true })
@@ -160,6 +182,10 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   expect(generatedReference).toMatch(/^REF-[A-F0-9]{16}$/);
   await expect(draft).toBeVisible();
   await draft.getByLabel('Supplier reference', { exact: true }).fill(generatedReference + '-EDIT');
+  await expect(draft.getByLabel('Supplier reference', { exact: true })).toHaveValue(
+    generatedReference + '-EDIT',
+  );
+  await draft.getByLabel('Supplier reference', { exact: true }).fill('U2-12670');
   await milk.getByLabel('Purchase tax %').fill('0');
   await bread.getByRole('button', { name: 'Create new product', exact: true }).click();
   const addProduct = page.getByRole('dialog', { name: 'Add a product', exact: true });
@@ -245,7 +271,8 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await expect(draft).not.toBeVisible();
   const orders = await page.request.get('/api/purchases').then((r) => r.json());
   expect(orders).toHaveLength(1);
-  expect(orders[0].supplier_reference).toBe(generatedReference + '-EDIT');
+  expect(orders[0].supplier_reference).toBe('U2-12670');
+  expect(orders[0].document_date).toBe('2026-09-08');
   expect(orders[0]).toMatchObject({ status: 'draft', total: '19.70' });
   const stock = await page.request.get('/api/products').then((r) => r.json());
   expect(stock.every((p: any) => p.stock === '0.000' && p.price === '10.00')).toBe(true);
@@ -260,7 +287,7 @@ test('reviews document suggestions, handles retry, and explicitly saves a purcha
   await expect(edit).not.toBeVisible();
   await page.goto('/purchases');
   const search = page.getByRole('textbox', { name: 'Search purchase orders', exact: true });
-  await search.fill(generatedReference.toLowerCase());
+  await search.fill('u2-12670');
   await expect(page.locator('tbody tr')).toHaveCount(1);
   await search.fill('unknown-reference-does-not-exist');
   await expect(page.locator('tbody tr')).toHaveCount(0);

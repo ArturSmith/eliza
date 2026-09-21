@@ -25,6 +25,9 @@ const payload = (lines = [sourceLine]) => ({
   supplierName: 'Test supplier',
   supplierCode: 'SUP',
   supplierCompanyNumber: '',
+  supplierPhone: '+7 (969) 722-22-22',
+  contactName: 'M-7 S. Mohamad',
+  contactPhone: '89292088095',
   supplierReference: 'INV-42',
   documentDate: '2026-09-16',
   lines,
@@ -152,6 +155,30 @@ describe.sequential('purchase document extraction', () => {
       supplierSku: 'SUP-1',
     });
     expect(providerCalls).toBe(1);
+  });
+  it('answers a follow-up question without writing any supplier, product, or purchase', async () => {
+    provider = () =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: 'The printed reference is INV-42.' } }],
+        }),
+      );
+    const document = {
+      ...payload(),
+      supplierCompanyNumber: '',
+      supplierPhone: '+7 (969) 722-22-22',
+      contactName: 'M-7 S. Mohamad',
+      contactPhone: '89292088095',
+    };
+    const answer = await request('/purchases/document-chat', {
+      document,
+      question: 'What is the reference?',
+      history: [],
+    });
+    expect(answer.status).toBe(201);
+    expect(answer.body).toEqual({ answer: 'The printed reference is INV-42.' });
+    expect(providerCalls).toBe(1);
+    expect((await db.pool.query('SELECT count(*) FROM purchases')).rows[0].count).toBe('0');
   });
   it('requires authentication and validates a supplier when one is provided', async () => {
     expect((await request('/purchases/extract', { supplierId, image }, false)).status).toBe(401);

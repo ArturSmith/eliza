@@ -41,7 +41,7 @@ import { AccessGuard, Require, parse, hash, cookie, type AuthRequest } from './s
 import { Operations, audit } from './operations.js';
 import type { PoolClient } from 'pg';
 import { shoppingProducts } from './shopping-list-data.js';
-import { extractPurchaseDocument } from './purchase-extraction.js';
+import { answerPurchaseDocumentQuestion, extractPurchaseDocument } from './purchase-extraction.js';
 const command = z.object({ requestId: z.uuid(), version: z.number().int().positive() });
 const supplierColumns = `id,code,name,contact_name AS "contactName",email,phone,address,company_number AS "companyNumber",payment_terms AS "paymentTerms",notes,active,version,created_at AS "createdAt"`;
 @Controller()
@@ -648,7 +648,7 @@ export class PurchasingController {
     const term = parse(z.string().max(200).default(''), search).trim().toLowerCase();
     return (
       await this.database.pool.query(
-        `SELECT p.id,p.number,p.supplier_reference,p.status,p.version,p.total,p.payment_status,p.payment_due_date::text,p.paid_at,
+        `SELECT p.id,p.number,p.supplier_id,p.supplier_reference,p.document_date::text,p.status,p.version,p.total,p.payment_status,p.payment_due_date::text,p.paid_at,
 (p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received','closed') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,p.created_at AS "createdAt",s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.store_id=$1 AND ($2='' OR strpos(lower(p.number),$2)>0 OR strpos(lower(s.name),$2)>0 OR strpos(lower(p.supplier_reference),$2)>0) ORDER BY p.created_at DESC LIMIT 200`,
         [req.context.store.id, term],
       )
@@ -748,6 +748,55 @@ export class PurchasingController {
     }
     return extractPurchaseDocument(b.image, b.supplierId, store, this.database);
   }
+  @Post('purchases/document-chat') @Require('purchases.write') async documentChat(
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(
+      z.object({
+        question: z.string().trim().min(1).max(500),
+        document: z.object({
+          supplierName: z.string().max(120),
+          supplierCode: z.string().max(60),
+          supplierCompanyNumber: z.string().max(120),
+          supplierPhone: z.string().max(60),
+          contactName: z.string().max(120),
+          contactPhone: z.string().max(60),
+          supplierReference: z.string().max(120),
+          documentDate: z.string().max(10),
+          lines: z
+            .array(
+              z.object({
+                description: z.string().max(200),
+                supplierSku: z.string().max(60),
+                barcode: z.string().max(40),
+                quantity: z.string().max(32),
+                unitCost: z.string().max(32),
+              }),
+            )
+            .min(1)
+            .max(100),
+        }),
+        history: z
+          .array(
+            z.object({
+              role: z.enum(['user', 'assistant']),
+              content: z.string().max(1000),
+            }),
+          )
+          .max(6)
+          .default([]),
+      }),
+      input,
+    );
+    return answerPurchaseDocumentQuestion(
+      this.database,
+      req.context.store.id,
+      b.document,
+      b.question,
+      b.history,
+    );
+  }
   @Post('purchases') @Require('purchases.write') async draft(
     @Body() input: unknown,
     @Req() req: AuthRequest,
@@ -803,7 +852,7 @@ export class PurchasingController {
       ? { id: b.id }
       : (
           await c.query(
-            `INSERT INTO purchases(store_id,supplier_id,number,supplier_reference,expected_date,notes,subtotal,tax,total,created_by,device_id) VALUES($1,$2,'PO-'||lpad(nextval('purchase_number_sequence')::text,6,'0'),$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
+            `INSERT INTO purchases(store_id,supplier_id,number,supplier_reference,expected_date,notes,subtotal,tax,total,created_by,device_id,document_date) VALUES($1,$2,'PO-'||lpad(nextval('purchase_number_sequence')::text,6,'0'),$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
             [
               store,
               b.supplierId,
@@ -815,13 +864,14 @@ export class PurchasingController {
               fromScaled(subtotal + tax, 2),
               req.context.user.id,
               req.context.device.id,
+              b.documentDate || null,
             ],
           )
         ).rows[0];
     if (b.id) {
       await c.query('DELETE FROM purchase_lines WHERE purchase_id=$1', [b.id]);
       await c.query(
-        'UPDATE purchases SET supplier_id=$2,supplier_reference=$3,expected_date=$4,notes=$5,subtotal=$6,tax=$7,total=$8,version=version+1 WHERE id=$1',
+        'UPDATE purchases SET supplier_id=$2,supplier_reference=$3,expected_date=$4,notes=$5,subtotal=$6,tax=$7,total=$8,document_date=$9,version=version+1 WHERE id=$1',
         [
           b.id,
           b.supplierId,
@@ -831,6 +881,7 @@ export class PurchasingController {
           fromScaled(subtotal, 2),
           fromScaled(tax, 2),
           fromScaled(subtotal + tax, 2),
+          b.documentDate || null,
         ],
       );
     }

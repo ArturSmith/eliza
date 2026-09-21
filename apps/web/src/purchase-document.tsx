@@ -5,6 +5,7 @@ import {
   type Supplier,
   confidentTextMatch,
   documentImageSchema,
+  matchingTextScore,
   normalizeMatchText,
 } from '@eliza/contracts';
 import { api, ApiError } from './api';
@@ -26,19 +27,48 @@ type ProductLookup = {
   existing?: { id: string; name: string };
   suggestion?: ProductSuggestion | null;
 };
-type SupplierPrefill = { name: string; code: string; companyNumber: string };
+type PurchaseReference = {
+  id: string;
+  number: string;
+  supplier_id: string;
+  supplier_reference: string;
+};
 
-function matchSupplier(document: Extraction, suppliers: Supplier[]) {
-  const active = suppliers.filter((supplier) => supplier.active);
+type SupplierPrefill = {
+  name: string;
+  code: string;
+  companyNumber: string;
+  contactName: string;
+  phone: string;
+  notes: string;
+};
+
+function matchingSuppliers(
+  document: Extraction,
+  suppliers: Supplier[],
+  referenceMatches: PurchaseReference[],
+) {
+  const digits = (value: string) => value.replace(/\D/g, '');
   const code = normalizeMatchText(document.supplierCode);
   const company = normalizeMatchText(document.supplierCompanyNumber);
-  const exact = active.filter(
-    (supplier) =>
-      (code && normalizeMatchText(supplier.code) === code) ||
-      (company && normalizeMatchText(supplier.companyNumber) === company),
-  );
-  if (exact.length === 1) return exact[0];
-  return confidentTextMatch(document.supplierName, active, (supplier) => supplier.name);
+  return suppliers
+    .filter((supplier) => supplier.active)
+    .map((supplier) => {
+      const name = document.supplierName
+        ? matchingTextScore(document.supplierName, supplier.name)
+        : 0;
+      const phone = [document.supplierPhone, document.contactPhone].some(
+        (value) => digits(value).length >= 7 && digits(value) === digits(supplier.phone),
+      );
+      const reference = referenceMatches.some((purchase) => purchase.supplier_id === supplier.id);
+      const exactCode = !!code && normalizeMatchText(supplier.code) === code;
+      const exactCompany = !!company && normalizeMatchText(supplier.companyNumber) === company;
+      const score = exactCompany || exactCode ? 4 : reference ? 3 + name : phone ? 2 + name : name;
+      return { supplier, score, phone, reference, exactCode, exactCompany, name };
+    })
+    .filter((candidate) => candidate.score >= 0.35)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
 }
 
 export type DocumentDraftLine = {
@@ -57,12 +87,14 @@ export function PurchaseDocument({
   suppliers,
   onApply,
   onAddSupplier,
+  onSelectSupplier,
 }: {
   supplierId: string;
   products: Product[];
   suppliers: Supplier[];
-  onApply: (lines: DocumentDraftLine[], reference: string, supplierId?: string) => void;
+  onApply: (lines: DocumentDraftLine[], reference: string, date: string) => void;
   onAddSupplier: (prefill: SupplierPrefill) => void;
+  onSelectSupplier: (id: string) => void;
 }) {
   useLanguage();
   const [open, setOpen] = useState(false);
@@ -70,12 +102,20 @@ export function PurchaseDocument({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [result, setResult] = useState<Extraction | null>(null);
-  const [supplierMatched, setSupplierMatched] = useState(false);
+  const [candidates, setCandidates] = useState<ReturnType<typeof matchingSuppliers>>([]);
+  const [referenceMatches, setReferenceMatches] = useState<PurchaseReference[]>([]);
+  const [question, setQuestion] = useState('');
+  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatError, setChatError] = useState<unknown>(null);
   const activeProducts = products.filter((p) => p.active);
   async function upload(file?: File) {
     setError(null);
     setResult(null);
-    setSupplierMatched(false);
+    setCandidates([]);
+    setReferenceMatches([]);
+    setMessages([]);
+    setChatError(null);
     setImage('');
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
@@ -120,9 +160,23 @@ export function PurchaseDocument({
           // The already loaded list can still be used if refreshing it fails.
         }
       }
-      const matchedSupplier = supplierId
-        ? supplierCandidates.find((supplier) => supplier.id === supplierId)
-        : matchSupplier(document, supplierCandidates);
+      let matchingPurchases: PurchaseReference[] = [];
+      if (document.supplierReference) {
+        try {
+          const purchases = await api<PurchaseReference[]>(
+            '/purchases?search=' + encodeURIComponent(document.supplierReference),
+          );
+          matchingPurchases = purchases.filter(
+            (purchase) =>
+              normalizeMatchText(purchase.supplier_reference) ===
+              normalizeMatchText(document.supplierReference),
+          );
+        } catch {
+          // Supplier name and phone matching remain available if purchase history cannot load.
+        }
+      }
+      setReferenceMatches(matchingPurchases);
+      setCandidates(matchingSuppliers(document, supplierCandidates, matchingPurchases));
       const enriched = await Promise.all(
         document.lines.map(async (source) => {
           let product =
@@ -162,13 +216,56 @@ export function PurchaseDocument({
         }),
       );
       setResult({ ...document, lines: enriched.map((line) => line.source) });
-      setSupplierMatched(!!matchedSupplier);
-      onApply(enriched, document.supplierReference, matchedSupplier?.id);
+      setMessages([]);
+      setChatError(null);
+      onApply(enriched, document.supplierReference, document.documentDate);
       setOpen(false);
     } catch (e) {
       setError(e);
     } finally {
       setBusy(false);
+    }
+  }
+  async function ask() {
+    if (!result || !question.trim() || chatBusy) return;
+    const asked = question.trim();
+    setChatBusy(true);
+    setChatError(null);
+    try {
+      const response = await api<{ answer: string }>('/purchases/document-chat', {
+        document: {
+          supplierName: result.supplierName,
+          supplierCode: result.supplierCode,
+          supplierCompanyNumber: result.supplierCompanyNumber,
+          supplierPhone: result.supplierPhone,
+          contactName: result.contactName,
+          contactPhone: result.contactPhone,
+          supplierReference: result.supplierReference,
+          documentDate: result.documentDate,
+          lines: result.lines.map((line) => ({
+            description: line.description,
+            supplierSku: line.supplierSku,
+            barcode: line.barcode,
+            quantity: line.quantity,
+            unitCost: line.unitCost,
+          })),
+        },
+        question: asked,
+        history: messages.slice(-6).map((message) => ({
+          role: message.role,
+          content: message.content.slice(0, 1000),
+        })),
+      });
+      setMessages((current) => [
+        ...current,
+        { role: 'user', content: asked },
+        { role: 'assistant', content: response.answer },
+      ]);
+      setQuestion('');
+    } catch (error) {
+      setChatError(error);
+    } finally {
+      setChatBusy(false);
     }
   }
   return (
@@ -178,27 +275,137 @@ export function PurchaseDocument({
           <Button type="button" variant="outline" onClick={() => setOpen(true)}>
             {t('Read supplier document')}
           </Button>
-          {!supplierId && result && !supplierMatched && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() =>
-                onAddSupplier({
-                  name: result.supplierName,
-                  code: result.supplierCode,
-                  companyNumber: result.supplierCompanyNumber,
-                })
-              }
-            >
-              {t('Add new supplier')}
-            </Button>
-          )}
         </div>
         <small className="muted">
           {supplierId
             ? t('Upload a document to prepare purchase lines.')
             : t('You can read the document first. Add or select a supplier before saving.')}
         </small>
+        {result && (
+          <div className="purchase-assistant" role="log" aria-label={t('Document assistant')}>
+            <p className="purchase-assistant-message">
+              {t('I read document {reference} dated {date} and found {count} product rows.', {
+                reference: result.supplierReference || '—',
+                date: result.documentDate || '—',
+                count: result.lines.length,
+              })}
+            </p>
+            {referenceMatches.length > 0 && (
+              <p className="notice">
+                {t(
+                  'A purchase with reference {reference} already exists. Check it before saving another.',
+                  {
+                    reference: result.supplierReference,
+                  },
+                )}
+              </p>
+            )}
+            {supplierId ? (
+              <p className="purchase-assistant-message">
+                {t('Supplier confirmed. Review the product rows and save the draft when ready.')}
+              </p>
+            ) : (
+              <>
+                <p className="purchase-assistant-message">
+                  {t('I found supplier {name}. Is one of these your supplier?', {
+                    name: result.supplierName || '—',
+                  })}
+                </p>
+                {candidates.map(({ supplier, exactCode, exactCompany, reference, phone, name }) => (
+                  <div className="purchase-assistant-candidate" key={supplier.id}>
+                    <span>
+                      <strong>{supplier.name}</strong> · {supplier.code}
+                      <small>
+                        {exactCompany || exactCode
+                          ? t('Matching supplier identifier')
+                          : reference
+                            ? t('Previous purchase with this reference')
+                            : phone
+                              ? t('Matching phone number')
+                              : t('Similar supplier name')}
+                        {name >= 0.35 && phone ? ' · ' + t('Similar supplier name') : ''}
+                      </small>
+                    </span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => onSelectSupplier(supplier.id)}
+                    >
+                      {t('Use this supplier')}
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    onAddSupplier({
+                      name: result.supplierName,
+                      code: result.supplierCode,
+                      companyNumber: result.supplierCompanyNumber,
+                      contactName: result.contactName,
+                      phone: result.contactPhone || result.supplierPhone,
+                      notes:
+                        result.contactPhone && result.supplierPhone
+                          ? t('Supplier business phone: {phone}', {
+                              phone: result.supplierPhone,
+                            })
+                          : '',
+                    })
+                  }
+                >
+                  {t('Create new supplier')}
+                </Button>
+                <small className="muted">
+                  {t('Review these details before approving a new supplier.')}
+                </small>
+              </>
+            )}
+            <p className="purchase-assistant-message">
+              {t('I matched {matched} products; {unmatched} need your review.', {
+                matched: result.lines.filter((line) => line.productId).length,
+                unmatched: result.lines.filter((line) => !line.productId).length,
+              })}
+            </p>
+            <small className="muted">
+              {t(
+                'Choose or create unmatched products in the table below. Check quantities, units, costs and tax before saving the purchase draft.',
+              )}
+            </small>
+            {messages.map((message, index) => (
+              <p
+                className={'purchase-assistant-message purchase-assistant-' + message.role}
+                key={index}
+              >
+                <strong>{message.role === 'user' ? t('You') : t('Eliza')}:</strong>{' '}
+                {message.content}
+              </p>
+            ))}
+            <div className="purchase-assistant-question">
+              <input
+                aria-label={t('Ask about this document')}
+                placeholder={t('Ask about this document')}
+                maxLength={500}
+                value={question}
+                onChange={(event) => setQuestion(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    void ask();
+                  }
+                }}
+              />
+              <Button
+                type="button"
+                disabled={chatBusy || !question.trim()}
+                onClick={() => void ask()}
+              >
+                {chatBusy ? t('Thinking…') : t('Ask')}
+              </Button>
+            </div>
+            <ErrorMessage error={chatError} />
+          </div>
+        )}
         {result && image && (
           <details className="purchase-document-preview">
             <summary>{t('Open original image')}</summary>

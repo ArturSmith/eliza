@@ -57,6 +57,9 @@ export type Extraction = {
   supplierName: string;
   supplierCode: string;
   supplierCompanyNumber: string;
+  supplierPhone: string;
+  contactName: string;
+  contactPhone: string;
   supplierReference: string;
   documentDate: string;
   lines: ExtractedLine[];

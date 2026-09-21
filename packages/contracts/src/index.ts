@@ -421,6 +421,7 @@ export const purchasePaymentSchema = z.object({
 export const purchaseDraftSchema = z.object({
   supplierId: z.uuid(),
   supplierReference: z.string().trim().max(120).default(''),
+  documentDate: optionalDate.default(''),
   expectedDate: optionalDate.default(''),
   notes: z.string().trim().max(1000).default(''),
   lines: z

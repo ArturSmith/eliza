@@ -2954,6 +2954,63 @@ input.shopping-section-title {
   gap: 12px;
   flex-wrap: wrap;
 }
+.purchase-assistant {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #dce7d8;
+  border-radius: 10px;
+  background: #f8fbf6;
+}
+.purchase-assistant-message {
+  margin: 0;
+  line-height: 1.5;
+}
+.purchase-assistant-candidate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #dce7d8;
+  border-radius: 8px;
+  background: white;
+}
+.purchase-assistant-candidate small {
+  display: block;
+  color: #637359;
+  margin-top: 4px;
+}
+.purchase-assistant > .button {
+  justify-self: start;
+}
+.purchase-assistant-user {
+  justify-self: end;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: #e9f1e5;
+}
+.purchase-assistant-assistant {
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: white;
+}
+.purchase-assistant-question {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.purchase-assistant-question input {
+  flex: 1 1 240px;
+  min-width: 0;
+  border: 1px solid #dce7d8;
+  border-radius: 7px;
+  padding: 10px 12px;
+}
+.purchase-assistant-question .button {
+  flex: 0 0 auto;
+}
 .purchase-document-preview {
   display: grid;
   gap: 8px;
