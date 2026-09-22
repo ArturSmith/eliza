@@ -77,10 +77,10 @@ function DocumentViewer({
     }
   }
   function editText(
-    value: string,
+    value: string | null,
     onChange: (value: string) => void,
     label: string,
-    original?: string,
+    original?: string | null,
     multiline = false,
   ) {
     if (!editing) return <span>{value || '—'}</span>;
@@ -91,18 +91,18 @@ function DocumentViewer({
         {multiline ? (
           <textarea
             aria-label={label}
-            value={value}
+            value={value ?? ''}
             onChange={(event) => onChange(event.target.value)}
           />
         ) : (
           <input
             aria-label={label}
-            value={value}
+            value={value ?? ''}
             onChange={(event) => onChange(event.target.value)}
           />
         )}
         {original !== undefined && original !== value && (
-          <small title={original}>{t('Edited from scan')}</small>
+          <small title={original ?? undefined}>{t('Edited from scan')}</small>
         )}
       </span>
     );
@@ -111,7 +111,7 @@ function DocumentViewer({
     <section className="scanned-document-result">
       <div className="document-result-toolbar">
         <div>
-          <span className="document-scan-badge">✓ {t('Scan complete')}</span>
+          <span className={validation.incomplete ? 'document-review-badge' : 'document-scan-badge'}>{validation.incomplete ? '⚠ ' + t('Review required') : '✓ ' + t('Scan complete')}</span>
           <span className="document-type-badge">{data.documentType || t('Document')}</span>
         </div>
         <div className="document-result-actions">
@@ -168,7 +168,7 @@ function DocumentViewer({
         <article className={'document-paper ' + (mobileTab === 'digital' ? 'mobile-active' : '')}>
           <header className="document-paper-header">
             <div className="document-paper-heading">
-              <span className="document-scan-badge">✓ {t('Scan complete')}</span>
+              <span className={validation.incomplete ? 'document-review-badge' : 'document-scan-badge'}>{validation.incomplete ? '⚠ ' + t('Review required') : '✓ ' + t('Scan complete')}</span>
               <span className="document-type-badge">{data.documentType || t('Document')}</span>
             </div>
             <h2>
@@ -401,6 +401,7 @@ function DocumentViewer({
                               table.columns[cellIndex]?.label || t('Cell'),
                               record.extracted.tables[tableIndex]?.rows[rowIndex]?.cells[cellIndex],
                             )}
+                            {row.uncertainCells?.includes(cellIndex) && <small className="document-cell-uncertain">{t('Uncertain')}</small>}
                           </td>
                         ))}
                         {editing && (
@@ -525,13 +526,13 @@ function DocumentViewer({
               </div>
               {validation.rowSum !== null && (
                 <div>
-                  <span>{t('Sum of table rows')}</span>
+                  <span>{validation.incomplete ? t('Partial sum of extracted rows') : t('Sum of table rows')}</span>
                   <span>{displayAmount(validation.rowSum, data.currency, data.language)}</span>
                 </div>
               )}
               {validation.difference !== null && validation.difference !== '0.00' && (
                 <p className="document-discrepancy">
-                  ⚠ {t('Discrepancy detected')}:{' '}
+                  ⚠ {validation.incomplete ? t('Partial sum differs from printed total') : t('Discrepancy detected')}:{' '}
                   {displayAmount(
                     String(Math.abs(Number(validation.difference))),
                     data.currency,
@@ -540,6 +541,11 @@ function DocumentViewer({
                 </p>
               )}
             </section>
+          )}
+          {validation.expectedRows !== null && (
+            <p className={validation.incomplete ? 'document-row-count incomplete' : 'document-row-count'}>
+              {t('Extracted {count} of {expected} expected rows.', { count: validation.extractedRows, expected: validation.expectedRows })}
+            </p>
           )}
           {validation.warnings.length > 0 && (
             <div className="document-warnings">

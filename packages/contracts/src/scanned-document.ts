@@ -28,6 +28,9 @@ export const documentDataSchema = z
     tables: z
       .array(
         z.object({
+          expectedRowCount: z.number().int().min(0).max(500).nullable().optional(),
+          firstRowNumber: z.number().int().min(0).max(9999).nullable().optional(),
+          lastRowNumber: z.number().int().min(0).max(9999).nullable().optional(),
           id: z.string().max(80),
           title: z.string().max(200),
           columns: z
@@ -41,7 +44,7 @@ export const documentDataSchema = z
             .min(1)
             .max(30),
           rows: z
-            .array(z.object({ rowNumber: z.string().max(30), cells: z.array(text).max(30) }))
+            .array(z.object({ rowNumber: z.string().max(30), cells: z.array(text.nullable()).max(30), uncertainCells: z.array(z.number().int().min(0).max(29)).max(30).optional() }))
             .max(500),
           footerRows: z
             .array(z.object({ label: z.string().max(150), value: z.string().max(120) }))
@@ -61,6 +64,12 @@ export type DocumentValidation = {
   printedTotal: string | null;
   difference: string | null;
   warnings: string[];
+  incomplete: boolean;
+  expectedRows: number | null;
+  extractedRows: number;
+  missingRowNumbers: number[];
+  duplicateRowNumbers: number[];
+  arithmeticStatus: 'confirmed' | 'incomplete' | 'unavailable';
 };
 
 /** Parse printed amounts without converting currency. Decimal separators can be comma or dot. */
@@ -92,44 +101,88 @@ function parsePrintedQuantity(raw: string): bigint | null {
 export function validateDocument(data: DocumentData): DocumentValidation {
   const warnings: string[] = [...data.extractionWarnings];
   let sum = 0n;
-  let count = 0;
+  let amountCount = 0;
+  let extractedRows = 0;
+  let expectedRows = 0;
+  let hasExpectedRows = false;
+  const missingRowNumbers: number[] = [];
+  const duplicateRowNumbers: number[] = [];
+  let incomplete = warnings.some((warning) => /conflicting readings|table section could not be read|layout inspection|more than 120 numbered rows/i.test(warning));
   for (const table of data.tables) {
+    extractedRows += table.rows.length;
+    const expected = table.expectedRowCount ?? null;
+    if (expected !== null) {
+      expectedRows += expected;
+      hasExpectedRows = true;
+      if (table.rows.length < expected) {
+        incomplete = true;
+        warnings.push(`${table.title || 'Table'}: extracted ${table.rows.length} of ${expected} expected rows.`);
+      }
+    } else if (table.rows.length >= 16) {
+      incomplete = true;
+      warnings.push(`${table.title || 'Table'}: expected row count could not be verified; review the original.`);
+    }
+    const numbered = new Map<number, number>();
+    for (const row of table.rows) {
+      const number = /^\d{1,4}$/.test(row.rowNumber.trim()) ? Number(row.rowNumber.trim()) : null;
+      if (number !== null) numbered.set(number, (numbered.get(number) ?? 0) + 1);
+      if (row.uncertainCells?.length) warnings.push(`Uncertain cells in ${table.title || 'table'} row ${row.rowNumber || 'unknown'}.`);
+    }
+    for (const [number, count] of numbered) {
+      if (count > 1) {
+        duplicateRowNumbers.push(number);
+        incomplete = true;
+      }
+    }
+    const first = table.firstRowNumber ?? (numbered.size ? Math.min(...numbered.keys()) : null);
+    const last = table.lastRowNumber ?? (expected !== null && first !== null ? first + expected - 1 : numbered.size ? Math.max(...numbered.keys()) : null);
+    if (first !== null && last !== null && last >= first && last - first < 501) {
+      for (let number = first; number <= last; number++) {
+        if (!numbered.has(number)) missingRowNumbers.push(number);
+      }
+    }
     const amountIndex = table.columns.findIndex((column) => column.kind === 'amount');
     if (amountIndex < 0) continue;
     const quantityIndex = table.columns.findIndex((column) => column.kind === 'quantity');
     const priceIndex = table.columns.findIndex((column) => column.kind === 'price');
     for (const row of table.rows) {
       const value = parsePrintedAmount(row.cells[amountIndex] ?? '');
-      if (value === null)
-        warnings.push(
-          `Unreadable amount in ${table.title || 'table'} row ${row.rowNumber || count + 1}.`,
-        );
-      else {
+      if (value === null) {
+        warnings.push(`Unreadable amount in ${table.title || 'table'} row ${row.rowNumber || 'unknown'}.`);
+        incomplete = true;
+      } else {
         sum += value;
-        count++;
+        amountCount++;
         if (quantityIndex >= 0 && priceIndex >= 0) {
           const quantity = parsePrintedQuantity(row.cells[quantityIndex] ?? '');
           const price = parsePrintedAmount(row.cells[priceIndex] ?? '');
           if (quantity !== null && price !== null && (quantity * price + 500n) / 1000n !== value)
-            warnings.push(
-              `Quantity × price differs from printed amount in ${table.title || 'table'} row ${row.rowNumber || count}.`,
-            );
+            warnings.push(`Quantity × price differs from printed amount in ${table.title || 'table'} row ${row.rowNumber || 'unknown'}.`);
         }
       }
     }
   }
+  if (missingRowNumbers.length) {
+    incomplete = true;
+    warnings.push(`Missing printed row numbers: ${missingRowNumbers.join(', ')}.`);
+  }
+  if (duplicateRowNumbers.length) warnings.push(`Duplicate printed row numbers: ${duplicateRowNumbers.join(', ')}.`);
   const printed = parsePrintedAmount(data.printedTotal);
-  if (data.printedTotal && printed === null)
-    warnings.push('The printed total could not be read as a number.');
-  const difference = count && printed !== null ? sum - printed : null;
+  if (data.printedTotal && printed === null) warnings.push('The printed total could not be read as a number.');
+  const difference = amountCount && printed !== null ? sum - printed : null;
+  const arithmeticStatus = difference === null ? 'unavailable' : incomplete ? 'incomplete' : 'confirmed';
   if (difference !== null && difference !== 0n)
-    warnings.push(
-      `Printed total and table amounts differ by ${formatCents(difference < 0n ? -difference : difference)} ${data.currency}`.trim(),
-    );
+    warnings.push(`${incomplete ? 'Partial extracted row sum differs from printed total' : 'Printed total and table amount sum differ'} by ${formatCents(difference < 0n ? -difference : difference)} ${data.currency}`.trim());
   return {
-    rowSum: count ? formatCents(sum) : null,
+    rowSum: amountCount ? formatCents(sum) : null,
     printedTotal: printed === null ? null : formatCents(printed),
     difference: difference === null ? null : formatCents(difference),
     warnings,
+    incomplete,
+    expectedRows: hasExpectedRows ? expectedRows : null,
+    extractedRows,
+    missingRowNumbers,
+    duplicateRowNumbers,
+    arithmeticStatus,
   };
 }

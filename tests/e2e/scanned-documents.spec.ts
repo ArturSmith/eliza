@@ -153,4 +153,11 @@ test('scans, edits, saves, and reopens a nine-row digital invoice', async ({ pag
   await expect(page.locator('.document-paper')).toBeVisible();
   const pdf = await page.pdf({ path: test.info().outputPath('digital-invoice.pdf') });
   expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
+  await page.emulateMedia({ media: 'screen' });
+  saved = { ...saved, version: saved.version + 1, edited: { ...saved.edited, tables: saved.edited.tables.map((table: any) => ({ ...table, expectedRowCount: 31, firstRowNumber: 1, lastRowNumber: 31 })) } };
+  await page.reload();
+  await expect(page.getByText('Review required').first()).toBeVisible();
+  await expect(page.getByText('Extracted 9 of 31 expected rows.', { exact: true })).toBeVisible();
+  await expect(page.getByText('This scan has missing or duplicate product rows.')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Prepare purchase order' })).toHaveCount(0);
 });

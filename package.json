@@ -25,8 +25,9 @@
     "@playwright/test": "^1.55.0",
     "@types/node": "^24.0.0",
     "concurrently": "^9.2.0",
+    "prettier": "^3.6.2",
+    "sharp": "^0.35.4",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4",
-    "prettier": "^3.6.2"
+    "vitest": "^3.2.4"
   }
 }

@@ -79,7 +79,7 @@ test('prepares a purchase from the new document chat and removes the old route',
   const milk = draft.getByRole('row', { name: 'Purchase row 1', exact: true });
   const loaf = draft.getByRole('row', { name: 'Purchase row 2', exact: true });
   await expect(milk.getByLabel('Quantity', { exact: true })).toHaveValue('2');
-  await expect(milk.getByLabel('Unit cost excl. tax')).toHaveValue('3');
+  await expect(milk.getByLabel('Unit cost excl. tax')).toHaveValue('3.00');
   await expect(loaf).toHaveClass(/purchase-review-focus/);
   await expect(loaf.getByRole('button', { name: 'Create new product' })).toBeVisible();
   expect(await page.request.get('/api/purchases').then((response) => response.json())).toHaveLength(0);

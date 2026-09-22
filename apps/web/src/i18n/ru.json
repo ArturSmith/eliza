@@ -1416,5 +1416,10 @@
   "Reading your document…": "Читаю ваш документ…",
   "Prepare purchase order": "Подготовить заказ поставщику",
   "This document has more than 100 product rows. Split it before preparing a purchase order.": "В документе более 100 товарных строк. Разделите его перед созданием заказа.",
-  "Some unit costs were estimated from line total divided by quantity. Check tax and costs against the original document before saving.": "Некоторые цены за единицу рассчитаны как сумма строки, делённая на количество. Перед сохранением проверьте налог и цены по оригиналу."
+  "Some unit costs were estimated from line total divided by quantity. Check tax and costs against the original document before saving.": "Некоторые цены за единицу рассчитаны как сумма строки, делённая на количество. Перед сохранением проверьте налог и цены по оригиналу.",
+  "Review required": "Требуется проверка",
+  "Partial sum of extracted rows": "Частичная сумма извлечённых строк",
+  "Partial sum differs from printed total": "Частичная сумма отличается от итога документа",
+  "Extracted {count} of {expected} expected rows.": "Извлечено {count} из {expected} ожидаемых строк.",
+  "This scan has missing or duplicate product rows. Correct and save the digital document before preparing a purchase order.": "В скане отсутствуют или повторяются товарные строки. Исправьте и сохраните цифровой документ перед подготовкой заказа."
 }

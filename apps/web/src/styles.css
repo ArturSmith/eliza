@@ -3790,3 +3790,9 @@ input.shopping-section-title {
 .document-purchase-step .document-chat-product { width: 100%; }
 .document-purchase-step > .button { margin-top: 16px; }
 @media print { .document-purchase-preparation { display: none !important; } }
+
+.document-review-badge { display: inline-flex; border-radius: 24px; padding: 5px 12px; font-weight: 600; background: #fff1df; color: #8b4c0c; white-space: nowrap; }
+.document-row-count { margin: 16px 0; color: #41634a; font-weight: 600; }
+.document-row-count.incomplete { color: #a34125; }
+
+.document-cell-uncertain { display: block; color: #9b5a17; font-size: .75rem; }

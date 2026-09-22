@@ -125,6 +125,33 @@ describe('scanned document reconstruction', () => {
     expect(validateDocument(data).warnings.some((warning) => warning.includes('row 1'))).toBe(true);
     expect(validateDocument(data).rowSum).toBe('9192.00');
   });
+  it('detects six missing rows from a 31-row numbered invoice without inventing them', () => {
+    const data = invoice();
+    const table = data.tables[0];
+    table.firstRowNumber = 1;
+    table.lastRowNumber = 31;
+    table.expectedRowCount = 31;
+    table.rows = Array.from({ length: 25 }, (_, index) => ({ rowNumber: String(index + 1), cells: [`Товар ${index + 1}`, '1', '100'] }));
+    data.printedTotal = '30219.00';
+    const result = validateDocument(data);
+    expect(result).toMatchObject({ incomplete: true, expectedRows: 31, extractedRows: 25, missingRowNumbers: [26, 27, 28, 29, 30, 31], arithmeticStatus: 'incomplete' });
+    expect(result.warnings.join(' ')).toContain('Partial extracted row sum');
+    expect(table.rows).toHaveLength(25);
+  });
+  it('flags duplicate row numbers and nullable unreadable values without default quantities', () => {
+    const data = invoice();
+    data.tables[0].expectedRowCount = 9;
+    data.tables[0].firstRowNumber = 1;
+    data.tables[0].lastRowNumber = 9;
+    data.tables[0].rows[1].rowNumber = '1';
+    data.tables[0].rows[0].cells[1] = null;
+    data.tables[0].rows[0].uncertainCells = [1];
+    const result = validateDocument(data);
+    expect(result.incomplete).toBe(true);
+    expect(result.duplicateRowNumbers).toEqual([1]);
+    expect(result.missingRowNumbers).toEqual([2]);
+    expect(data.tables[0].rows[0].cells[1]).toBe(null);
+  });
   it('validates edited values without changing the extraction', () => {
     const source = invoice();
     const edited = structuredClone(source);

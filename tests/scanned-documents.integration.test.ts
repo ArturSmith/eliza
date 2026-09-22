@@ -1,5 +1,6 @@
 import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import sharp from 'sharp';
 import { createApp } from '../apps/api/dist/app.js';
 import { Database } from '../apps/api/dist/database.js';
 import type { DocumentData } from '../packages/contracts/src/index';
@@ -57,7 +58,29 @@ const invoice: DocumentData = {
 };
 let providerData: DocumentData = invoice;
 let providerInput: any;
+let visionRequests: any[] = [];
 let chatInput: any;
+let denseMode: 'complete' | 'partial' | 'multipage' | '' = '';
+let forceIncomplete = false;
+let sectionIndex = 0;
+const denseRows = Array.from({ length: 31 }, (_, index) => {
+  const number = index + 1;
+  const quantity = number === 10 ? '10' : '1';
+  const price = number === 10 ? '65.00' : number === 31 ? '569.00' : '1000.00';
+  const amount = number === 10 ? '650.00' : number === 31 ? '569.00' : '1000.00';
+  return { rowNumber: String(number), cells: [`Арт-${String(number).padStart(3, '0')}`, number === 10 ? 'UNO' : `Товар ${number}`, quantity, 'шт', price, amount], uncertainCells: [] };
+});
+const denseInvoice: DocumentData = {
+  ...invoice, number: '9605', title: 'Реализация товаров № 9605', printedTotal: '30219.00',
+  tables: [{ id: 'items', title: 'Товары', columns: [
+    { key: 'article', label: 'Артикул', kind: 'text' },
+    { key: 'product', label: 'Товар', kind: 'text' },
+    { key: 'quantity', label: 'Количество', kind: 'quantity' },
+    { key: 'unit', label: 'Ед.', kind: 'text' },
+    { key: 'price', label: 'Цена', kind: 'price' },
+    { key: 'amount', label: 'Сумма', kind: 'amount' },
+  ], rows: denseRows.slice(0, 25).map((row) => row.rowNumber === '10' ? { ...row, cells: ['Арт-010', 'Incorrect UNO', '1', 'шт', '650.00', '650.00'] } : row), footerRows: [] }],
+};
 class Client {
   cookies = new Map<string, string>();
   async request(path: string, body?: unknown) {
@@ -89,13 +112,21 @@ beforeAll(async () => {
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
     if (String(input) === 'https://api.openai.com/v1/responses') {
       providerInput = JSON.parse(String(init?.body));
-      return new Response(
-        JSON.stringify({
-          status: 'completed',
-          output: [{ content: [{ type: 'output_text', text: JSON.stringify(providerData) }] }],
-        }),
-        { status: 200 },
-      );
+      visionRequests.push(providerInput);
+      const schemaName = providerInput.text.format.name;
+      let output: unknown = providerData;
+      if (denseMode) {
+        if (schemaName === 'document_layout') output = denseMode === 'multipage'
+          ? { expectedRowCount: null, firstRowNumber: null, lastRowNumber: null, tableTitle: '', tableCount: 0, warnings: [] }
+          : { expectedRowCount: 31, firstRowNumber: 1, lastRowNumber: 31, tableTitle: 'Товары', tableCount: 1, warnings: [] };
+        else if (schemaName === 'scanned_document') output = denseMode === 'multipage' ? { ...invoice, documentType: 'letter', pages: 2, title: 'Two-page notice', tables: [], printedTotal: '', sections: [{ title: 'Notice', text: 'Delivery delayed.' }] } : denseInvoice;
+        else if (schemaName === 'document_rows') {
+          const segments = denseMode === 'complete' ? [[1, 10], [9, 18], [17, 25], [24, 31]] : [[1, 10], [9, 18], [17, 25], [20, 25]];
+          const [first, last] = segments[sectionIndex++];
+          output = { rows: denseRows.filter((row) => Number(row.rowNumber) >= first && Number(row.rowNumber) <= last) };
+        }
+      }
+      return new Response(JSON.stringify(forceIncomplete ? { status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' }, output: [] } : { status: 'completed', output: [{ content: [{ type: 'output_text', text: JSON.stringify(output) }] }] }), { status: 200 });
     }
     if (String(input) === 'https://api.openai.com/v1/chat/completions') {
       chatInput = JSON.parse(String(init?.body));
@@ -194,6 +225,41 @@ describe.sequential('scanned document persistence and access', () => {
     const anonymous = await originalFetch(url + '/api/documents/' + id + '/file');
     expect(anonymous.status).toBe(401);
   });
+  it('recovers all 31 numbered rows from overlapping high-resolution sections', async () => {
+    denseMode = 'complete'; sectionIndex = 0; visionRequests = [];
+    const bytes = await sharp({ create: { width: 1200, height: 1800, channels: 3, background: '#fff' } }).png().toBuffer();
+    const result = await owner.request('/documents/scan', { filename: 'invoice-9605.png', dataUrl: 'data:image/png;base64,' + bytes.toString('base64') });
+    denseMode = '';
+    expect(result.status).toBe(201);
+    expect(sectionIndex).toBe(4);
+    const crops = visionRequests.filter((request) => request.text.format.name === 'document_rows');
+    expect(crops).toHaveLength(4);
+    for (const cropRequest of crops) {
+      const cropUrl: string = cropRequest.input[0].content[2].image_url;
+      const cropMeta = await sharp(Buffer.from(cropUrl.split(',')[1], 'base64')).metadata();
+      expect(cropMeta.width).toBe(1200);
+      expect(cropMeta.height).toBeGreaterThanOrEqual(450);
+    }
+    const original = await originalFetch(url + '/api/documents/' + result.body.id + '/file', { headers: { Cookie: [...owner.cookies].map(([key, value]) => `${key}=${value}`).join('; ') } });
+    expect(Buffer.from(await original.arrayBuffer())).toEqual(bytes);
+    expect(result.body.extracted.number).toBe('9605');
+    expect(result.body.extracted.tables[0].rows).toHaveLength(31);
+    expect(result.body.extracted.tables[0].rows[9].cells).toEqual(['Арт-010', 'UNO', '10', 'шт', '65.00', '650.00']);
+    expect(result.body.extracted.tables[0].rows.at(-1).rowNumber).toBe('31');
+    expect(result.body.validation).toMatchObject({ expectedRows: 31, extractedRows: 31, incomplete: true, rowSum: '30219.00', printedTotal: '30219.00', difference: '0.00' });
+    const persisted = await owner.request('/documents/' + result.body.id);
+    expect(persisted.body.extracted.tables[0].rows).toHaveLength(31);
+  });
+  it('marks 25 of 31 rows incomplete and treats totals as partial', async () => {
+    denseMode = 'partial'; sectionIndex = 0;
+    const bytes = await sharp({ create: { width: 1200, height: 1800, channels: 3, background: '#fff' } }).png().toBuffer();
+    const result = await owner.request('/documents/scan', { filename: 'partial-9605.png', dataUrl: 'data:image/png;base64,' + bytes.toString('base64') });
+    denseMode = '';
+    expect(result.status).toBe(201);
+    expect(result.body.extracted.tables[0].rows).toHaveLength(25);
+    expect(result.body.validation).toMatchObject({ expectedRows: 31, extractedRows: 25, incomplete: true, missingRowNumbers: [26, 27, 28, 29, 30, 31], arithmeticStatus: 'incomplete' });
+    expect(result.body.validation.warnings.join(' ')).toContain('Partial extracted row sum');
+  });
   it('accepts a PDF with no table without fabricating invoice rows', async () => {
     providerData = {
       ...invoice,
@@ -210,7 +276,28 @@ describe.sequential('scanned document persistence and access', () => {
     expect(result.status).toBe(201);
     expect(providerInput.input[0].content[1].type).toBe('input_file');
     expect(providerInput.input[0].content[1].file_data).toBe(pdf);
+    expect(providerInput.input[0].content[1].detail).toBe('high');
     expect(result.body.edited.tables).toEqual([]);
     expect(result.body.validation.rowSum).toBe(null);
+  });
+  it('uses high PDF detail for a multi-page non-table document', async () => {
+    denseMode = 'multipage'; sectionIndex = 0;
+    const bytes = Buffer.concat([Buffer.from('%PDF-1.4\n'), Buffer.alloc(110_000, 32)]);
+    const result = await owner.request('/documents/scan', { filename: 'two-pages.pdf', dataUrl: 'data:application/pdf;base64,' + bytes.toString('base64') });
+    denseMode = '';
+    expect(result.status).toBe(201);
+    expect(result.body.edited.pages).toBe(2);
+    expect(result.body.edited.tables).toEqual([]);
+    expect(providerInput.input[0].content[1].detail).toBe('high');
+    expect(sectionIndex).toBe(0);
+  });
+  it('does not save a truncated model response', async () => {
+    await db.pool.query("DELETE FROM auth_attempts WHERE key LIKE 'ai-universal-scan:%'");
+    const before = (await db.pool.query('SELECT count(*)::int AS count FROM scanned_documents')).rows[0].count;
+    forceIncomplete = true;
+    const result = await owner.request('/documents/scan', { filename: 'truncated.png', dataUrl: png });
+    forceIncomplete = false;
+    expect(result.status).toBe(503);
+    expect((await db.pool.query('SELECT count(*)::int AS count FROM scanned_documents')).rows[0].count).toBe(before);
   });
 });

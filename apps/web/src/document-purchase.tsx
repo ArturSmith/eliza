@@ -4,6 +4,7 @@ import {
   confidentTextMatch,
   matchingTextScore,
   normalizeMatchText,
+  validateDocument,
   type DocumentData,
   type Product,
   type Supplier,
@@ -53,6 +54,8 @@ function supplierCandidates(preview: Preview, suppliers: Supplier[], references:
 export function DocumentPurchasePreparation({ data, documentId }: { data: DocumentData; documentId: string }) {
   useLanguage();
   const preview = documentPurchasePreview(data);
+  const validation = validateDocument(data);
+  const missingRows = validation.missingRowNumbers.length > 0 || validation.duplicateRowNumbers.length > 0 || (validation.expectedRows !== null && validation.extractedRows < validation.expectedRows);
   const suppliers = useQuery({ queryKey: ['suppliers'], queryFn: () => api<Supplier[]>('/suppliers') });
   const [stage, setStage] = useState<'idle' | 'supplier' | 'products'>('idle');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -64,6 +67,7 @@ export function DocumentPurchasePreparation({ data, documentId }: { data: Docume
   const [error, setError] = useState<unknown>(null);
   useEffect(() => { setStage('idle'); setSupplierId(''); setLines([]); setError(null); }, [documentId, data]);
   async function start() {
+    if (missingRows) return;
     setBusy(true); setError(null);
     try {
       const current = await api<Supplier[]>('/suppliers');
@@ -109,7 +113,8 @@ export function DocumentPurchasePreparation({ data, documentId }: { data: Docume
   }
   if (!preview.rows.length) return null;
   return <section className="document-purchase-preparation">
-    {preview.tooManyRows ? <p className="notice">{t('This document has more than 100 product rows. Split it before preparing a purchase order.')}</p> : stage === 'idle' && <Button type="button" variant="outline" disabled={busy} onClick={() => void start()}>{busy ? t('Checking suppliers…') : t('Prepare purchase order')}</Button>}
+    {missingRows && <p className="notice">{t('This scan has missing or duplicate product rows. Correct and save the digital document before preparing a purchase order.')}</p>}
+    {preview.tooManyRows ? <p className="notice">{t('This document has more than 100 product rows. Split it before preparing a purchase order.')}</p> : stage === 'idle' && !missingRows && <Button type="button" variant="outline" disabled={busy} onClick={() => void start()}>{busy ? t('Checking suppliers…') : t('Prepare purchase order')}</Button>}
     <ErrorMessage error={error} />
     {stage === 'supplier' && <div className="document-purchase-step">
       <p>{candidates.length ? t('I found supplier {name}. Is one of these your supplier?', { name: preview.supplierName || '—' }) : t('There is no such supplier in the system. Add one?')}</p>
