@@ -28,7 +28,7 @@ Alternatively, use `docker compose up -d` instead of `pnpm db:start`. Choose one
 
 Optional overrides go in a root `.env` file (see `.env.example`). The API loads it without overwriting existing environment variables. API: http://127.0.0.1:3001/api/health. Development endpoint documentation: http://127.0.0.1:3001/api/docs. Request contracts are defined in `packages/contracts/src/index.ts`.
 
-The optional [Scanned documents](docs/scanned-documents.md) feature reconstructs uploaded images and PDFs as editable digital documents. It requires a server-side `OPENAI_API_KEY`; the rest of Eliza continues to work without one.
+The optional [Scanned documents](docs/scanned-documents.md) feature reconstructs uploaded images and PDFs as editable digital documents. [Eliza AI](docs/ai-agent.md) answers store questions using permission-checked read tools and saved conversations. Both require a server-side `OPENAI_API_KEY`; the rest of Eliza continues to work without one.
 
 ## Implemented workflows
 

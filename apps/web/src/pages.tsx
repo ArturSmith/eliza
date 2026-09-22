@@ -4,6 +4,7 @@ import { Link, Outlet, useLocation } from '@tanstack/react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   Activity,
+  Sparkles,
   Clock3,
   ArrowDownLeft,
   ArrowRight,
@@ -54,7 +55,10 @@ import { Dialog } from './components/ui/dialog';
 const navGroups = [
   {
     label: 'Workspace',
-    items: [{ to: '/', label: 'Overview', icon: LayoutDashboard, permission: 'catalog.read' }],
+    items: [
+      { to: '/', label: 'Overview', icon: LayoutDashboard, permission: 'catalog.read' },
+      { to: '/ai', label: 'Eliza AI', icon: Sparkles, permission: 'catalog.read' },
+    ],
   },
   {
     label: 'Sales',

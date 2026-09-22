@@ -36,6 +36,7 @@ import { OwnerDashboardModule } from './owner-dashboard.js';
 import { SalesSummaryModule } from './sales-summary.js';
 import { PurchasingModule } from './purchasing.js';
 import { ScannedDocumentsModule } from './scanned-documents.js';
+import { AiAgentModule } from './ai-agent.js';
 import { CheckoutModule } from './checkout.js';
 @Catch()
 class Errors implements ExceptionFilter {
@@ -121,6 +122,7 @@ class HealthController {
     CheckoutModule,
     PurchasingModule,
     ScannedDocumentsModule,
+    AiAgentModule,
     SalesSummaryModule,
     AnalyticsModule,
     OwnerDashboardModule,

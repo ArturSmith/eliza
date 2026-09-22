@@ -29,6 +29,7 @@ import { StoreSettingsPage } from './store-settings';
 import { StockCountsPage } from './stock-counts';
 import { SuppliersPage, PurchasesPage } from './purchasing';
 import { ScannedDocumentsPage } from './scanned-documents';
+import { AiAgentPage } from './ai-agent';
 import { TeamManagementPage } from './team';
 import { OwnerDashboardPage } from './owner-dashboard';
 import { SalesPage, ShiftsPage } from './reports';
@@ -61,6 +62,7 @@ const routes = [
   createRoute({ getParentRoute: () => root, path: '/suppliers', component: SuppliersPage }),
   createRoute({ getParentRoute: () => root, path: '/purchases', component: PurchasesPage }),
   createRoute({ getParentRoute: () => root, path: '/documents', component: ScannedDocumentsPage }),
+  createRoute({ getParentRoute: () => root, path: '/ai', component: AiAgentPage }),
   createRoute({ getParentRoute: () => root, path: '/pos', component: CheckoutRoute }),
   createRoute({ getParentRoute: () => root, path: '/analytics', component: OwnerDashboardPage }),
   createRoute({ getParentRoute: () => root, path: '/sales', component: SalesPage }),

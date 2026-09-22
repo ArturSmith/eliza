@@ -21,7 +21,7 @@ const range = z
   );
 @Controller('reports')
 @UseGuards(AccessGuard)
-class GrossProfitController {
+export class GrossProfitController {
   constructor(private database: Database) {}
   @Get('gross-profit') @Require('costs.read') async report(
     @Query() input: unknown,
