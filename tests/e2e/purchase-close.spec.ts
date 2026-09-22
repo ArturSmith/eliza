@@ -22,7 +22,11 @@ test('closes a partial purchase without changing delivered quantities', async ({
     requestId: crypto.randomUUID(),
     code: 'CLOSE',
     name: 'Test supplier',
+    phone: '+7 (969) 722-22-22',
+    contactName: 'M-7 S. Mokhamad',
+    contactPhone: '89292088095',
   });
+  expect(supplier.contactPhone).toBe('89292088095');
   const product = await post('/products', {
     name: 'Milk',
     sku: 'CLOSE',
@@ -37,8 +41,20 @@ test('closes a partial purchase without changing delivered quantities', async ({
   let order = await post('/purchases', {
     requestId: crypto.randomUUID(),
     supplierId: supplier.id,
+    buyerName: 'Chir-kort',
+    buyerDetails: '13 Mag Rimis Street',
+    driverName: 'Saliev',
+    driverPhone: '89381127025',
+    goodsNumber: 'G-17',
+    buyerTaxNumber: '1234567890',
+    grossWeight: '55.304 kg',
+    documentVat: '1557.66',
+    returnAmount: '0',
+    documentComment: 'Checked on arrival',
     lines: [{ productId: product.id, quantity: '10', unitCost: '5', taxRate: '0' }],
   });
+  expect(order.buyer_name).toBe('Chir-kort');
+  expect(order.driver_phone).toBe('89381127025');
   order = await post('/purchases/' + order.id + '/status', {
     requestId: crypto.randomUUID(),
     version: order.version,
@@ -50,6 +66,10 @@ test('closes a partial purchase without changing delivered quantities', async ({
     lines: [{ purchaseLineId: order.lines[0].id, quantity: '3' }],
   });
   await page.goto('/purchases?order=' + order.id);
+  await expect(page.getByText('Chir-kort')).toBeVisible();
+  await expect(page.getByText('89381127025')).toBeVisible();
+  await expect(page.getByText('89292088095')).toBeVisible();
+  await expect(page.getByText('+7 (969) 722-22-22')).toBeVisible();
   await page.getByRole('button', { name: 'Close remaining quantities', exact: true }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('Milk: 7 piece')).toBeVisible();

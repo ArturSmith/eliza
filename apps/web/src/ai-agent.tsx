@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowUp, Clock3, FileText, Paperclip, Plus, Sparkles, X } from 'lucide-react';
+import { ArrowUp, ChevronDown, ChevronUp, Clock3, FileText, Paperclip, Plus, Sparkles, X } from 'lucide-react';
 import { api, queryClient, useSession } from './api';
 import { ErrorMessage } from './forms';
 import { t, useLanguage } from './i18n';
@@ -139,6 +139,7 @@ export function AiAgentPage() {
   const [documentId, setDocumentId] = useState('');
   const [activeDocumentId, setActiveDocumentId] = useState(() => new URLSearchParams(window.location.search).get('document') || '');
   const [documentRecord, setDocumentRecord] = useState<DocumentRecord | null>(null);
+  const [documentExpanded, setDocumentExpanded] = useState(true);
   const [documentName, setDocumentName] = useState('');
   const [showDocuments, setShowDocuments] = useState(false);
   const [documentSearch, setDocumentSearch] = useState('');
@@ -150,6 +151,9 @@ export function AiAgentPage() {
   const [showHistory, setShowHistory] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
   const end = useRef<HTMLDivElement>(null);
+  const thread = useRef<HTMLDivElement>(null);
+  const main = useRef<HTMLElement>(null);
+  const composerWrap = useRef<HTMLDivElement>(null);
   const history = useQuery({
     queryKey: ['ai-conversations'],
     queryFn: () => api<Conversation[]>('/ai/conversations'),
@@ -173,13 +177,25 @@ export function AiAgentPage() {
     setLocalMessages(null);
   }, [id]);
   useEffect(() => {
-    end.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
+    const node = composerWrap.current;
+    const container = main.current;
+    if (!node || !container) return;
+    const update = () => container.style.setProperty('--ai-composer-height', `${Math.ceil(node.getBoundingClientRect().height + 20)}px`);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    const node = thread.current;
+    if (node) node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' });
   }, [detail.data, localMessages, pending, streamed, busy]);
   const messages = localMessages ?? detail.data?.messages ?? [];
   const chosen = documents.data?.find((doc) => doc.id === documentId);
   const visibleDocument = documentRecord?.id === activeDocumentId ? documentRecord : activeDocument.data;
   function openDocument(next: string) {
     setActiveDocumentId(next);
+    setDocumentExpanded(true);
     if (!next) { setDocumentId(''); setDocumentName(''); }
     setDocumentRecord(null);
     setShowDocuments(false);
@@ -198,6 +214,7 @@ export function AiAgentPage() {
     setShowDocuments(false);
     window.history.replaceState(null, '', next ? '/ai?id=' + next : '/ai');
     setActiveDocumentId('');
+    setDocumentExpanded(true);
     setDocumentRecord(null);
   }
   function chooseFile(next?: File) {
@@ -233,6 +250,8 @@ export function AiAgentPage() {
     const text =
       draft.trim() || (file || documentId || activeDocumentId ? t('Please review this scanned document.') : '');
     if (!text || busy || (id && detail.isPending && !localMessages)) return;
+    const submittedDraft = draft;
+    setDraft('');
     setBusy(true);
     setPending(text);
     setStreamed('');
@@ -260,14 +279,13 @@ export function AiAgentPage() {
         ...(current ?? detail.data?.messages ?? []),
         ...result.messages,
       ]);
-      setDraft('');
       setDocumentId('');
       setDocumentName('');
       void queryClient.invalidateQueries({ queryKey: ['ai-conversations'] });
       void queryClient.invalidateQueries({ queryKey: ['ai-conversation', conversationId] });
     } catch (cause) {
       setError(cause);
-      setDraft(text);
+      setDraft((current) => current || submittedDraft);
     } finally {
       setPending('');
       setStreamed('');
@@ -308,29 +326,16 @@ export function AiAgentPage() {
           {history.data?.length === 0 && <p>{t('No conversations yet.')}</p>}
         </div>
       </aside>
-      <main className="ai-main">
-        <header className="ai-header">
-          <button
-            type="button"
-            className="ai-history-toggle"
-            onClick={() => setShowHistory((v) => !v)}
-            aria-label={t('Conversation history')}
-          >
-            <Clock3 size={20} />
-          </button>
-          <span>
-            <Sparkles size={18} />
-            {t('Eliza AI')}
-          </span>
-          <button
-            type="button"
-            onClick={() => selectConversation('')}
-            aria-label={t('New conversation')}
-          >
-            <Plus size={20} />
-          </button>
-        </header>
-        <div className="ai-thread" role="log" aria-live="polite">
+      <main className="ai-main" ref={main}>
+        <button
+          type="button"
+          className="ai-history-toggle"
+          onClick={() => setShowHistory((current) => !current)}
+          aria-label={t('Conversation history')}
+        >
+          <Clock3 size={20} />
+        </button>
+        <div className="ai-thread" ref={thread} role="log" aria-live="polite">
           {!id && !messages.length && (
             <div className="ai-welcome">
               <span className="ai-welcome-icon">
@@ -362,17 +367,23 @@ export function AiAgentPage() {
             {activeDocumentId && canDocuments && (
               <div className="ai-digital-document" id="digital-document">
                 <div className="ai-digital-heading">
-                  <strong>{t('Digital document')}</strong>
+                  <button type="button" className="ai-digital-toggle" onClick={() => setDocumentExpanded((current) => !current)} aria-expanded={documentExpanded} aria-controls="digital-document-content" aria-label={documentExpanded ? t('Collapse document') : t('Expand document')}>
+                    {documentExpanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                    <strong>{t('Digital document')}</strong>
+                    {visibleDocument?.filename && <span>{visibleDocument.filename}</span>}
+                  </button>
                   <button type="button" onClick={() => openDocument('')} aria-label={t('Close document')}><X size={18} /></button>
                 </div>
-                <p className="ai-document-note">{t('Save edits before asking Eliza about them.')}</p>
-                <ErrorMessage error={activeDocument.error} />
-                {activeDocument.isPending && !visibleDocument && <p>{t('Loading…')}</p>}
-                {visibleDocument && <DocumentViewer record={visibleDocument} canEdit={canUpload} onSaved={(next) => {
-                  setDocumentRecord(next);
-                  queryClient.setQueryData(['scanned-document', next.id], next);
-                  void queryClient.invalidateQueries({ queryKey: ['scanned-documents'] });
-                }} />}
+                <div id="digital-document-content" className={'ai-digital-content' + (documentExpanded ? '' : ' is-collapsed')}>
+                  <p className="ai-document-note">{t('Save edits before asking Eliza about them.')}</p>
+                  <ErrorMessage error={activeDocument.error} />
+                  {activeDocument.isPending && !visibleDocument && <p>{t('Loading…')}</p>}
+                  {visibleDocument && <DocumentViewer record={visibleDocument} canEdit={canUpload} onSaved={(next) => {
+                    setDocumentRecord(next);
+                    queryClient.setQueryData(['scanned-document', next.id], next);
+                    void queryClient.invalidateQueries({ queryKey: ['scanned-documents'] });
+                  }} />}
+                </div>
               </div>
             )}
             {pending && (
@@ -399,7 +410,7 @@ export function AiAgentPage() {
             <div ref={end} />
           </div>
         </div>
-        <div className="ai-composer-wrap">
+        <div className="ai-composer-wrap" ref={composerWrap}>
           <ErrorMessage error={error} />
           <div className="ai-composer">
             {(file || documentId || activeDocumentId) && (

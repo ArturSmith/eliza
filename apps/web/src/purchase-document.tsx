@@ -39,6 +39,7 @@ type SupplierPrefill = {
   code: string;
   companyNumber: string;
   contactName: string;
+  contactPhone: string;
   phone: string;
   notes: string;
 };
@@ -57,9 +58,8 @@ function matchingSuppliers(
       const name = document.supplierName
         ? matchingTextScore(document.supplierName, supplier.name)
         : 0;
-      const phone = [document.supplierPhone, document.contactPhone].some(
-        (value) => digits(value).length >= 7 && digits(value) === digits(supplier.phone),
-      );
+      const phone = (digits(document.supplierPhone).length >= 7 && digits(document.supplierPhone) === digits(supplier.phone)) ||
+        (digits(document.contactPhone).length >= 7 && digits(document.contactPhone) === digits(supplier.contactPhone));
       const reference = referenceMatches.some((purchase) => purchase.supplier_id === supplier.id);
       const exactCode = !!code && normalizeMatchText(supplier.code) === code;
       const exactCompany = !!company && normalizeMatchText(supplier.companyNumber) === company;
@@ -344,13 +344,9 @@ export function PurchaseDocument({
                       code: result.supplierCode,
                       companyNumber: result.supplierCompanyNumber,
                       contactName: result.contactName,
-                      phone: result.contactPhone || result.supplierPhone,
-                      notes:
-                        result.contactPhone && result.supplierPhone
-                          ? t('Supplier business phone: {phone}', {
-                              phone: result.supplierPhone,
-                            })
-                          : '',
+                      phone: result.supplierPhone,
+                      contactPhone: result.contactPhone,
+                      notes: '',
                     })
                   }
                 >

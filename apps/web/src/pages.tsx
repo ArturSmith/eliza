@@ -4,6 +4,7 @@ import { Link, Outlet, useLocation } from '@tanstack/react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   Activity,
+  FileText,
   Sparkles,
   Clock3,
   ArrowDownLeft,
@@ -87,6 +88,7 @@ const navGroups = [
         permission: 'purchases.read',
       },
       { to: '/purchases', label: 'Purchases', icon: Truck, permission: 'purchases.read' },
+      { to: '/digital-purchases', label: 'Digital purchases', icon: FileText, permission: 'purchases.read' },
       { to: '/suppliers', label: 'Suppliers', icon: Store, permission: 'suppliers.read' },
     ],
   },

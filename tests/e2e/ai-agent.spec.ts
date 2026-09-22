@@ -80,9 +80,12 @@ test('asks Eliza AI, displays a sales table, reopens history and attaches a docu
     : route.fulfill({ json: { ...digital, edited: digital.extracted } }));
   await page.route('**/api/documents/scan', (route) => route.fulfill({ json: { ...digital, edited: digital.extracted } }));
   await page.goto('/ai');
+  await expect(page.locator('.ai-header')).toHaveCount(0);
+  await expect(page.locator('.ai-thread')).toHaveCSS('top', '0px');
   await expect(page.getByRole('heading', { name: 'How can I help your store?' })).toBeVisible();
   await page.getByLabel('Ask Eliza AI', { exact: true }).fill('Sales this month?');
   await page.getByRole('button', { name: 'Send' }).click();
+  await expect(page.getByLabel('Ask Eliza AI', { exact: true })).toBeEmpty();
   await expect(page.getByRole('table')).toContainText('42 NOK');
   await expect(page.locator('.ai-message-assistant strong').first()).toHaveText('Sales by month:');
   await expect(page.locator('.ai-message-assistant li')).toContainText('Net sales: 42 NOK');

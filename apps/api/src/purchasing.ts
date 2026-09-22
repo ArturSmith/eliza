@@ -43,7 +43,7 @@ import type { PoolClient } from 'pg';
 import { shoppingProducts } from './shopping-list-data.js';
 import { answerPurchaseDocumentQuestion, extractPurchaseDocument } from './purchase-extraction.js';
 const command = z.object({ requestId: z.uuid(), version: z.number().int().positive() });
-const supplierColumns = `id,code,name,contact_name AS "contactName",email,phone,address,company_number AS "companyNumber",payment_terms AS "paymentTerms",notes,active,version,created_at AS "createdAt"`;
+const supplierColumns = `id,code,name,contact_name AS "contactName",contact_phone AS "contactPhone",email,phone,address,company_number AS "companyNumber",payment_terms AS "paymentTerms",notes,active,version,created_at AS "createdAt"`;
 @Controller()
 @UseGuards(AccessGuard)
 export class PurchasingController {
@@ -436,6 +436,7 @@ export class PurchasingController {
         b.code,
         b.name,
         b.contactName,
+        b.contactPhone,
         b.email,
         b.phone,
         b.address,
@@ -448,7 +449,7 @@ export class PurchasingController {
       if (b.id) {
         row = (
           await c.query(
-            `UPDATE suppliers SET code=$2,name=$3,contact_name=$4,email=$5,phone=$6,address=$7,company_number=$8,payment_terms=$9,notes=$10,active=$11,version=version+1 WHERE store_id=$1 AND id=$12 AND version=$13 RETURNING ${supplierColumns}`,
+            `UPDATE suppliers SET code=$2,name=$3,contact_name=$4,contact_phone=$5,email=$6,phone=$7,address=$8,company_number=$9,payment_terms=$10,notes=$11,active=$12,version=version+1 WHERE store_id=$1 AND id=$13 AND version=$14 RETURNING ${supplierColumns}`,
             [...values, b.id, b.version],
           )
         ).rows[0];
@@ -456,7 +457,7 @@ export class PurchasingController {
       } else
         row = (
           await c.query(
-            `INSERT INTO suppliers(store_id,code,name,contact_name,email,phone,address,company_number,payment_terms,notes,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING ${supplierColumns}`,
+            `INSERT INTO suppliers(store_id,code,name,contact_name,contact_phone,email,phone,address,company_number,payment_terms,notes,active) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING ${supplierColumns}`,
             values,
           )
         ).rows[0];
@@ -669,7 +670,7 @@ export class PurchasingController {
     const p = (
       await c.query(
         `SELECT p.*,(SELECT name FROM employees WHERE id=p.closed_by) AS closed_by_name,p.payment_due_date::text,
-(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received','closed') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.id=$1 AND p.store_id=$2`,
+(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received','closed') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,s.name AS "supplierName",s.code AS "supplierCode",s.phone AS "supplierPhone",s.company_number AS "supplierCompanyNumber",s.contact_name AS "supplierContactName",s.contact_phone AS "supplierContactPhone" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.id=$1 AND p.store_id=$2`,
         [id, store],
       )
     ).rows[0];
@@ -852,7 +853,7 @@ export class PurchasingController {
       ? { id: b.id }
       : (
           await c.query(
-            `INSERT INTO purchases(store_id,supplier_id,number,supplier_reference,expected_date,notes,subtotal,tax,total,created_by,device_id,document_date) VALUES($1,$2,'PO-'||lpad(nextval('purchase_number_sequence')::text,6,'0'),$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+            `INSERT INTO purchases(store_id,supplier_id,number,supplier_reference,expected_date,notes,subtotal,tax,total,created_by,device_id,document_date,buyer_name,buyer_details,driver_name,driver_phone,goods_number,buyer_tax_number,gross_weight,document_vat,return_amount,document_comment) VALUES($1,$2,'PO-'||lpad(nextval('purchase_number_sequence')::text,6,'0'),$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21) RETURNING id`,
             [
               store,
               b.supplierId,
@@ -865,13 +866,15 @@ export class PurchasingController {
               req.context.user.id,
               req.context.device.id,
               b.documentDate || null,
+              b.buyerName, b.buyerDetails, b.driverName, b.driverPhone, b.goodsNumber,
+              b.buyerTaxNumber, b.grossWeight, b.documentVat, b.returnAmount, b.documentComment,
             ],
           )
         ).rows[0];
     if (b.id) {
       await c.query('DELETE FROM purchase_lines WHERE purchase_id=$1', [b.id]);
       await c.query(
-        'UPDATE purchases SET supplier_id=$2,supplier_reference=$3,expected_date=$4,notes=$5,subtotal=$6,tax=$7,total=$8,document_date=$9,version=version+1 WHERE id=$1',
+        'UPDATE purchases SET supplier_id=$2,supplier_reference=$3,expected_date=$4,notes=$5,subtotal=$6,tax=$7,total=$8,document_date=$9,buyer_name=$10,buyer_details=$11,driver_name=$12,driver_phone=$13,goods_number=$14,buyer_tax_number=$15,gross_weight=$16,document_vat=$17,return_amount=$18,document_comment=$19,version=version+1 WHERE id=$1',
         [
           b.id,
           b.supplierId,
@@ -882,6 +885,8 @@ export class PurchasingController {
           fromScaled(tax, 2),
           fromScaled(subtotal + tax, 2),
           b.documentDate || null,
+          b.buyerName, b.buyerDetails, b.driverName, b.driverPhone, b.goodsNumber,
+          b.buyerTaxNumber, b.grossWeight, b.documentVat, b.returnAmount, b.documentComment,
         ],
       );
     }

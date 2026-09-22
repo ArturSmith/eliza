@@ -30,6 +30,16 @@ type Order = {
   supplier_id: string;
   supplier_reference: string;
   document_date: string | null;
+  buyer_name: string;
+  buyer_details: string;
+  driver_name: string;
+  driver_phone: string;
+  goods_number: string;
+  buyer_tax_number: string;
+  gross_weight: string;
+  document_vat: string;
+  return_amount: string;
+  document_comment: string;
   expected_date: string | null;
   id: string;
   number: string;
@@ -37,6 +47,11 @@ type Order = {
   version: number;
   total: string;
   supplierName: string;
+  supplierCode: string;
+  supplierPhone: string;
+  supplierCompanyNumber: string;
+  supplierContactName: string;
+  supplierContactPhone: string;
   notes: string;
   lines: Line[];
   receipts: {
@@ -104,9 +119,10 @@ function SupplierSummary({ supplier }: { supplier: Supplier }) {
   useLanguage();
   const details: [string, string][] = [
     ['Code', supplier.code],
-    ['Contact', supplier.contactName],
+    ['Sales representative', supplier.contactName],
+    ['Representative phone', supplier.contactPhone],
     ['Email', supplier.email],
-    ['Phone', supplier.phone],
+    ['Supplier phone', supplier.phone],
     ['Address', supplier.address],
     ['Company number', supplier.companyNumber],
     ['Payment terms', supplier.paymentTerms],
@@ -164,7 +180,7 @@ export function SuppliersPage() {
   const [catalogFor, setCatalogFor] = useState<Supplier | undefined>();
   const [search, setSearch] = useState('');
   const rows = (q.data ?? []).filter((s) =>
-    [s.name, s.code, s.contactName, s.email, s.phone].some((v) =>
+    [s.name, s.code, s.contactName, s.contactPhone, s.email, s.phone].some((v) =>
       (v ?? '').toLowerCase().includes(search.trim().toLowerCase()),
     ),
   );
@@ -212,8 +228,8 @@ export function SuppliersPage() {
                     </td>
                     <td>
                       {s.contactName || '—'}
-                      {(s.email || s.phone) && (
-                        <small>{[s.email, s.phone].filter(Boolean).join(' · ')}</small>
+                      {(s.contactPhone || s.email || s.phone) && (
+                        <small>{[s.contactPhone, s.email, s.phone].filter(Boolean).join(' · ')}</small>
                       )}
                     </td>
                     <td>{s.paymentTerms || '—'}</td>
@@ -278,7 +294,7 @@ export function SupplierForm({
   done: () => void;
   onCreated?: (supplier: Supplier) => void;
   prefill?: Partial<
-    Pick<Supplier, 'name' | 'code' | 'companyNumber' | 'contactName' | 'phone' | 'notes'>
+    Pick<Supplier, 'name' | 'code' | 'companyNumber' | 'contactName' | 'contactPhone' | 'phone' | 'notes'>
   >;
 }) {
   useLanguage();
@@ -289,6 +305,7 @@ export function SupplierForm({
       name: prefill?.name ?? '',
       companyNumber: prefill?.companyNumber ?? '',
       contactName: prefill?.contactName ?? '',
+      contactPhone: prefill?.contactPhone ?? '',
       phone: prefill?.phone ?? '',
       notes: prefill?.notes ?? '',
       active: true,
@@ -316,6 +333,7 @@ export function SupplierForm({
             'code',
             'name',
             'contactName',
+            'contactPhone',
             'email',
             'phone',
             'address',
@@ -330,11 +348,12 @@ export function SupplierForm({
               {
                 code: 'Supplier code',
                 name: 'Supplier name',
-                contactName: 'Contact name',
+                contactName: 'Sales representative',
+                contactPhone: 'Representative phone',
                 companyNumber: 'Company number',
                 paymentTerms: 'Payment terms',
                 email: 'Email',
-                phone: 'Phone',
+                phone: 'Supplier phone',
                 address: 'Address',
                 notes: 'Notes',
               }[key],
@@ -568,6 +587,18 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
   const [documentDate, setDocumentDate] = useState(
     order?.document_date?.slice(0, 10) ?? handoff?.date ?? '',
   );
+  const [documentDetails, setDocumentDetails] = useState({
+    buyerName: order?.buyer_name ?? handoff?.buyerName ?? '',
+    buyerDetails: order?.buyer_details ?? handoff?.buyerDetails ?? '',
+    driverName: order?.driver_name ?? handoff?.driverName ?? '',
+    driverPhone: order?.driver_phone ?? handoff?.driverPhone ?? '',
+    goodsNumber: order?.goods_number ?? handoff?.goodsNumber ?? '',
+    buyerTaxNumber: order?.buyer_tax_number ?? handoff?.buyerTaxNumber ?? '',
+    grossWeight: order?.gross_weight ?? handoff?.grossWeight ?? '',
+    documentVat: order?.document_vat ?? handoff?.documentVat ?? '',
+    returnAmount: order?.return_amount ?? handoff?.returnAmount ?? '',
+    documentComment: order?.document_comment ?? handoff?.documentComment ?? '',
+  });
   const [expectedDate, setDate] = useState(order?.expected_date?.slice(0, 10) ?? '');
   const [notes, setNotes] = useState(order?.notes ?? '');
   const [reviewed, setReviewed] = useState(false);
@@ -666,6 +697,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
         supplierId,
         supplierReference: reference,
         documentDate,
+        ...documentDetails,
         expectedDate,
         notes,
         lines: lines.map(({ source: _source, suggestion: _suggestion, ...line }) => ({
@@ -688,6 +720,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
             supplierId,
             supplierReference: reference,
             documentDate,
+            ...documentDetails,
             expectedDate,
             notes,
             lines: lines.map((line) => ({ ...line, sellingPrice: line.sellingPrice || undefined })),
@@ -763,6 +796,22 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
             onChange={(e) => setDocumentDate(e.target.value)}
           />
         </Field>
+        <fieldset className="purchase-document-details">
+          <legend>{t('Supplier document details (optional)')}</legend>
+          <div className="form-grid">
+            {([
+              ['buyerName', 'Buyer'], ['buyerDetails', 'Buyer details'],
+              ['driverName', 'Driver'], ['driverPhone', 'Driver phone'],
+              ['goodsNumber', 'Goods number'], ['buyerTaxNumber', 'Buyer tax number'],
+              ['grossWeight', 'Gross weight'], ['documentVat', 'VAT on document'],
+              ['returnAmount', 'Return amount'], ['documentComment', 'Document comment'],
+            ] as const).map(([key, label]) => (
+              <Field key={key} label={t(label)}>
+                <input value={documentDetails[key]} onChange={(event) => setDocumentDetails((current) => ({ ...current, [key]: event.target.value }))} />
+              </Field>
+            ))}
+          </div>
+        </fieldset>
         <Field label={t('Expected delivery')}>
           <input type="date" value={expectedDate} onChange={(e) => setDate(e.target.value)} />
         </Field>
@@ -1292,6 +1341,26 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
       )}
       {p && (
         <>
+          <div className="order-detail-document">
+            <h3>{t('Supplier')}</h3>
+            <dl>{([
+              ['Supplier name', p.supplierName], ['Supplier code', p.supplierCode],
+              ['Supplier phone', p.supplierPhone], ['Company number', p.supplierCompanyNumber],
+              ['Sales representative', p.supplierContactName], ['Representative phone', p.supplierContactPhone],
+            ] as const).filter(([, value]) => value).map(([label, value]) => <div key={label}><dt>{t(label)}</dt><dd>{value}</dd></div>)}</dl>
+          </div>
+          {Object.values([p.buyer_name, p.buyer_details, p.driver_name, p.driver_phone, p.goods_number, p.buyer_tax_number, p.gross_weight, p.document_vat, p.return_amount, p.document_comment]).some(Boolean) && (
+            <div className="order-detail-document">
+              <h3>{t('Supplier document details')}</h3>
+              <dl>{([
+                ['Supplier', p.supplierName], ['Buyer', p.buyer_name], ['Buyer details', p.buyer_details],
+                ['Driver', p.driver_name], ['Driver phone', p.driver_phone], ['Goods number', p.goods_number],
+                ['Buyer tax number', p.buyer_tax_number], ['Gross weight', p.gross_weight],
+                ['VAT on document', p.document_vat], ['Return amount', p.return_amount],
+                ['Document comment', p.document_comment],
+              ] as const).filter(([, value]) => value).map(([label, value]) => <div key={label}><dt>{t(label)}</dt><dd>{value}</dd></div>)}</dl>
+            </div>
+          )}
           {p.notes && <p className="order-detail-notes">{p.notes}</p>}
           {p.status === 'closed' && (
             <div className="order-detail-notes">

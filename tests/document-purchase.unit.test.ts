@@ -20,6 +20,25 @@ describe('purchase preview from reconstructed document', () => {
     expect(preview).toMatchObject({ supplierName: 'ИП Магомадов Р.А.', reference: 'U2-12670', date: '2026-09-08', tooManyRows: false });
     expect(preview.rows).toEqual([{ description: 'Milk', sku: 'MILK', barcode: '', quantity: '2', unitCost: '3.00', derivedCost: false }]);
   });
+  it('keeps supplier, representative, buyer and driver distinct', () => {
+    const preview = documentPurchasePreview({ ...base,
+      parties: [
+        ...base.parties,
+        { role: 'Торговый представитель', name: 'М-7 С. Мохамад', details: '89292088095' },
+        { role: 'Водитель', name: 'В77 - Салиев', details: '89381127025' },
+        { role: 'Покупатель', name: 'Чир-корт', details: 'ул. А. А. 13 маг. Римис' },
+      ],
+      fields: [
+        { label: 'Товарный номер', value: '17', kind: 'text', uncertain: false },
+        { label: 'Вес брутто', value: '55,304', kind: 'text', uncertain: false },
+      ],
+    });
+    expect(preview).toMatchObject({
+      supplierPhone: '+7 969 722-22-22', contactName: 'М-7 С. Мохамад', contactPhone: '89292088095',
+      driverName: 'В77 - Салиев', driverPhone: '89381127025', buyerName: 'Чир-корт',
+      buyerDetails: 'ул. А. А. 13 маг. Римис', goodsNumber: '17', grossWeight: '55,304',
+    });
+  });
   it('marks costs derived from totals and gathers multiple product tables', () => {
     const table = { id: 'items', title: 'Goods', columns: [
       { key: 'name', label: 'Item', kind: 'text' as const },

@@ -6,6 +6,17 @@ export type Preview = {
   supplierCode: string;
   companyNumber: string;
   contactName: string;
+  contactPhone: string;
+  buyerName: string;
+  buyerDetails: string;
+  driverName: string;
+  driverPhone: string;
+  goodsNumber: string;
+  buyerTaxNumber: string;
+  grossWeight: string;
+  documentVat: string;
+  returnAmount: string;
+  documentComment: string;
   reference: string;
   date: string;
   rows: { description: string; sku: string; barcode: string; quantity: string; unitCost: string; derivedCost: boolean }[];
@@ -34,6 +45,9 @@ function purchaseCost(raw: string) {
 }
 export function documentPurchasePreview(data: DocumentData): Preview {
   const supplier = data.parties.find((party) => /supplier|vendor|seller|поставщик|продавец/i.test(party.role));
+  const buyer = data.parties.find((party) => /buyer|customer|покупатель/i.test(party.role));
+  const driver = data.parties.find((party) => /driver|водитель/i.test(party.role));
+  const representative = data.parties.find((party) => /representative|торговый представитель/i.test(party.role));
   const supplierName = supplier?.name ?? readField(data, /supplier|vendor|seller|поставщик|продавец/i);
   const phone = (supplier?.details ?? '').match(/\+?\d[\d ()-]{8,}\d/)?.[0] ?? '';
   const tables = data.tables.filter((candidate) => candidate.rows.length && candidate.columns.some((column) => column.kind === 'text') && candidate.columns.some((column) => ['quantity', 'price', 'amount'].includes(column.kind)));
@@ -60,7 +74,18 @@ export function documentPurchasePreview(data: DocumentData): Preview {
     supplierPhone: phone || readField(data, /supplier phone|телефон поставщика/i),
     supplierCode: readField(data, /supplier code|код поставщика/i),
     companyNumber: readField(data, /company number|инн|vat number/i),
-    contactName: readField(data, /contact person|representative|торговый представитель|контактное лицо/i),
+    contactName: representative?.name ?? readField(data, /contact person|representative|торговый представитель|контактное лицо/i),
+    contactPhone: (representative?.details ?? '').match(/\+?\d[\d ()-]{8,}\d/)?.[0] ?? readField(data, /representative phone|телефон представителя/i),
+    buyerName: buyer?.name ?? readField(data, /^buyer$|^покупатель$/i),
+    buyerDetails: buyer?.details ?? '',
+    driverName: driver?.name ?? readField(data, /^driver$|^водитель$/i),
+    driverPhone: (driver?.details ?? '').match(/\+?\d[\d ()-]{8,}\d/)?.[0] ?? readField(data, /driver phone|телефон водителя/i),
+    goodsNumber: readField(data, /goods number|товарный номер/i),
+    buyerTaxNumber: readField(data, /buyer tax|инн\s*\/\s*кпп/i),
+    grossWeight: readField(data, /gross weight|вес брутто/i),
+    documentVat: readField(data, /^vat$|^ндс$/i),
+    returnAmount: readField(data, /return amount|сумма возврата/i),
+    documentComment: readField(data, /comment|комментарий/i),
     reference: data.number || readField(data, /reference|invoice number|номер документа|номер накладной/i),
     date: dateForInput(data.date),
     rows,

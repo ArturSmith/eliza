@@ -22,6 +22,16 @@ export type PurchaseHandoff = {
   supplierId: string;
   reference: string;
   date: string;
+  buyerName: string;
+  buyerDetails: string;
+  driverName: string;
+  driverPhone: string;
+  goodsNumber: string;
+  buyerTaxNumber: string;
+  grossWeight: string;
+  documentVat: string;
+  returnAmount: string;
+  documentComment: string;
   lines: DocumentDraftLine[];
   focusLine: number;
 };
@@ -45,7 +55,8 @@ function supplierCandidates(preview: Preview, suppliers: Supplier[], references:
     const name = matchingTextScore(preview.supplierName, supplier.name);
     const code = !!preview.supplierCode && normalizeMatchText(preview.supplierCode) === normalizeMatchText(supplier.code);
     const company = !!preview.companyNumber && normalizeMatchText(preview.companyNumber) === normalizeMatchText(supplier.companyNumber);
-    const phone = digits(preview.supplierPhone).length >= 7 && digits(preview.supplierPhone) === digits(supplier.phone);
+    const phone = (digits(preview.supplierPhone).length >= 7 && digits(preview.supplierPhone) === digits(supplier.phone)) ||
+      (digits(preview.contactPhone).length >= 7 && digits(preview.contactPhone) === digits(supplier.contactPhone));
     const reference = references.some((item) => item.supplier_id === supplier.id);
     return { supplier, score: code || company ? 4 : reference ? 3 + name : phone ? 2 + name : name };
   }).filter((item) => item.score >= .35).sort((a, b) => b.score - a.score).slice(0, 5);
@@ -107,7 +118,7 @@ export function DocumentPurchasePreparation({ data, documentId }: { data: Docume
   }
   function openOrder(index: number) {
     try {
-      sessionStorage.setItem(handoffKey, JSON.stringify({ supplierId, reference: preview.reference, date: preview.date, lines, focusLine: index } satisfies PurchaseHandoff));
+      sessionStorage.setItem(handoffKey, JSON.stringify({ supplierId, reference: preview.reference, date: preview.date, buyerName: preview.buyerName, buyerDetails: preview.buyerDetails, driverName: preview.driverName, driverPhone: preview.driverPhone, goodsNumber: preview.goodsNumber, buyerTaxNumber: preview.buyerTaxNumber, grossWeight: preview.grossWeight, documentVat: preview.documentVat, returnAmount: preview.returnAmount, documentComment: preview.documentComment, lines, focusLine: index } satisfies PurchaseHandoff));
       window.location.assign('/purchases?document=1');
     } catch (cause) { setError(cause); }
   }
@@ -130,7 +141,7 @@ export function DocumentPurchasePreparation({ data, documentId }: { data: Docume
       <Button type="button" onClick={() => openOrder(0)}>{t('Review full purchase order')}</Button>
     </div>}
     <Dialog elevated open={addingSupplier} onOpenChange={setAddingSupplier} title={t('Add supplier')} description={t('Keep supplier details available for your team.')}>
-      {addingSupplier && <SupplierForm supplier={null} prefill={{ name: preview.supplierName, code: preview.supplierCode && !(suppliers.data ?? []).some((item) => item.code.toLowerCase() === preview.supplierCode.toLowerCase()) ? preview.supplierCode : 'SUP-' + crypto.randomUUID().slice(0, 8).toUpperCase(), companyNumber: preview.companyNumber, contactName: preview.contactName, phone: preview.supplierPhone }} done={() => setAddingSupplier(false)} onCreated={(supplier) => { void refresh(); void chooseSupplier(supplier.id); }} />}
+      {addingSupplier && <SupplierForm supplier={null} prefill={{ name: preview.supplierName, code: preview.supplierCode && !(suppliers.data ?? []).some((item) => item.code.toLowerCase() === preview.supplierCode.toLowerCase()) ? preview.supplierCode : 'SUP-' + crypto.randomUUID().slice(0, 8).toUpperCase(), companyNumber: preview.companyNumber, contactName: preview.contactName, contactPhone: preview.contactPhone, phone: preview.supplierPhone }} done={() => setAddingSupplier(false)} onCreated={(supplier) => { void refresh(); void chooseSupplier(supplier.id); }} />}
     </Dialog>
   </section>;
 }

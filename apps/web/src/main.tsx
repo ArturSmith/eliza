@@ -29,6 +29,7 @@ import { StoreSettingsPage } from './store-settings';
 import { StockCountsPage } from './stock-counts';
 import { SuppliersPage, PurchasesPage } from './purchasing';
 import { AiAgentPage } from './ai-agent';
+import { DigitalPurchasesPage } from './digital-purchases';
 import { TeamManagementPage } from './team';
 import { OwnerDashboardPage } from './owner-dashboard';
 import { SalesPage, ShiftsPage } from './reports';
@@ -69,6 +70,7 @@ const routes = [
   createRoute({ getParentRoute: () => root, path: '/purchases', component: PurchasesPage }),
   createRoute({ getParentRoute: () => root, path: '/documents', component: LegacyDocumentsRedirect }),
   createRoute({ getParentRoute: () => root, path: '/ai', component: AiAgentPage }),
+  createRoute({ getParentRoute: () => root, path: '/digital-purchases', component: DigitalPurchasesPage }),
   createRoute({ getParentRoute: () => root, path: '/pos', component: CheckoutRoute }),
   createRoute({ getParentRoute: () => root, path: '/analytics', component: OwnerDashboardPage }),
   createRoute({ getParentRoute: () => root, path: '/sales', component: SalesPage }),
