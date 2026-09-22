@@ -3849,10 +3849,15 @@ input.shopping-section-title {
 .ai-message { margin: 0 0 27px; }
 .ai-message-user { width: fit-content; max-width: 80%; margin-left: auto; padding: 13px 17px; border-radius: 18px; background: #edf3ea; }
 .ai-message-label { margin-bottom: 7px; color: #637467; font-size: .78rem; font-weight: 700; }
-.ai-message-body { color: #26372c; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ai-message-body { color: #26372c; line-height: 1.55; overflow-wrap: anywhere; }
 .ai-message-body p { margin: 0 0 12px; }
 .ai-message-body p:last-child { margin-bottom: 0; }
 .ai-message-body a { color: #286d4e; text-decoration: underline; }
+.ai-message-body ul, .ai-message-body ol { margin: 8px 0 16px; padding-left: 1.5em; }
+.ai-message-body li { padding-left: 2px; margin: 5px 0; }
+.ai-message-body li:last-child { margin-bottom: 0; }
+.ai-message-body h3 { margin: 17px 0 8px; font-size: 1.05em; }
+.ai-message-body code { padding: 1px 5px; border-radius: 4px; background: #edf3ea; font-size: .9em; }
 .ai-pending { opacity: .68; }
 .ai-thinking { color: #4c725b; padding: 0 0 24px; }
 .ai-table-scroll { max-width: 100%; margin: 12px 0 18px; overflow-x: auto; border: 1px solid #e1e8df; border-radius: 12px; }

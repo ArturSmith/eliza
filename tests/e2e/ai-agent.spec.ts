@@ -54,7 +54,7 @@ test('asks Eliza AI, displays a sales table, reopens history and attaches a docu
           role: 'assistant',
           content: body.documentId
             ? 'Invoice received. Review /documents?id=' + documentId
-            : 'Sales by month:\n| Month | Sales |\n| --- | --- |\n| September | 42 NOK |',
+            : '**Sales by month:**\n- **Net sales:** 42 NOK\n| Month | Sales |\n| --- | --- |\n| September | 42 NOK |',
           document_id: body.documentId ?? null,
           created_at: now,
         },
@@ -75,6 +75,8 @@ test('asks Eliza AI, displays a sales table, reopens history and attaches a docu
   await page.getByLabel('Ask Eliza AI', { exact: true }).fill('Sales this month?');
   await page.getByRole('button', { name: 'Send' }).click();
   await expect(page.getByRole('table')).toContainText('42 NOK');
+  await expect(page.locator('.ai-message-assistant strong').first()).toHaveText('Sales by month:');
+  await expect(page.locator('.ai-message-assistant li')).toContainText('Net sales: 42 NOK');
   await page.screenshot({ path: test.info().outputPath('eliza-ai-chat.png'), fullPage: true });
   await page.reload();
   await expect(page.getByRole('table')).toContainText('September');
