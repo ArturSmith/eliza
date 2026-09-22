@@ -69,7 +69,16 @@ test('asks Eliza AI, displays a sales table, reopens history and attaches a docu
     }
     return route.fulfill({ json: { conversation, messages } });
   });
-  await page.route('**/api/documents/scan', (route) => route.fulfill({ json: { id: documentId } }));
+  const digital = {
+    id: documentId, filename: 'invoice.png', mimeType: 'image/png', documentType: 'Invoice', status: 'draft', version: 1,
+    extracted: { documentType: 'Invoice', language: 'en', title: 'Invoice', number: '1', date: '', currency: 'NOK', summary: '', pages: 1, parties: [], fields: [], sections: [], tables: [], additionalText: [], annotations: [], printedTotal: '', extractionWarnings: [] },
+    validation: { rowSum: null, printedTotal: null, difference: null, warnings: [] },
+    createdAt: now, updatedAt: now,
+  };
+  await page.route('**/api/documents/**', (route) => route.request().url().endsWith('/file')
+    ? route.fulfill({ contentType: 'image/png', body: pixel })
+    : route.fulfill({ json: { ...digital, edited: digital.extracted } }));
+  await page.route('**/api/documents/scan', (route) => route.fulfill({ json: { ...digital, edited: digital.extracted } }));
   await page.goto('/ai');
   await expect(page.getByRole('heading', { name: 'How can I help your store?' })).toBeVisible();
   await page.getByLabel('Ask Eliza AI', { exact: true }).fill('Sales this month?');
@@ -87,6 +96,6 @@ test('asks Eliza AI, displays a sales table, reopens history and attaches a docu
     .setInputFiles({ name: 'invoice.png', mimeType: 'image/png', buffer: pixel });
   await page.getByLabel('Ask Eliza AI', { exact: true }).fill('What is in this invoice?');
   await page.getByRole('button', { name: 'Send' }).click();
-  await expect(page.getByRole('link', { name: /Open scanned document/ }).first()).toBeVisible();
+  await expect(page.getByRole('button', { name: /Open scanned document/ }).first()).toBeVisible();
   expect(sentDocument).toBe(documentId);
 });

@@ -410,7 +410,7 @@ export function PurchasesPage() {
         )}
         action={
           <div className="purchase-heading-actions">
-            <a className="button button-outline" href="/documents">
+            <a className="button button-outline" href="/ai">
               {t('Document assistant')}
             </a>
             <Button onClick={() => setCreate(true)}>{t('New purchase order')}</Button>

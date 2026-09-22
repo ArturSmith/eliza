@@ -149,7 +149,7 @@ export const aiToolDefinitions = [
     name: 'search_documents',
     permission: 'purchases.read',
     description:
-      'Find scanned documents by filename, document number, title, or supplier text. These are unverified scans, not purchase transactions.',
+      'Find saved digital scanned documents by filename, document number, title, or supplier text. These are unverified scans, not purchase transactions.',
     parameters: {
       type: 'object',
       properties: { query: { type: 'string' } },
@@ -311,12 +311,12 @@ export async function executeAiTool(
     }
     case 'search_documents':
       return query(
-        `SELECT id,filename,document_type,created_at,edited->>'number' AS number,edited->>'title' AS title,validation FROM scanned_documents WHERE store_id=$1 AND (filename ILIKE $2 OR edited->>'number' ILIKE $2 OR edited->>'title' ILIKE $2 OR edited::text ILIKE $2) ORDER BY created_at DESC LIMIT 20`,
+        `SELECT id,filename,document_type,created_at,edited->>'number' AS number,edited->>'title' AS title,validation FROM scanned_documents WHERE store_id=$1 AND status='saved' AND (filename ILIKE $2 OR edited->>'number' ILIKE $2 OR edited->>'title' ILIKE $2 OR edited::text ILIKE $2) ORDER BY created_at DESC LIMIT 20`,
         [store.id, pattern],
       );
     case 'document_details': {
       const rows = await query(
-        `SELECT id,filename,mime_type,edited,validation,created_at FROM scanned_documents WHERE store_id=$1 AND id=$2`,
+        `SELECT id,filename,mime_type,edited,validation,status,created_at FROM scanned_documents WHERE store_id=$1 AND id=$2`,
         [store.id, a.id],
       );
       return rows.length
@@ -324,7 +324,7 @@ export async function executeAiTool(
             ...rows[0],
             verified: false,
             source: 'AI-extracted scanned document',
-            url: '/documents?id=' + a.id,
+            url: '/ai?document=' + a.id,
           }
         : { notFound: true };
     }

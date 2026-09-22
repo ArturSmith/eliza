@@ -28,11 +28,17 @@ function CheckoutRoute() {
 import { StoreSettingsPage } from './store-settings';
 import { StockCountsPage } from './stock-counts';
 import { SuppliersPage, PurchasesPage } from './purchasing';
-import { ScannedDocumentsPage } from './scanned-documents';
 import { AiAgentPage } from './ai-agent';
 import { TeamManagementPage } from './team';
 import { OwnerDashboardPage } from './owner-dashboard';
 import { SalesPage, ShiftsPage } from './reports';
+function LegacyDocumentsRedirect() {
+  React.useEffect(() => {
+    const oldId = new URLSearchParams(window.location.search).get('id');
+    window.location.replace('/ai' + (oldId ? '?document=' + encodeURIComponent(oldId) : ''));
+  }, []);
+  return null;
+}
 function Root() {
   useLanguage();
   const location = useLocation();
@@ -61,7 +67,7 @@ const routes = [
   createRoute({ getParentRoute: () => root, path: '/stock-counts', component: StockCountsPage }),
   createRoute({ getParentRoute: () => root, path: '/suppliers', component: SuppliersPage }),
   createRoute({ getParentRoute: () => root, path: '/purchases', component: PurchasesPage }),
-  createRoute({ getParentRoute: () => root, path: '/documents', component: ScannedDocumentsPage }),
+  createRoute({ getParentRoute: () => root, path: '/documents', component: LegacyDocumentsRedirect }),
   createRoute({ getParentRoute: () => root, path: '/ai', component: AiAgentPage }),
   createRoute({ getParentRoute: () => root, path: '/pos', component: CheckoutRoute }),
   createRoute({ getParentRoute: () => root, path: '/analytics', component: OwnerDashboardPage }),

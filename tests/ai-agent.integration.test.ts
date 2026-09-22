@@ -220,6 +220,14 @@ describe.sequential('Eliza AI conversations', () => {
       .slice(-2)
       .flatMap((v) => v.input.filter((item: any) => item.type === 'function_call_output'));
     expect(outputs.some((item: any) => item.output.includes('"verified":false'))).toBe(true);
+    expect(outputs.some((item: any) => item.output === '[]')).toBe(true);
+    await db.pool.query("UPDATE scanned_documents SET status='saved' WHERE id=$1", [scannedId]);
+    replies = [call('search_documents', { query: '9605' }), answer('I found saved invoice 9605.')];
+    const savedSearch = await owner.request('/ai/conversations/' + conversationId + '/messages', {
+      message: 'Find the saved digital invoice 9605.',
+    });
+    expect(savedSearch.status).toBe(201);
+    expect(providerCalls.at(-1).input.at(-1).output).toContain(scannedId);
   });
   it('rejects invalid tool arguments and model-supplied store IDs', async () => {
     replies = [
@@ -409,6 +417,7 @@ describe.sequential('Eliza AI conversations', () => {
     expect(Number(output.missingCostRecords)).toBeGreaterThan(0);
   });
   it('compresses long persisted history while keeping recent turns', async () => {
+    await db.pool.query("DELETE FROM auth_attempts WHERE key LIKE 'ai-agent:%'");
     for (let i = 0; i < 24; i++)
       await db.pool.query(
         'INSERT INTO ai_messages(store_id,conversation_id,role,content) VALUES($1,$2,$3,$4)',

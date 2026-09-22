@@ -47,123 +47,76 @@ const source = {
   ],
 };
 const id = 'b13a452a-6a6e-4b8f-9300-09b831dbe202';
-test('scans, edits, saves, and reopens a nine-row digital invoice', async ({ page }) => {
+test('scans, edits, saves, and reopens a digital invoice inside Eliza AI', async ({ page }) => {
   await page.goto('/');
   const setup = await page.request.get('/api/auth/status').then((response) => response.json());
   if (setup.needsSetup) {
     await page.getByLabel('Store name', { exact: true }).fill('Document shop');
     await page.getByLabel('Your name').fill('Alex');
-    await page.getByLabel('Email address').fill('documents@example.test');
-    await page.getByLabel('Password', { exact: true }).fill('local-test-password-123');
-    await page.getByRole('button', { name: 'Create my store' }).click();
-  } else {
-    await page.getByLabel('Email address').fill('documents@example.test');
-    await page.getByLabel('Password').fill('local-test-password-123');
-    await page.getByRole('button', { name: 'Sign in' }).click();
   }
-  await expect(page.getByRole('link', { name: 'Purchases', exact: true })).toBeVisible();
-  let saved: any = null;
-  await page.route('**/api/documents/**', async (route) => {
-    if (route.request().url().endsWith('/file'))
-      return route.fulfill({ status: 200, contentType: 'image/png', body: pixel });
-    if (route.request().url().endsWith('/save')) {
-      saved = { ...saved, edited: route.request().postDataJSON().data, version: saved.version + 1 };
-      return route.fulfill({ json: saved });
+  await page.getByLabel('Email address').fill('ai-ui@example.test');
+  await page.getByLabel('Password', { exact: true }).fill('local-test-password-123');
+  await page.getByRole('button', { name: setup.needsSetup ? 'Create my store' : 'Sign in' }).click();
+  await expect(page.getByRole('link', { name: 'Eliza AI' })).toBeVisible();
+  let record: any = null;
+  const conversation = { id: '17bf1957-f17b-4e22-9c29-a67757292e60', title: 'Invoice', created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+  let messages: any[] = [];
+  await page.route('**/api/ai/**', (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (pathname.endsWith('/messages/stream')) {
+      const input = route.request().postDataJSON();
+      expect(input.documentId).toBe(id);
+      const pair = [
+        { id: crypto.randomUUID(), role: 'user', content: input.message, document_id: id, created_at: conversation.created_at },
+        { id: crypto.randomUUID(), role: 'assistant', content: 'I scanned the invoice. Review and save the digital document below.', document_id: id, created_at: conversation.created_at },
+      ];
+      messages.push(...pair);
+      return route.fulfill({ contentType: 'text/event-stream', body: 'event: done\ndata: ' + JSON.stringify({ conversation, messages: pair }) + '\n\n' });
     }
-    return route.fulfill({ json: saved });
+    if (pathname.endsWith('/conversations') && route.request().method() === 'POST') return route.fulfill({ json: conversation });
+    if (pathname.endsWith('/conversations')) return route.fulfill({ json: [conversation] });
+    return route.fulfill({ json: { conversation, messages } });
   });
-  await page.route('**/api/documents', async (route) =>
-    route.fulfill({
-      json: saved
-        ? [
-            {
-              id,
-              filename: 'invoice.png',
-              documentType: 'Invoice',
-              version: saved.version,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            },
-          ]
-        : [],
-    }),
-  );
-  await page.route('**/api/documents/scan', async (route) => {
+  await page.route('**/api/documents/**', (route) => {
+    if (route.request().url().endsWith('/file')) return route.fulfill({ contentType: 'image/png', body: pixel });
+    if (route.request().url().endsWith('/save')) {
+      record = { ...record, edited: route.request().postDataJSON().data, status: 'saved', version: record.version + 1 };
+      return route.fulfill({ json: record });
+    }
+    return route.fulfill({ json: record });
+  });
+  await page.route('**/api/documents', (route) => route.fulfill({ json: record ? [{ id, filename: 'invoice.png', documentType: 'Invoice', status: record.status, version: record.version, createdAt: record.createdAt, updatedAt: record.updatedAt }] : [] }));
+  await page.route('**/api/documents?*', (route) => route.fulfill({ json: record ? [{ id, filename: 'invoice.png', documentType: 'Invoice', status: record.status, version: record.version, createdAt: record.createdAt, updatedAt: record.updatedAt }] : [] }));
+  await page.route('**/api/documents/scan', (route) => {
     expect(route.request().postDataJSON().dataUrl).toMatch(/^data:image\/png;base64,/);
-    saved = {
-      id,
-      filename: 'invoice.png',
-      mimeType: 'image/png',
-      documentType: 'Invoice',
-      extracted: source,
-      edited: structuredClone(source),
-      validation: {
-        rowSum: '9192.00',
-        printedTotal: '8638.00',
-        difference: '554.00',
-        warnings: [],
-      },
-      version: 1,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    await route.fulfill({ json: saved });
+    record = { id, filename: 'invoice.png', mimeType: 'image/png', documentType: 'Invoice', status: 'draft', extracted: source, edited: structuredClone(source), validation: { rowSum: '9192.00', printedTotal: '8638.00', difference: '554.00', warnings: [] }, version: 1, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+    return route.fulfill({ json: record });
   });
-  await page.route('**/api/documents/chat', async (route) => {
-    expect(route.request().postDataJSON().documentId).toBe(id);
-    await route.fulfill({ json: { answer: 'The invoice has nine product rows.' } });
-  });
-  await page.goto('/documents');
-  await expect(page.getByRole('heading', { name: 'What would you like to scan?' })).toBeVisible();
-  await page.screenshot({ path: test.info().outputPath('assistant-welcome.png'), fullPage: true });
-  await expect(page.getByRole('heading', { name: 'Previous scans' })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Attach document' }).click();
-  await expect(page.locator('.document-attach-menu').getByRole('button', { name: 'Choose file' })).toBeVisible();
-  await expect(page.locator('.document-attach-menu').getByRole('button', { name: 'Take photo' })).toBeVisible();
-  await page.getByRole('button', { name: 'Attach document' }).click();
-  await page
-    .getByLabel('Choose file')
-    .setInputFiles({ name: 'invoice.png', mimeType: 'image/png', buffer: pixel });
-  await expect(page.locator('.document-attachment-preview')).toContainText('invoice.png');
+  await page.goto('/ai');
+  await page.locator('input[type="file"][aria-label="Upload document"]').setInputFiles({ name: 'invoice.png', mimeType: 'image/png', buffer: pixel });
   await page.getByRole('button', { name: 'Send' }).click();
-  const paper = page.locator('.document-paper');
+  const paper = page.locator('.ai-digital-document .document-paper');
   await expect(paper.getByRole('heading', { name: 'Реализация товаров № U2-12670' })).toBeVisible();
-  const original = page.locator('.document-original');
-  await expect(original).toBeVisible();
-  const originalBox = await original.boundingBox();
-  const paperBox = await paper.boundingBox();
-  expect(originalBox && paperBox && originalBox.y + originalBox.height <= paperBox.y).toBeTruthy();
-  expect(originalBox && paperBox && Math.abs(originalBox.width - paperBox.width) < 2).toBeTruthy();
   await expect(paper.locator('tbody tr')).toHaveCount(9);
-  await expect(paper).toContainText('ИП Магомадов Р.А.');
-  await expect(paper).toContainText('Чир-корт');
-  await expect(paper).toContainText('554 ₽');
-  await page.getByLabel('Upload a document or ask anything...').fill('How many rows?');
-  await page.getByRole('button', { name: 'Send' }).click();
-  await expect(page.getByText('The invoice has nine product rows.')).toBeVisible();
-  await paper.screenshot({ path: test.info().outputPath('digital-invoice.png') });
-  await page.getByRole('button', { name: 'Edit document' }).click();
+  await expect(page.getByText('Draft digital document')).toBeVisible();
   await paper.getByLabel('Printed document total').fill('9 192,00');
-  await expect(paper.getByText('Discrepancy detected')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Save corrections' }).click();
-  await expect(page.getByRole('button', { name: 'Edit document' })).toBeVisible();
+  await page.getByRole('button', { name: 'Save digital document' }).click();
+  await expect(page.getByText('Saved digital document')).toBeVisible();
+  await expect(paper).toContainText('9 192,00');
+  expect(await page.request.get('/api/purchases').then((response) => response.json())).toHaveLength(0);
   await page.reload();
-  await expect(page.locator('.document-paper')).toContainText('9 192,00');
-  await expect(page.locator('.document-paper tbody tr')).toHaveCount(9);
-  await page.getByRole('button', { name: 'Previous scans' }).click();
-  await expect(page.getByRole('heading', { name: 'Previous scans' })).toBeVisible();
-  await expect(page.locator('.document-history')).toContainText('invoice.png');
-  await page.getByRole('button', { name: 'Previous scans' }).click();
+  await expect(page.locator('.ai-digital-document .document-paper')).toContainText('9 192,00');
   await page.emulateMedia({ media: 'print' });
   await expect(page.locator('.sidebar')).toBeHidden();
-  await expect(page.locator('.document-paper')).toBeVisible();
-  const pdf = await page.pdf({ path: test.info().outputPath('digital-invoice.pdf') });
+  await expect(page.locator('.ai-digital-document .document-paper')).toBeVisible();
+  const pdf = await page.pdf();
   expect(pdf.subarray(0, 4).toString()).toBe('%PDF');
   await page.emulateMedia({ media: 'screen' });
-  saved = { ...saved, version: saved.version + 1, edited: { ...saved.edited, tables: saved.edited.tables.map((table: any) => ({ ...table, expectedRowCount: 31, firstRowNumber: 1, lastRowNumber: 31 })) } };
-  await page.reload();
-  await expect(page.getByText('Review required').first()).toBeVisible();
-  await expect(page.getByText('Extracted 9 of 31 expected rows.', { exact: true })).toBeVisible();
-  await expect(page.getByText('This scan has missing or duplicate product rows.')).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Prepare purchase order' })).toHaveCount(0);
+  await page.getByRole('button', { name: 'Close document' }).click();
+  await page.getByRole('button', { name: 'Digital documents' }).click();
+  await page.getByRole('button', { name: 'invoice.png' }).last().click();
+  await expect(page.locator('.ai-digital-document .document-paper tbody tr')).toHaveCount(9);
+  await page.goto('/documents?id=' + id);
+  await expect(page).toHaveURL(/\/ai\?document=/);
+  await expect(page.locator('.ai-digital-document .document-paper')).toContainText('9 192,00');
 });

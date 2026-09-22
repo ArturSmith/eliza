@@ -1452,5 +1452,12 @@
   "Document access denied.": "Доступ к документу запрещён.",
   "Choose a JPEG, PNG, WebP, or PDF file smaller than 8 MB.": "Выберите файл JPEG, PNG, WebP или PDF размером до 8 МБ.",
   "The file could not be opened.": "Не удалось открыть файл.",
-  "Eliza AI could not complete the request. Try again.": "Eliza AI не смогла завершить запрос. Попробуйте ещё раз."
+  "Eliza AI could not complete the request. Try again.": "Eliza AI не смогла завершить запрос. Попробуйте ещё раз.",
+  "Close document": "Закрыть документ",
+  "Draft": "Черновик",
+  "Draft digital document": "Черновик цифрового документа",
+  "Saved digital document": "Сохранённый цифровой документ",
+  "Save digital document": "Сохранить цифровой документ",
+  "Save edits before asking Eliza about them.": "Сохраните изменения, прежде чем спрашивать о них Элизу.",
+  "Search digital documents": "Поиск цифровых документов"
 }

@@ -179,20 +179,11 @@ describe.sequential('scanned document persistence and access', () => {
     });
     id = result.body.id;
   });
-  it('answers a question about the saved document and rejects inaccessible ids', async () => {
-    const result = await owner.request('/documents/chat', {
-      documentId: id,
-      question: 'How many rows are there?',
-      history: [],
-    });
-    expect(result.status).toBe(201);
-    expect(result.body.answer).toBe('The document has 9 rows.');
-    expect(chatInput.messages[1].content).toContain('Чай Манго');
-    const missing = await owner.request('/documents/chat', {
-      documentId: '00000000-0000-4000-8000-000000000001',
-      question: 'Read this document',
-    });
-    expect(missing.status).toBe(404);
+  it('keeps a new scan as a draft until a user saves it', async () => {
+    const current = (await owner.request('/documents/' + id)).body;
+    expect(current.status).toBe('draft');
+    const matches = await owner.request('/documents?search=invoice.png');
+    expect(matches.body.some((item: { id: string; status: string }) => item.id === id && item.status === 'draft')).toBe(true);
   });
   it('saves a correction while preserving the original extraction and reopens it', async () => {
     const current = (await owner.request('/documents/' + id)).body;
@@ -204,9 +195,12 @@ describe.sequential('scanned document persistence and access', () => {
     });
     expect(saved.status).toBe(201);
     expect(saved.body.validation.difference).toBe('0.00');
+    expect(saved.body.status).toBe('saved');
     expect(saved.body.extracted.printedTotal).toBe('8 638,00');
     const reopened = await owner.request('/documents/' + id);
     expect(reopened.body.edited.printedTotal).toBe('9 192,00');
+    const byNumber = await owner.request('/documents?search=U2-12670');
+    expect(byNumber.body.some((item: { id: string; status: string }) => item.id === id && item.status === 'saved')).toBe(true);
     expect(
       (
         await owner.request('/documents/' + id + '/save', {
