@@ -128,6 +128,12 @@ test('scans, edits, saves, and reopens a nine-row digital invoice', async ({ pag
   await page.getByRole('button', { name: 'Send' }).click();
   const paper = page.locator('.document-paper');
   await expect(paper.getByRole('heading', { name: 'Реализация товаров № U2-12670' })).toBeVisible();
+  const original = page.locator('.document-original');
+  await expect(original).toBeVisible();
+  const originalBox = await original.boundingBox();
+  const paperBox = await paper.boundingBox();
+  expect(originalBox && paperBox && originalBox.y + originalBox.height <= paperBox.y).toBeTruthy();
+  expect(originalBox && paperBox && Math.abs(originalBox.width - paperBox.width) < 2).toBeTruthy();
   await expect(paper.locator('tbody tr')).toHaveCount(9);
   await expect(paper).toContainText('ИП Магомадов Р.А.');
   await expect(paper).toContainText('Чир-корт');

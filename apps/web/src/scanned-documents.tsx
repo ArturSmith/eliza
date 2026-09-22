@@ -45,7 +45,6 @@ function DocumentViewer({
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
-  const [mobileTab, setMobileTab] = useState<'digital' | 'original'>('digital');
   useEffect(() => {
     setData(structuredClone(record.edited));
     setEditing(false);
@@ -136,24 +135,8 @@ function DocumentViewer({
         </div>
       </div>
       <ErrorMessage error={error} />
-      <div className="document-mobile-tabs">
-        <button
-          type="button"
-          className={mobileTab === 'digital' ? 'active' : ''}
-          onClick={() => setMobileTab('digital')}
-        >
-          {t('Digital document')}
-        </button>
-        <button
-          type="button"
-          className={mobileTab === 'original' ? 'active' : ''}
-          onClick={() => setMobileTab('original')}
-        >
-          {t('Original scan')}
-        </button>
-      </div>
       <div className="document-result-columns">
-        <aside className={'document-original ' + (mobileTab === 'original' ? 'mobile-active' : '')}>
+        <aside className="document-original">
           <h2>{t('Original scan')}</h2>
           {record.mimeType === 'application/pdf' ? (
             <iframe title={t('Original PDF')} src={'/api/documents/' + record.id + '/file'} />
@@ -165,7 +148,7 @@ function DocumentViewer({
           )}
           <small>{record.filename}</small>
         </aside>
-        <article className={'document-paper ' + (mobileTab === 'digital' ? 'mobile-active' : '')}>
+        <article className="document-paper">
           <header className="document-paper-header">
             <div className="document-paper-heading">
               <span className={validation.incomplete ? 'document-review-badge' : 'document-scan-badge'}>{validation.incomplete ? '⚠ ' + t('Review required') : '✓ ' + t('Scan complete')}</span>
