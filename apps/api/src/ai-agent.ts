@@ -23,6 +23,9 @@ import { availableAiTools, executeAiTool } from './ai-tools.js';
 import { providerFailure, safeProviderRequestId } from './purchase-document-error.js';
 import { decideProposal, stageProposal, type Proposal } from './ai-actions.js';
 
+const maxToolRounds = 16;
+const maxToolCalls = 24;
+
 const sendSchema = z
   .object({ message: z.string().trim().min(1).max(4000), documentId: z.string().uuid().optional() })
   .strict();
@@ -213,7 +216,7 @@ export class AiAgentService {
     const documentIds: string[] = [];
     const proposals: Proposal[] = [];
     let callCount = 0;
-    for (let round = 0; round < 5; round++) {
+    for (let round = 0; round < maxToolRounds; round++) {
       const response = await this.callProvider(req, input, tools, 2500, onDelta, signal);
       const calls = response.output!.filter((item) => item.type === 'function_call');
       if (!calls.length) {
@@ -223,7 +226,7 @@ export class AiAgentService {
       }
       input.push(...response.output!);
       for (const call of calls) {
-        if (++callCount > 8 || !call.call_id)
+        if (++callCount > maxToolCalls || !call.call_id)
           throw new HttpException('Eliza AI reached its tool limit. Ask a narrower question.', 422);
         let args: unknown;
         try {
