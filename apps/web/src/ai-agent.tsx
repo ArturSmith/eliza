@@ -1,18 +1,28 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowUp, ChevronDown, ChevronUp, Clock3, FileText, Paperclip, Plus, Sparkles, X } from 'lucide-react';
-import { api, queryClient, useSession } from './api';
+import { api, queryClient, useProducts, useSession } from './api';
 import { ErrorMessage } from './forms';
 import { t, useLanguage } from './i18n';
 import { DocumentViewer, type DocumentRecord } from './scanned-documents';
 
 type Conversation = { id: string; title: string; created_at: string; updated_at: string };
+type ProposedAction = {
+  id: string;
+  kind: 'supplier' | 'product' | 'purchase';
+  operation: 'create' | 'update';
+  summary: string;
+  payload: Record<string, unknown>;
+  status: 'pending' | 'processing' | 'applied' | 'rejected';
+  result?: { id?: string; number?: string };
+};
 type Message = {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   document_id: string | null;
   created_at: string;
+  actions?: ProposedAction[];
 };
 type Detail = { conversation: Conversation; messages: Message[] };
 type Document = { id: string; filename: string; documentType: string; status: 'draft' | 'saved' };
@@ -131,6 +141,8 @@ async function sendStream(
 export function AiAgentPage() {
   useLanguage();
   const session = useSession();
+  const products = useProducts();
+  const suppliers = useQuery({ queryKey: ['suppliers'], queryFn: () => api<{ id: string; name: string }[]>('/suppliers'), enabled: session.data?.user.permissions.includes('suppliers.read') ?? false });
   const canDocuments = session.data?.user.permissions.includes('purchases.read') ?? false;
   const canUpload = session.data?.user.permissions.includes('purchases.write') ?? false;
   const [id, setId] = useState(() => new URLSearchParams(window.location.search).get('id') || '');
@@ -144,6 +156,8 @@ export function AiAgentPage() {
   const [showDocuments, setShowDocuments] = useState(false);
   const [documentSearch, setDocumentSearch] = useState('');
   const [busy, setBusy] = useState(false);
+  const [actionBusy, setActionBusy] = useState('');
+  const [actionError, setActionError] = useState<{ id: string; error: unknown } | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [pending, setPending] = useState('');
   const [streamed, setStreamed] = useState('');
@@ -245,6 +259,40 @@ export function AiAgentPage() {
     openDocument(result.id);
     setDocumentRecord(result);
     return result.id;
+  }
+  async function decideAction(action: ProposedAction, approve: boolean) {
+    if (actionBusy) return;
+    setActionBusy(action.id);
+    setActionError(null);
+    try {
+      const result = await api<ProposedAction>('/ai/actions/' + action.id + (approve ? '/approve' : '/reject'), {});
+      setLocalMessages((current) => (current ?? detail.data?.messages ?? []).map((message) => ({
+        ...message,
+        actions: message.actions?.map((item) => item.id === action.id ? { ...item, ...result } : item),
+      })));
+      void queryClient.invalidateQueries({ queryKey: ['ai-conversation', id] });
+      if (approve) {
+        void queryClient.invalidateQueries({ queryKey: ['products'] });
+        void queryClient.invalidateQueries({ queryKey: ['suppliers'] });
+        void queryClient.invalidateQueries({ queryKey: ['purchases'] });
+      }
+    } catch (cause) { setActionError({ id: action.id, error: cause }); }
+    finally { setActionBusy(''); }
+  }
+  function actionFields(action: ProposedAction) {
+    const payload = action.payload;
+    const labels: Record<string, string> = {
+      name: 'Name', code: 'Code', contactName: 'Sales representative', contactPhone: 'Representative phone',
+      phone: 'Supplier phone', companyNumber: 'Company number', email: 'Email', address: 'Address',
+      paymentTerms: 'Payment terms', category: 'Category', unit: 'Unit', sku: 'SKU', plu: 'PLU',
+      price: 'Selling price', cost: 'Unit cost', taxRate: 'Tax rate', minStock: 'Minimum stock',
+      supplierReference: 'Supplier reference', documentDate: 'Document date', expectedDate: 'Expected delivery',
+      buyerName: 'Buyer', buyerDetails: 'Buyer details', driverName: 'Driver', driverPhone: 'Driver phone',
+      goodsNumber: 'Goods number', buyerTaxNumber: 'Buyer tax number', grossWeight: 'Gross weight',
+      documentVat: 'VAT on document', returnAmount: 'Return amount', documentComment: 'Document comment',
+      notes: 'Notes', description: 'Description', barcodes: 'Barcodes',
+    };
+    return Object.entries(payload).filter(([key, value]) => !['id', 'version', 'lines', 'supplierId', 'autoSku', 'autoPlu', 'active'].includes(key) && value !== '' && value !== undefined && value !== null && (!Array.isArray(value) || value.length)).map(([key, value]) => <div key={key}><dt>{t(labels[key] ?? key)}</dt><dd>{Array.isArray(value) ? value.join(', ') : String(value)}</dd></div>);
   }
   async function send() {
     const text =
@@ -353,6 +401,19 @@ export function AiAgentPage() {
                   {message.role === 'assistant' ? t('Eliza AI') : t('You')}
                 </div>
                 <div className="ai-message-body">{messageContent(message.content)}</div>
+                {message.actions?.map((action) => <section className="ai-action-card" key={action.id}>
+                  <div className="ai-action-card-head"><strong>{t(action.operation === 'create' ? 'Proposed new {kind}' : 'Proposed {kind} update', { kind: t(action.kind) })}</strong><span className={'ai-action-status ' + action.status}>{t(action.status === 'pending' ? 'Awaiting approval' : action.status === 'applied' ? 'Applied' : action.status === 'rejected' ? 'Declined' : 'Processing')}</span></div>
+                  <p>{action.summary}</p>
+                  <dl>
+                    {action.kind === 'purchase' && <div><dt>{t('Supplier')}</dt><dd>{suppliers.data?.find((supplier) => supplier.id === action.payload.supplierId)?.name ?? String(action.payload.supplierId ?? '')}</dd></div>}
+                    {actionFields(action)}
+                  </dl>
+                  {action.kind === 'product' && Boolean(action.payload.autoSku || action.payload.autoPlu) && <p className="ai-action-generated">{t('Eliza will generate: {value0}', { value0: [action.payload.autoSku ? 'SKU' : '', action.payload.autoPlu ? 'PLU' : ''].filter(Boolean).join(', ') })}</p>}
+                  {action.kind === 'purchase' && Array.isArray(action.payload.lines) && <div className="ai-action-lines"><strong>{t('Purchase items')}</strong>{(action.payload.lines as { productId: string; quantity: string; unitCost: string; taxRate: string; sellingPrice?: string }[]).map((line, index) => <div key={index}>{products.data?.find((product) => product.id === line.productId)?.name ?? line.productId} · {line.quantity} × {line.unitCost} · {line.taxRate}% {t('tax')}{line.sellingPrice ? ' · ' + t('Selling price') + ': ' + line.sellingPrice : ''}</div>)}</div>}
+                  {action.status === 'pending' && <div className="ai-action-buttons"><button type="button" className="button" disabled={!!actionBusy} onClick={() => void decideAction(action, true)}>{t('Approve and save')}</button><button type="button" className="button button-outline" disabled={!!actionBusy} onClick={() => void decideAction(action, false)}>{t('Decline')}</button></div>}
+                  {actionError?.id === action.id && <ErrorMessage error={actionError.error} />}
+                  {action.status === 'applied' && action.result?.id && <a href={action.kind === 'supplier' ? '/suppliers' : action.kind === 'product' ? '/products' : '/purchases?order=' + action.result.id}>{t('Open saved record')}</a>}
+                </section>)}
                 {message.document_id && (
                   <button type="button" className="ai-document-card" onClick={() => openDocument(message.document_id!)}>
                     <FileText size={19} />

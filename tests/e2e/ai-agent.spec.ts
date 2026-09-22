@@ -30,8 +30,10 @@ test('asks Eliza AI, displays a sales table, reopens history and attaches a docu
   let messages: any[] = [];
   let exists = false;
   let sentDocument = '';
+  const proposal = { id: 'd83b9de1-04ea-469b-b8d2-61976eb1526b', kind: 'supplier', operation: 'create', summary: 'Create the reviewed supplier', payload: { code: 'NEW-SUP', name: 'New supplier', phone: '+7 969 722-22-22' }, status: 'pending' };
   await page.route('**/api/ai/**', async (route) => {
     const { pathname } = new URL(route.request().url());
+    if (pathname.endsWith('/approve')) { proposal.status = 'applied'; return route.fulfill({ json: { ...proposal, result: { id: crypto.randomUUID() } } }); }
     if (pathname.endsWith('/ai/conversations') && route.request().method() === 'GET')
       return route.fulfill({ json: exists ? [conversation] : [] });
     if (pathname.endsWith('/ai/conversations') && route.request().method() === 'POST') {
@@ -57,6 +59,7 @@ test('asks Eliza AI, displays a sales table, reopens history and attaches a docu
             : '**Sales by month:**\n- **Net sales:** 42 NOK\n| Month | Sales |\n| --- | --- |\n| September | 42 NOK |',
           document_id: body.documentId ?? null,
           created_at: now,
+          actions: body.documentId ? [] : [proposal],
         },
       ];
       messages.push(...generated);
@@ -89,8 +92,12 @@ test('asks Eliza AI, displays a sales table, reopens history and attaches a docu
   await expect(page.getByRole('table')).toContainText('42 NOK');
   await expect(page.locator('.ai-message-assistant strong').first()).toHaveText('Sales by month:');
   await expect(page.locator('.ai-message-assistant li')).toContainText('Net sales: 42 NOK');
+  await expect(page.getByText('Create the reviewed supplier')).toBeVisible();
+  await page.getByRole('button', { name: 'Approve and save' }).click();
+  await expect(page.getByText('Applied', { exact: true })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('eliza-ai-chat.png'), fullPage: true });
   await page.reload();
+  await expect(page.getByText('Applied', { exact: true })).toBeVisible();
   await expect(page.getByRole('table')).toContainText('September');
   await page.getByRole('button', { name: 'New conversation' }).last().click();
   await expect(page.getByRole('heading', { name: 'How can I help your store?' })).toBeVisible();

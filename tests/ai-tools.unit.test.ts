@@ -26,6 +26,10 @@ describe('AI read tool boundaries', () => {
       'sales_breakdown',
     ]);
     expect(availableAiTools(['costs.read']).some((t) => t.name === 'gross_profit')).toBe(false);
+    expect(availableAiTools(['catalog.write']).some((t) => t.name === 'propose_change')).toBe(true);
+    expect(availableAiTools(['sales.read']).some((t) => t.name === 'propose_change')).toBe(false);
+    expect(availableAiTools(['catalog.write']).some((t) => t.name === 'product_details')).toBe(false);
+    expect(availableAiTools(['catalog.write', 'costs.read']).some((t) => t.name === 'product_details')).toBe(true);
     expect(
       availableAiTools(['costs.read', 'sales.read']).some((t) => t.name === 'gross_profit'),
     ).toBe(true);

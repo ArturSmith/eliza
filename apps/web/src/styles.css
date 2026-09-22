@@ -3967,3 +3967,18 @@ input.shopping-section-title {
 .order-detail-document dt { color: #728073; font-size: .82rem; }
 .order-detail-document dd { margin: 4px 0 0; overflow-wrap: anywhere; }
 @media (max-width: 640px) { .order-detail-document dl { grid-template-columns: 1fr; } }
+
+/* AI changes require a deliberate review in the conversation. */
+.ai-action-card { margin: 14px 0 4px; padding: 17px 19px; border: 1px solid #d9e6d7; border-radius: 14px; background: #fbfdf9; }
+.ai-action-card-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.ai-action-card > p { margin: 10px 0 14px; }
+.ai-action-card dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; margin: 0; }
+.ai-action-card dt { color: #728073; font-size: .8rem; }
+.ai-action-card dd { margin: 3px 0 0; overflow-wrap: anywhere; }
+.ai-action-status { flex: none; padding: 4px 8px; border-radius: 7px; color: #765b2a; background: #fff1cf; font-size: .76rem; font-weight: 700; }
+.ai-action-status.applied { color: #35633f; background: #e8f4e6; }
+.ai-action-status.rejected { color: #67736a; background: #e9ede8; }
+.ai-action-lines { display: grid; gap: 6px; margin-top: 16px; padding-top: 12px; border-top: 1px solid #e0e9dd; }
+.ai-action-buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.ai-action-card > a { display: inline-block; margin-top: 12px; color: #286d4e; text-decoration: underline; }
+@media (max-width: 640px) { .ai-action-card dl { grid-template-columns: 1fr; } }

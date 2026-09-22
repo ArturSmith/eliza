@@ -5,6 +5,7 @@ import type { AuthRequest } from './security.js';
 import type { Permission } from '@eliza/contracts';
 import { GrossProfitController } from './gross-profit.js';
 import { SalesSummaryController } from './sales-summary.js';
+import { canPropose, proposalToolSchema } from './ai-actions.js';
 
 const date = z
   .string()
@@ -84,6 +85,13 @@ export const aiToolDefinitions = [
     schema: search,
   },
   {
+    name: 'product_details',
+    permission: 'catalog.write',
+    description: 'Get full editable product fields and barcodes by exact ID, including cost. Use before proposing a product update; do not guess fields.',
+    parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false },
+    schema: uuid,
+  },
+  {
     name: 'inventory',
     permission: 'inventory.read',
     description:
@@ -97,6 +105,13 @@ export const aiToolDefinitions = [
     schema: search,
   },
   {
+    name: 'supplier_details',
+    permission: 'suppliers.read',
+    description: 'Get full editable supplier fields and version by exact ID. Use before proposing a supplier update.',
+    parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false },
+    schema: uuid,
+  },
+  {
     name: 'search_purchases',
     permission: 'purchases.read',
     description:
@@ -108,6 +123,30 @@ export const aiToolDefinitions = [
       additionalProperties: false,
     },
     schema: search,
+  },
+  {
+    name: 'search_suppliers',
+    permission: 'suppliers.read',
+    description: 'Find suppliers by name, code, business or representative phone, or company number. Returns IDs and contact details for matching before proposing changes.',
+    parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false },
+    schema: search,
+  },
+  {
+    name: 'propose_change',
+    permission: 'catalog.read',
+    description: 'Prepare a supplier, product, or purchase draft create/update for explicit user approval. This does not write anything. First search existing records. Data is a JSON string matching the normal Eliza form fields. Supplier fields: code,name,contactName,contactPhone,email,phone,address,companyNumber,paymentTerms,notes,active; update also needs id,version. Product fields: name,sku,category,unit,price,cost,minStock,plu,barcodes,description (optional),autoSku,autoPlu; update also needs id and full current fields. Purchase fields: supplierId,supplierReference,documentDate,expectedDate,notes,lines array of productId,quantity,unitCost,taxRate and optional sellingPrice; optional buyerName,buyerDetails,driverName,driverPhone,goodsNumber,buyerTaxNumber,grossWeight,documentVat,returnAmount,documentComment; update also needs id,version and must be a draft. Never invent IDs, prices, costs, tax rates, or missing required fields. Ask user for missing information first. The proposal is saved only after user clicks Approve.',
+    parameters: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: ['supplier', 'product', 'purchase'] },
+        operation: { type: 'string', enum: ['create', 'update'] },
+        summary: { type: 'string', description: 'Human-readable short summary of the exact change.' },
+        data: { type: 'string', description: 'JSON object of complete validated form fields.' },
+      },
+      required: ['kind', 'operation', 'summary', 'data'],
+      additionalProperties: false,
+    },
+    schema: proposalToolSchema,
   },
   {
     name: 'supplier_purchase_summary',
@@ -206,8 +245,9 @@ export type AiToolName = (typeof aiToolDefinitions)[number]['name'];
 export function availableAiTools(permissions: readonly Permission[]) {
   return aiToolDefinitions.filter(
     (tool) =>
-      permissions.includes(tool.permission as Permission) &&
-      (tool.name !== 'gross_profit' || permissions.includes('sales.read')),
+      (tool.name === 'propose_change' ? canPropose(permissions) : permissions.includes(tool.permission as Permission)) &&
+      (tool.name !== 'gross_profit' || permissions.includes('sales.read')) &&
+      (tool.name !== 'product_details' || permissions.includes('costs.read')),
   );
 }
 export async function executeAiTool(
@@ -220,7 +260,8 @@ export async function executeAiTool(
   if (!tool) return { error: 'Unknown tool.' };
   if (
     !req.context.user.permissions.includes(tool.permission as Permission) ||
-    (name === 'gross_profit' && !req.context.user.permissions.includes('sales.read'))
+    (name === 'gross_profit' && !req.context.user.permissions.includes('sales.read')) ||
+    (name === 'product_details' && !req.context.user.permissions.includes('costs.read'))
   )
     throw new ForbiddenException('Tool access denied.');
   const parsed = tool.schema.safeParse(raw);
@@ -251,6 +292,8 @@ export async function executeAiTool(
   };
   const pattern = '%' + (a.query ?? '').replace(/[\\%_]/g, '\\$&') + '%';
   switch (name) {
+    case 'propose_change':
+      return { error: 'Proposals are handled by the conversation service.' };
     case 'gross_profit':
       return new GrossProfitController(database).report({ from: a.from, to: a.to }, req);
     case 'sales_summary': {
@@ -271,14 +314,33 @@ export async function executeAiTool(
         `SELECT DISTINCT p.id,p.name,p.sku,p.plu,p.category,p.unit,p.price::text,p.stock::text,p.active FROM products p LEFT JOIN barcodes b ON b.product_id=p.id AND b.store_id=p.store_id WHERE p.store_id=$1 AND (p.name ILIKE $2 OR p.sku ILIKE $2 OR p.plu ILIKE $2 OR b.value ILIKE $2) ORDER BY p.name LIMIT 20`,
         [store.id, pattern],
       );
+    case 'product_details': {
+      const rows = await query(
+        `SELECT id,name,sku,category,unit,tax_rate::text AS "taxRate",price::text,cost::text,min_stock::text AS "minStock",coalesce(plu,'') AS plu,description,active,coalesce((SELECT json_agg(value ORDER BY value) FROM barcodes WHERE product_id=p.id AND store_id=p.store_id),'[]'::json) AS barcodes FROM products p WHERE store_id=$1 AND id=$2`,
+        [store.id, a.id],
+      );
+      return rows[0] ?? { notFound: true };
+    }
     case 'inventory':
       return query(
         `SELECT id,name,sku,unit,stock::text,min_stock::text,active FROM products WHERE store_id=$1 AND ($2='low' AND stock<=min_stock OR $2<>'low' AND (name ILIKE $3 OR sku ILIKE $3)) ORDER BY stock<=min_stock DESC,name LIMIT 30`,
         [store.id, a.query, pattern],
       );
+    case 'search_suppliers':
+      return query(
+        `SELECT id,code,name,phone,contact_name,contact_phone,company_number,email,address,payment_terms,active,version FROM suppliers WHERE store_id=$1 AND (name ILIKE $2 OR code ILIKE $2 OR phone ILIKE $2 OR contact_name ILIKE $2 OR contact_phone ILIKE $2 OR company_number ILIKE $2) ORDER BY name LIMIT 20`,
+        [store.id, pattern],
+      );
+    case 'supplier_details': {
+      const rows = await query(
+        `SELECT id,code,name,contact_name AS "contactName",contact_phone AS "contactPhone",phone,email,address,company_number AS "companyNumber",payment_terms AS "paymentTerms",notes,active,version FROM suppliers WHERE store_id=$1 AND id=$2`,
+        [store.id, a.id],
+      );
+      return rows[0] ?? { notFound: true };
+    }
     case 'search_purchases':
       return query(
-        `SELECT p.id,p.number,p.supplier_reference,p.status,p.payment_status,p.total::text,p.document_date,p.created_at,s.id AS supplier_id,s.name AS supplier,s.code AS supplier_code FROM purchases p JOIN suppliers s ON s.id=p.supplier_id AND s.store_id=p.store_id WHERE p.store_id=$1 AND (p.number ILIKE $2 OR p.supplier_reference ILIKE $2 OR s.name ILIKE $2) ORDER BY p.created_at DESC LIMIT 20`,
+        `SELECT p.id,p.number,p.version,p.supplier_reference,p.status,p.payment_status,p.total::text,p.document_date,p.created_at,s.id AS supplier_id,s.name AS supplier,s.code AS supplier_code FROM purchases p JOIN suppliers s ON s.id=p.supplier_id AND s.store_id=p.store_id WHERE p.store_id=$1 AND (p.number ILIKE $2 OR p.supplier_reference ILIKE $2 OR s.name ILIKE $2) ORDER BY p.created_at DESC LIMIT 20`,
         [store.id, pattern],
       );
     case 'supplier_purchase_summary': {
@@ -299,12 +361,12 @@ export async function executeAiTool(
     }
     case 'purchase_details': {
       const rows = await query(
-        `SELECT p.id,p.number,p.supplier_reference,p.status,p.payment_status,p.total::text,p.document_date,p.created_at,s.id AS supplier_id,s.name AS supplier,s.code AS supplier_code FROM purchases p JOIN suppliers s ON s.id=p.supplier_id AND s.store_id=p.store_id WHERE p.store_id=$1 AND p.id=$2`,
+        `SELECT p.id,p.number,p.version,p.supplier_reference,p.status,p.payment_status,p.total::text,p.document_date,p.expected_date,p.notes,p.buyer_name,p.buyer_details,p.driver_name,p.driver_phone,p.goods_number,p.buyer_tax_number,p.gross_weight,p.document_vat,p.return_amount,p.document_comment,p.created_at,s.id AS supplier_id,s.name AS supplier,s.code AS supplier_code FROM purchases p JOIN suppliers s ON s.id=p.supplier_id AND s.store_id=p.store_id WHERE p.store_id=$1 AND p.id=$2`,
         [store.id, a.id],
       );
       if (!rows.length) return { notFound: true };
       const lines = await query(
-        `SELECT product_name,sku,unit,ordered_quantity::text,received_quantity::text,unit_cost::text,total::text FROM purchase_lines WHERE store_id=$1 AND purchase_id=$2 ORDER BY id LIMIT 100`,
+        `SELECT product_id AS "productId",product_name,sku,unit,ordered_quantity::text AS quantity,received_quantity::text,unit_cost::text AS "unitCost",tax_rate::text AS "taxRate",proposed_selling_price::text AS "sellingPrice",total::text FROM purchase_lines WHERE store_id=$1 AND purchase_id=$2 ORDER BY id LIMIT 100`,
         [store.id, a.id],
       );
       return { ...rows[0], lines };
