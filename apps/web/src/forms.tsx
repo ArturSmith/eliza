@@ -798,6 +798,23 @@ export function AdjustmentForm({ products, onDone }: { products: Product[]; onDo
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const [productId, setProductId] = useState('');
   const selected = products.find((p) => p.id === productId);
+  function selectScannedProduct(code: string) {
+    const matches = products.filter(
+      (p) => p.active && (p.barcodes.includes(code) || p.sku === code || p.plu === code),
+    );
+    if (matches.length !== 1) {
+      setError(
+        matches.length
+          ? t('This code matches multiple products. Select the correct product.')
+          : t('No active product matches this barcode. Check the code or select a product.'),
+      );
+      return;
+    }
+    setProductId(matches[0].id);
+    setRequestId(crypto.randomUUID());
+    mutation.reset();
+    setError(null);
+  }
   const mutation = useMutation({
     mutationFn: (body: unknown) => api('/inventory/adjustments', body),
     onSuccess: () => {
@@ -823,29 +840,32 @@ export function AdjustmentForm({ products, onDone }: { products: Product[]; onDo
         mutation.reset();
       }}
     >
-      <SearchSelect
-        label={t('Product')}
-        placeholder={t('Select a product')}
-        value={
-          selected && {
-            title: selected.name,
-            subtitle: `${Number(selected.stock)} ${t(selected.unit)} ${t('on hand')}`,
+      <div className="adjustment-product-picker">
+        <SearchSelect
+          label={t('Product')}
+          placeholder={t('Select a product')}
+          value={
+            selected && {
+              title: selected.name,
+              subtitle: `${Number(selected.stock)} ${t(selected.unit)} ${t('on hand')}`,
+            }
           }
-        }
-        options={products
-          .filter((p) => p.active)
-          .map((p) => ({
-            id: p.id,
-            title: p.name,
-            subtitle: `${p.sku} · ${Number(p.stock)} ${t(p.unit ?? '')} ${t('on hand')}`,
-            keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
-          }))}
-        onSelect={(id) => {
-          setProductId(id);
-          setRequestId(crypto.randomUUID());
-          mutation.reset();
-        }}
-      />
+          options={products
+            .filter((p) => p.active)
+            .map((p) => ({
+              id: p.id,
+              title: p.name,
+              subtitle: `${p.sku} · ${Number(p.stock)} ${t(p.unit ?? '')} ${t('on hand')}`,
+              keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
+            }))}
+          onSelect={(id) => {
+            setProductId(id);
+            setRequestId(crypto.randomUUID());
+            mutation.reset();
+          }}
+        />
+        <CameraBarcodeScanner onScan={selectScannedProduct} />
+      </div>
       <Field
         label={t('Quantity change')}
         hint={t('Use a positive quantity to add stock or a negative quantity to remove it.')}

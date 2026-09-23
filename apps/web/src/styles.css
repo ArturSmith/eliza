@@ -5000,3 +5000,7 @@ input.shopping-section-title {
   box-shadow: 0 0 0 100vmax #0005;
   pointer-events: none;
 }
+
+.adjustment-product-picker { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 16px; }
+.adjustment-product-picker > .search-select { flex: 1; min-width: 0; margin-bottom: 0; }
+.adjustment-product-picker > .camera-scan-button { min-height: 40px; }

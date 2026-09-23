@@ -7,9 +7,13 @@ import { Dialog } from './components/ui/dialog';
 export function CameraBarcodeScanner({
   onScan,
   disabled = false,
+  continuous = false,
+  onOpen,
 }: {
   onScan: (barcode: string) => void;
   disabled?: boolean;
+  continuous?: boolean;
+  onOpen?: () => void;
 }) {
   useLanguage();
   const [open, setOpen] = useState(false);
@@ -23,6 +27,8 @@ export function CameraBarcodeScanner({
     let cancelled = false;
     let controls: IScannerControls | undefined;
     let detected = false;
+    let lastCode = '';
+    let lastSeenAt = 0;
     const start = async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
         setError(
@@ -38,13 +44,19 @@ export function CameraBarcodeScanner({
           { video: { facingMode: { ideal: 'environment' } }, audio: false },
           videoRef.current ?? undefined,
           (result) => {
-            if (!result || cancelled || detected) return;
-            detected = true;
-            const code = result.getText().trim();
-            if (code) {
-              onScanRef.current(code);
-              setOpen(false);
+            if (cancelled || detected) return;
+            if (!result) {
+              if (Date.now() - lastSeenAt > 650) lastCode = '';
+              return;
             }
+            const code = result.getText().trim();
+            if (!code) return;
+            lastSeenAt = Date.now();
+            if (continuous && code === lastCode) return;
+            lastCode = code;
+            if (!continuous) detected = true;
+            onScanRef.current(code);
+            if (!continuous) setOpen(false);
           },
         );
         if (cancelled) controls.stop();
@@ -62,7 +74,7 @@ export function CameraBarcodeScanner({
       cancelled = true;
       controls?.stop();
     };
-  }, [open]);
+  }, [open, continuous]);
 
   return (
     <>
@@ -74,6 +86,7 @@ export function CameraBarcodeScanner({
         disabled={disabled}
         onClick={() => {
           setError('');
+          onOpen?.();
           setOpen(true);
         }}
       >
@@ -84,7 +97,9 @@ export function CameraBarcodeScanner({
         onOpenChange={setOpen}
         title={t('Scan barcode with camera')}
         description={t(
-          'Point your camera at a barcode. The code will fill this field automatically.',
+          continuous
+            ? 'Point your camera at each barcode. Scanning continues until you close this window.'
+            : 'Point your camera at a barcode. The code will fill this field automatically.',
         )}
       >
         <div className="camera-scan-preview">

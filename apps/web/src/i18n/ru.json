@@ -1538,5 +1538,8 @@
   "Camera preview": "Изображение с камеры",
   "Camera access is unavailable. Use HTTPS or localhost and allow camera access.": "Камера недоступна. Откройте приложение через HTTPS или localhost и разрешите доступ к камере.",
   "Camera permission was denied. Allow camera access in your browser settings.": "Доступ к камере запрещён. Разрешите его в настройках браузера.",
-  "Could not start the camera. Check that it is connected and not in use.": "Не удалось включить камеру. Проверьте подключение и убедитесь, что её не использует другое приложение."
+  "Could not start the camera. Check that it is connected and not in use.": "Не удалось включить камеру. Проверьте подключение и убедитесь, что её не использует другое приложение.",
+  "Point your camera at each barcode. Scanning continues until you close this window.": "Наведите камеру на каждый штрихкод. Сканирование продолжится, пока вы не закроете это окно.",
+  "This code matches multiple products. Select the correct product.": "Этот код соответствует нескольким товарам. Выберите нужный товар.",
+  "No active product matches this barcode. Check the code or select a product.": "По этому штрихкоду не найден активный товар. Проверьте код или выберите товар вручную."
 }

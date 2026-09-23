@@ -407,6 +407,41 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   const [search, setSearch] = useState(''),
     [category, setCategory] = useState('All products');
   const [message, setMessage] = useState('');
+  const scanSound = useRef<AudioContext | null>(null);
+  useEffect(
+    () => () => {
+      void scanSound.current?.close();
+    },
+    [],
+  );
+  function prepareScanSound() {
+    try {
+      scanSound.current ??= new AudioContext();
+      void scanSound.current.resume();
+    } catch {
+      // Checkout still works if this device has no audio output.
+    }
+  }
+  function playScanSound() {
+    prepareScanSound();
+    const audio = scanSound.current;
+    if (!audio) return;
+    const start = audio.currentTime;
+    for (const [index, frequency] of [880, 1320].entries()) {
+      const oscillator = audio.createOscillator();
+      const volume = audio.createGain();
+      const from = start + index * 0.09;
+      oscillator.type = 'sine';
+      oscillator.frequency.value = frequency;
+      volume.gain.setValueAtTime(0.0001, from);
+      volume.gain.exponentialRampToValueAtTime(0.12, from + 0.01);
+      volume.gain.exponentialRampToValueAtTime(0.0001, from + 0.08);
+      oscillator.connect(volume).connect(audio.destination);
+      oscillator.start(from);
+      oscillator.stop(from + 0.09);
+    }
+  }
+
   const [modal, setModal] = useState<
     'payment' | 'start' | 'close' | 'cash' | 'held' | 'history' | null
   >(null);
@@ -525,13 +560,11 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     if (['piece', 'pack', 'box'].includes(p.unit)) add(p);
     else setWeighted(p);
   }
-  function scanItem(e: FormEvent) {
-    e.preventDefault();
+  function scanCode(term: string) {
     if (noShift) {
       setMessage('Start your shift before adding items to the cart.');
       return;
     }
-    const term = search.trim();
     if (frozen) return;
     if (scaleProfile.isPending || scaleProfile.error) {
       setMessage('Store barcode settings are unavailable. Retry when connected.');
@@ -561,6 +594,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
           return;
         }
         add(matching[0], amount);
+        playScanSound();
         return;
       }
     } catch (error) {
@@ -570,10 +604,18 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     const exact =
       catalog.data?.filter((p) => p.barcodes.includes(term) || p.sku === term || p.plu === term) ??
       [];
-    if (exact.length === 1) choose(exact[0]);
-    else if (exact.length > 1)
+    if (exact.length === 1) {
+      if (['piece', 'pack', 'box'].includes(exact[0].unit)) {
+        add(exact[0]);
+        playScanSound();
+      } else choose(exact[0]);
+    } else if (exact.length > 1)
       setMessage('This code matches multiple products. Select the correct product below.');
     else setMessage('Barcode not registered. Search by product name or ask a manager to add it.');
+  }
+  function scanItem(e: FormEvent) {
+    e.preventDefault();
+    scanCode(search.trim());
   }
   function submitPayment(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -722,10 +764,9 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
             />
             <CameraBarcodeScanner
               disabled={frozen || noShift}
-              onScan={(code) => {
-                setSearch(code);
-                setMessage('');
-              }}
+              continuous
+              onOpen={prepareScanSound}
+              onScan={scanCode}
             />
             <kbd>{t('Enter')}</kbd>
           </form>
