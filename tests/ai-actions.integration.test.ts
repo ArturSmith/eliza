@@ -112,6 +112,31 @@ describe('approved AI writes', () => {
       if (originalKey === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = originalKey;
     }
   });
+  it('deletes scans without deleting chats and deletes chats without deleting saved records', async () => {
+    const deviceId = (await db.pool.query('SELECT id FROM devices WHERE store_id=$1 LIMIT 1', [storeId])).rows[0].id;
+    const scanId = (await db.pool.query(
+      `INSERT INTO scanned_documents(store_id,created_by,device_id,filename,mime_type,original_file,extracted,edited,validation,document_type)
+       VALUES($1,$2,$3,'invoice.png','image/png',$4,'{}','{}','{}','invoice') RETURNING id`,
+      [storeId, employeeId, deviceId, Buffer.from('test')],
+    )).rows[0].id;
+    const conversation = (await request('/ai/conversations', {})).body.id;
+    const attachedMessage = (await db.pool.query(
+      "INSERT INTO ai_messages(store_id,conversation_id,role,content,document_id) VALUES($1,$2,'user','Please read this',$3) RETURNING id",
+      [storeId, conversation, scanId],
+    )).rows[0].id;
+    const deleteRequest = async (path: string) => {
+      const response = await fetch(url + '/api' + path, { method: 'DELETE', headers: { Origin: 'http://localhost:5173', 'X-Eliza-Request': '1', Cookie: cookies } });
+      return { status: response.status, body: await response.json() };
+    };
+    expect((await deleteRequest('/documents/' + scanId)).body.deleted).toBe(true);
+    expect((await request('/documents/' + scanId)).status).toBe(404);
+    expect((await db.pool.query('SELECT document_id FROM ai_messages WHERE id=$1', [attachedMessage])).rows[0].document_id).toBeNull();
+    expect((await request('/ai/conversations/' + conversation)).status).toBe(200);
+    expect((await deleteRequest('/ai/conversations/' + conversation)).body.deleted).toBe(true);
+    expect((await request('/ai/conversations/' + conversation)).status).toBe(404);
+    expect((await db.pool.query('SELECT 1 FROM ai_messages WHERE conversation_id=$1', [conversation])).rowCount).toBe(0);
+    expect((await db.pool.query('SELECT count(*)::int AS count FROM purchases')).rows[0].count).toBeGreaterThan(0);
+  });
   it('rejects a proposal without writing a record', async () => {
     const id = await proposal('supplier', { code: 'AI-DECLINED', name: 'Declined supplier' });
     const rejected = await request('/ai/actions/' + id + '/reject', {});

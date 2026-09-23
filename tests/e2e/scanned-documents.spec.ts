@@ -78,6 +78,7 @@ test('scans, edits, saves, and reopens a digital invoice inside Eliza AI', async
     return route.fulfill({ json: { conversation, messages } });
   });
   await page.route('**/api/documents/**', (route) => {
+    if (route.request().method() === 'DELETE') { record = null; return route.fulfill({ json: { deleted: true } }); }
     if (route.request().url().endsWith('/file')) return route.fulfill({ contentType: 'image/png', body: pixel });
     if (route.request().url().endsWith('/save')) {
       record = { ...record, edited: route.request().postDataJSON().data, status: 'saved', version: record.version + 1 };
@@ -146,4 +147,8 @@ test('scans, edits, saves, and reopens a digital invoice inside Eliza AI', async
   await expect(page).toHaveURL(/\/digital-purchases\?id=/);
   await expect(page.locator('.document-paper')).toContainText('9 192,00');
   await expect(page.getByRole('link', { name: 'Open in Eliza AI' })).toHaveAttribute('href', '/ai?document=' + id);
+  await page.getByRole('button', { name: 'Delete', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Delete digital purchase?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Delete digital purchase', exact: true }).click();
+  await expect(page.getByText('No digital purchases yet. Upload a supplier document in Eliza AI to get started.')).toBeVisible();
 });

@@ -33,6 +33,7 @@ test('asks Eliza AI, displays a sales table, reopens history and attaches a docu
   const proposal = { id: 'd83b9de1-04ea-469b-b8d2-61976eb1526b', kind: 'supplier', operation: 'create', summary: 'Create the reviewed supplier', payload: { code: 'NEW-SUP', name: 'New supplier', phone: '+7 969 722-22-22' }, status: 'pending' };
   await page.route('**/api/ai/**', async (route) => {
     const { pathname } = new URL(route.request().url());
+    if (route.request().method() === 'DELETE' && pathname.endsWith('/ai/conversations/' + conversationId)) { exists = false; messages = []; return route.fulfill({ json: { deleted: true } }); }
     if (pathname.endsWith('/approve')) { proposal.status = 'applied'; return route.fulfill({ json: { ...proposal, result: { id: crypto.randomUUID() } } }); }
     if (pathname.endsWith('/ai/conversations') && route.request().method() === 'GET')
       return route.fulfill({ json: exists ? [conversation] : [] });
@@ -108,4 +109,8 @@ test('asks Eliza AI, displays a sales table, reopens history and attaches a docu
   await page.getByRole('button', { name: 'Send' }).click();
   await expect(page.getByRole('button', { name: /Open scanned document/ }).first()).toBeVisible();
   expect(sentDocument).toBe(documentId);
+  await page.getByRole('button', { name: 'Delete conversation: Sales this month' }).click();
+  await expect(page.getByRole('heading', { name: 'Delete conversation?' })).toBeVisible();
+  await page.getByRole('button', { name: 'Delete conversation', exact: true }).click();
+  await expect(page.getByText('No conversations yet.')).toBeVisible();
 });

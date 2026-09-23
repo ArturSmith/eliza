@@ -1506,5 +1506,12 @@
   "supplier": "поставщика",
   "product": "товар",
   "purchase": "закупку",
-  "Eliza will generate: {value0}": "Eliza создаст автоматически: {value0}"
+  "Eliza will generate: {value0}": "Eliza создаст автоматически: {value0}",
+  "Delete digital purchase?": "Удалить цифровую закупку?",
+  "Delete digital purchase": "Удалить цифровую закупку",
+  "The scan and extracted details will be permanently deleted. Chat messages stay, but their document attachment will no longer open. Purchase orders are unaffected.": "Скан и извлечённые данные будут удалены без возможности восстановления. Сообщения в чате останутся, но документ в них больше не откроется. Заказы на закупку не изменятся.",
+  "Delete conversation?": "Удалить диалог?",
+  "Delete conversation": "Удалить диалог",
+  "This permanently deletes the chat and its pending actions. Saved digital purchases, products, suppliers and purchase orders remain.": "Диалог и ожидающие подтверждения действия будут удалены без возможности восстановления. Сохранённые цифровые закупки, товары, поставщики и заказы на закупку останутся.",
+  "Deleting…": "Удаление…"
 }

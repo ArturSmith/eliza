@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Module,
   Param,
@@ -97,6 +98,32 @@ export class ScannedDocumentsController {
     res.setHeader('Content-Disposition', 'inline');
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.send(row.original_file);
+  }
+  @Delete(':id') @Require('purchases.write') async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    const client = await this.database.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const document = await client.query(
+        'SELECT id FROM scanned_documents WHERE id=$1 AND store_id=$2 FOR UPDATE',
+        [id, req.context.store.id],
+      );
+      if (!document.rowCount) throw new NotFoundException('Document not found.');
+      await client.query(
+        'UPDATE ai_messages SET document_id=NULL WHERE document_id=$1 AND store_id=$2',
+        [id, req.context.store.id],
+      );
+      await client.query('DELETE FROM scanned_documents WHERE id=$1 AND store_id=$2', [id, req.context.store.id]);
+      await client.query('COMMIT');
+      return { deleted: true };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
   @Post('scan') @Require('purchases.write') async scan(
     @Body() input: unknown,

@@ -3982,3 +3982,17 @@ input.shopping-section-title {
 .ai-action-buttons { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
 .ai-action-card > a { display: inline-block; margin-top: 12px; color: #286d4e; text-decoration: underline; }
 @media (max-width: 640px) { .ai-action-card dl { grid-template-columns: 1fr; } }
+
+/* Delete controls for Eliza AI history and digital purchases */
+.ai-history-row { display: flex; align-items: center; gap: 3px; }
+.ai-history-row > button:first-child { flex: 1; min-width: 0; }
+.ai-history-list .ai-history-delete { flex: none; width: 36px; padding: 10px; color: #8b5b52; }
+.ai-history-list .ai-history-delete:hover { background: #fff0ed; }
+.digital-purchases-row { display: flex; align-items: stretch; border-bottom: 1px solid #e5ebe2; }
+.digital-purchases-row:last-child { border-bottom: 0; }
+.digital-purchases-row .digital-purchases-item { flex: 1; min-width: 0; border-bottom: 0; }
+.digital-purchases-delete { display: grid; place-items: center; align-self: center; flex: none; width: 40px; height: 40px; margin-right: 18px; border: 0; border-radius: 9px; color: #8b5b52; background: transparent; cursor: pointer; }
+.digital-purchases-delete:hover { background: #fff0ed; }
+.digital-purchases-actions, .dialog-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.dialog-actions { justify-content: flex-end; margin-top: 24px; }
+@media (max-width: 640px) { .digital-purchases-delete { margin-right: 8px; } }

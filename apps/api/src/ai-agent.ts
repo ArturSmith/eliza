@@ -3,6 +3,7 @@ import {
   Body,
   ConflictException,
   Controller,
+  Delete,
   Get,
   HttpException,
   Injectable,
@@ -336,6 +337,17 @@ export class AiAgentController {
       },
       messages: messages.map((message) => ({ ...message, actions: actionsByMessage.get(message.id) ?? [] })),
     };
+  }
+  @Delete('conversations/:id') async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    const deleted = await this.database.pool.query(
+      'DELETE FROM ai_conversations WHERE id=$1 AND store_id=$2 AND employee_id=$3 RETURNING id',
+      [id, req.context.store.id, req.context.user.id],
+    );
+    if (!deleted.rowCount) throw new NotFoundException('Conversation not found.');
+    return { deleted: true };
   }
   @Post('actions/:id/approve') async approve(
     @Param('id', ParseUUIDPipe) id: string,

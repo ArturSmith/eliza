@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowUp, ChevronDown, ChevronUp, Clock3, FileText, Paperclip, Plus, Sparkles, X } from 'lucide-react';
+import { ArrowUp, ChevronDown, ChevronUp, Clock3, FileText, Paperclip, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { api, queryClient, useProducts, useSession } from './api';
 import { ErrorMessage } from './forms';
+import { Dialog } from './components/ui/dialog';
 import { t, useLanguage } from './i18n';
 import { DocumentViewer, type DocumentRecord } from './scanned-documents';
 
@@ -163,6 +164,9 @@ export function AiAgentPage() {
   const [streamed, setStreamed] = useState('');
   const [localMessages, setLocalMessages] = useState<Message[] | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const [deletingConversation, setDeletingConversation] = useState<Conversation | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<unknown>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const end = useRef<HTMLDivElement>(null);
   const thread = useRef<HTMLDivElement>(null);
@@ -216,6 +220,18 @@ export function AiAgentPage() {
     const search = new URLSearchParams(window.location.search);
     if (next) search.set('document', next); else search.delete('document');
     window.history.replaceState(null, '', '/ai' + (search.size ? '?' + search.toString() : ''));
+  }
+  async function removeConversation() {
+    if (!deletingConversation) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      await api('/ai/conversations/' + deletingConversation.id, undefined, 'DELETE');
+      queryClient.removeQueries({ queryKey: ['ai-conversation', deletingConversation.id] });
+      await queryClient.invalidateQueries({ queryKey: ['ai-conversations'] });
+      if (id === deletingConversation.id) selectConversation('');
+      setDeletingConversation(null);
+    } catch (error) { setDeleteError(error); } finally { setDeleteBusy(false); }
   }
   function selectConversation(next: string) {
     setId(next);
@@ -361,15 +377,12 @@ export function AiAgentPage() {
           <span className="ai-history-label">{t('Recent conversations')}</span>
           <ErrorMessage error={history.error} />
           {history.data?.map((item) => (
-            <button
-              type="button"
-              className={id === item.id ? 'active' : ''}
-              key={item.id}
-              onClick={() => selectConversation(item.id)}
-            >
-              <Clock3 size={15} />
-              <span>{item.title}</span>
-            </button>
+            <div className="ai-history-row" key={item.id}>
+              <button type="button" className={id === item.id ? 'active' : ''} onClick={() => selectConversation(item.id)}>
+                <Clock3 size={15} /><span>{item.title}</span>
+              </button>
+              <button type="button" className="ai-history-delete" aria-label={t('Delete conversation') + ': ' + item.title} onClick={() => setDeletingConversation(item)}><Trash2 size={16} /></button>
+            </div>
           ))}
           {history.data?.length === 0 && <p>{t('No conversations yet.')}</p>}
         </div>
@@ -580,6 +593,10 @@ export function AiAgentPage() {
           </p>
         </div>
       </main>
+      <Dialog open={!!deletingConversation} onOpenChange={(open) => { if (!open && !deleteBusy) { setDeletingConversation(null); setDeleteError(null); } }} title={t('Delete conversation?')} description={t('This permanently deletes the chat and its pending actions. Saved digital purchases, products, suppliers and purchase orders remain.')}>
+        <ErrorMessage error={deleteError} />
+        <div className="dialog-actions"><button type="button" className="button button-outline" disabled={deleteBusy} onClick={() => setDeletingConversation(null)}>{t('Cancel')}</button><button type="button" className="button button-danger" disabled={deleteBusy} onClick={() => void removeConversation()}>{deleteBusy ? t('Deleting…') : t('Delete conversation')}</button></div>
+      </Dialog>
     </div>
   );
 }
