@@ -96,7 +96,6 @@ export function DocumentViewer({
     } catch (error) { setError(error); }
   }
   const productFields: { key: keyof DocumentProduct; label: string; multiline?: boolean }[] = [
-    { key: 'name', label: t('Product name') },
     { key: 'barcode', label: t('Barcode') },
     { key: 'sku', label: t('SKU') },
     { key: 'plu', label: t('PLU') },
@@ -435,7 +434,10 @@ export function DocumentViewer({
                               cell,
                               (value) =>
                                 change((draft) => {
-                                  draft.tables[tableIndex].rows[rowIndex].cells[cellIndex] = value;
+                                  const changedRow = draft.tables[tableIndex].rows[rowIndex];
+                                changedRow.cells[cellIndex] = value;
+                                if (cellIndex === productIndex(draft.tables[tableIndex]) && changedRow.product)
+                                  changedRow.product.name = value;
                                 }),
                               table.columns[cellIndex]?.label || t('Cell'),
                               record.extracted.tables[tableIndex]?.rows[rowIndex]?.cells[cellIndex],

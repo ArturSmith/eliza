@@ -75,7 +75,7 @@ export async function stageDocumentProductProposal(
   if (!row?.product) return { error: 'Fill the product details in this row and save the document.' };
   const product = row.product;
   const productColumn = table.columns.findIndex((column) => /^(product|item|товар|наименование)$/i.test(column.key) || /^(product|item|товар|наименование)$/i.test(column.label.trim()));
-  const name = product.name.trim() || (productColumn >= 0 ? (row.cells[productColumn] || '').trim() : '');
+  const name = productColumn >= 0 ? (row.cells[productColumn] || '').trim() : product.name.trim();
   const missing = [
     !name && 'name', !product.category && 'category', !product.unit && 'unit',
     !product.price && 'selling price', !product.cost && 'unit cost',

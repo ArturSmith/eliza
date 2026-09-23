@@ -3870,8 +3870,8 @@ input.shopping-section-title {
 .ai-document-card { display: inline-flex; align-items: center; gap: 12px; max-width: 100%; margin-top: 12px; padding: 10px 14px; border: 1px solid #dce6da; border-radius: 12px; color: #264432; text-decoration: none; }
 .ai-document-card:hover { background: #f5faf3; }
 .ai-document-card small { display: block; margin-top: 2px; color: #748074; font-size: .76rem; }
-.ai-composer-wrap { position: absolute; z-index: 2; right: 0; bottom: 0; left: 0; width: min(calc(100% - 40px), 900px); margin: 0 auto; padding-top: 20px; background: linear-gradient(to bottom, transparent, #fff 20px); }
-.ai-composer { padding: 13px 15px 10px; border: 1px solid #dce5da; border-radius: 20px; box-shadow: 0 5px 25px rgba(30, 55, 38, .07); background: white; }
+.ai-composer-wrap { position: absolute; z-index: 2; right: 0; bottom: 0; left: 0; width: min(calc(100% - 40px), 900px); margin: 0 auto; }
+.ai-composer { padding: 13px 15px 10px; border: 1px solid #dce5da; border-radius: 20px; background: white; }
 .ai-composer:focus-within { border-color: #86ad8a; }
 .ai-composer textarea { display: block; width: 100%; min-height: 48px; max-height: 190px; resize: vertical; padding: 4px; border: 0; outline: 0; background: transparent; color: #26372c; font: inherit; }
 .ai-composer textarea::placeholder { color: #929e92; }

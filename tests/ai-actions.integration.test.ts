@@ -119,7 +119,7 @@ describe('approved AI writes', () => {
     const edited = {
       documentType: 'invoice', language: 'en', title: 'Supplier invoice', number: 'A-1', date: '', currency: 'NOK', summary: '', pages: 1,
       parties: [], fields: [], sections: [], additionalText: [], annotations: [], printedTotal: '', extractionWarnings: [],
-      tables: [{ id: 'items', title: 'Items', columns: [{ key: 'product', label: 'Product', kind: 'text' }], footerRows: [], rows: [{ rowNumber: '1', cells: ['Test biscuits'], product: { name: 'Test biscuits', sku: '', barcode: '5449000000996', plu: '', image, description: 'Small pack', category: 'Snacks', unit: 'piece', price: '15', cost: '10', taxRate: '0', minStock: '0' } }] }],
+      tables: [{ id: 'items', title: 'Items', columns: [{ key: 'product', label: 'Product', kind: 'text' }], footerRows: [], rows: [{ rowNumber: '1', cells: ['Test biscuits'], product: { name: 'Old duplicated name', sku: '', barcode: '5449000000996', plu: '', image, description: 'Small pack', category: 'Snacks', unit: 'piece', price: '15', cost: '10', taxRate: '0', minStock: '0' } }] }],
     };
     const scanId = (await db.pool.query(
       `INSERT INTO scanned_documents(store_id,created_by,device_id,filename,mime_type,original_file,extracted,edited,validation,document_type,status)
@@ -128,7 +128,7 @@ describe('approved AI writes', () => {
     )).rows[0].id;
     const actor = { context: { store: { id: storeId }, user: { id: employeeId, permissions: ['catalog.write', 'purchases.read'] } } } as any;
     const readable = await executeAiTool(db, actor, 'document_details', { id: scanId }) as any;
-    expect(readable.edited.tables[0].rows[0].product).toMatchObject({ name: 'Test biscuits', barcode: '5449000000996', image: '[uploaded image available for product proposal]' });
+    expect(readable.edited.tables[0].rows[0].product).toMatchObject({ name: 'Old duplicated name', barcode: '5449000000996', image: '[uploaded image available for product proposal]' });
     const draft = await stageDocumentProductProposal(db, actor, { documentId: scanId, tableIndex: 0, rowIndex: 0 });
     expect(draft).toMatchObject({ kind: 'product', operation: 'create', payload: { name: 'Test biscuits', image, barcodes: ['5449000000996'], autoSku: true, autoPlu: true } });
     expect((await db.pool.query("SELECT count(*)::int AS count FROM products WHERE name='Test biscuits'")).rows[0].count).toBe(0);

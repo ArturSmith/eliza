@@ -62,7 +62,9 @@ test('scans, edits, saves, and reopens a digital invoice inside Eliza AI', async
   let record: any = null;
   const conversation = { id: '17bf1957-f17b-4e22-9c29-a67757292e60', title: 'Invoice', created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
   let messages: any[] = [];
-  await page.route('**/api/ai/**', (route) => {
+  let releaseAnswer = () => {};
+  const answerGate = new Promise<void>((resolve) => { releaseAnswer = resolve; });
+  await page.route('**/api/ai/**', async (route) => {
     const pathname = new URL(route.request().url()).pathname;
     if (pathname.endsWith('/messages/stream')) {
       const input = route.request().postDataJSON();
@@ -72,6 +74,7 @@ test('scans, edits, saves, and reopens a digital invoice inside Eliza AI', async
         { id: crypto.randomUUID(), role: 'assistant', content: 'I scanned the invoice. Review and save the digital document below.', document_id: id, created_at: conversation.created_at },
       ];
       messages.push(...pair);
+      await answerGate;
       return route.fulfill({ contentType: 'text/event-stream', body: 'event: done\ndata: ' + JSON.stringify({ conversation, messages: pair }) + '\n\n' });
     }
     if (pathname.endsWith('/conversations') && route.request().method() === 'POST') return route.fulfill({ json: conversation });
@@ -100,7 +103,17 @@ test('scans, edits, saves, and reopens a digital invoice inside Eliza AI', async
   const paper = page.locator('.ai-digital-document .document-paper');
   await expect(paper.getByRole('heading', { name: 'Реализация товаров № U2-12670' })).toBeVisible();
   await expect(paper.locator('tbody tr')).toHaveCount(9);
+  await expect(paper.getByRole('columnheader', { name: 'Product name' })).toHaveCount(0);
   await expect(page.getByText('Draft digital document')).toBeVisible();
+  await expect(page.locator('.ai-pending')).toBeVisible();
+  await expect(page.locator('.ai-thinking')).toBeVisible();
+  expect(await page.locator('.ai-pending').evaluate((element) => Boolean(element.compareDocumentPosition(document.querySelector('.ai-digital-document')) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+  releaseAnswer();
+  const reply = page.locator('.ai-message-assistant:not(.ai-streaming)').last();
+  await expect(reply).toContainText('I scanned the invoice.');
+  expect(await reply.evaluate((element) => Boolean(element.compareDocumentPosition(document.querySelector('.ai-digital-document')) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+  await expect(reply).toBeInViewport();
+
   await page.getByRole('button', { name: 'Collapse document' }).click();
   await expect(paper).toBeHidden();
   await page.getByRole('button', { name: 'Expand document' }).click();

@@ -212,7 +212,15 @@ export function AiAgentPage() {
   }, []);
   useEffect(() => {
     const node = thread.current;
-    if (node) node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' });
+    if (!node) return;
+    const replies = node.querySelectorAll<HTMLElement>('.ai-message-assistant:not(.ai-streaming)');
+    const anchor = node.querySelector<HTMLElement>('.ai-streaming')
+      ?? (busy ? node.querySelector<HTMLElement>('.ai-thinking') : null)
+      ?? (activeDocumentId ? replies[replies.length - 1] : null);
+    if (anchor) {
+      const top = node.scrollTop + anchor.getBoundingClientRect().bottom - node.getBoundingClientRect().bottom + 24;
+      node.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+    } else node.scrollTo({ top: node.scrollHeight, behavior: 'smooth' });
   }, [detail.data, localMessages, pending, streamed, busy]);
   const messages = localMessages ?? detail.data?.messages ?? [];
   const chosen = documents.data?.find((doc) => doc.id === documentId);
@@ -449,6 +457,27 @@ export function AiAgentPage() {
                 )}
               </div>
             ))}
+            {pending && (
+              <div className="ai-message ai-message-user ai-pending">
+                <div className="ai-message-label">{t('You')}</div>
+                <div className="ai-message-body">
+                  <p>{pending}</p>
+                </div>
+              </div>
+            )}
+            {streamed && (
+              <div className="ai-message ai-message-assistant ai-streaming">
+                <div className="ai-message-label">{t('Eliza AI')}</div>
+                <div className="ai-message-body">{messageContent(streamed)}</div>
+              </div>
+            )}
+            {busy && !streamed && (
+              <div className="ai-thinking" role="status">
+                <span className="thinking-dots">
+                  {file ? t('Reading your document…') : t('Thinking…')}
+                </span>
+              </div>
+            )}
             {activeDocumentId && canDocuments && (
               <div className="ai-digital-document" id="digital-document">
                 <div className="ai-digital-heading">
@@ -469,27 +498,6 @@ export function AiAgentPage() {
                     void queryClient.invalidateQueries({ queryKey: ['scanned-documents'] });
                   }} />}
                 </div>
-              </div>
-            )}
-            {pending && (
-              <div className="ai-message ai-message-user ai-pending">
-                <div className="ai-message-label">{t('You')}</div>
-                <div className="ai-message-body">
-                  <p>{pending}</p>
-                </div>
-              </div>
-            )}
-            {streamed && (
-              <div className="ai-message ai-message-assistant ai-streaming">
-                <div className="ai-message-label">{t('Eliza AI')}</div>
-                <div className="ai-message-body">{messageContent(streamed)}</div>
-              </div>
-            )}
-            {busy && !streamed && (
-              <div className="ai-thinking" role="status">
-                <span className="thinking-dots">
-                  {file ? t('Reading your document…') : t('Thinking…')}
-                </span>
               </div>
             )}
             <div ref={end} />
