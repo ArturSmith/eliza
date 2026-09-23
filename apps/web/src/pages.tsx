@@ -54,6 +54,7 @@ import { AuthForm, AddProduct, ProductForm, AdjustmentForm, ErrorMessage, Field 
 import { ProductSuppliers } from './supplier-products';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
+import { CameraBarcodeScanner } from './camera-barcode-scanner';
 const navGroups = [
   {
     label: 'Workspace',
@@ -89,7 +90,12 @@ const navGroups = [
         permission: 'purchases.read',
       },
       { to: '/purchases', label: 'Purchases', icon: Truck, permission: 'purchases.read' },
-      { to: '/digital-purchases', label: 'Digital purchases', icon: FileText, permission: 'purchases.read' },
+      {
+        to: '/digital-purchases',
+        label: 'Digital purchases',
+        icon: FileText,
+        permission: 'purchases.read',
+      },
       { to: '/suppliers', label: 'Suppliers', icon: Store, permission: 'suppliers.read' },
     ],
   },
@@ -736,6 +742,7 @@ export function ProductsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+            <CameraBarcodeScanner onScan={setSearch} />
           </div>
           <select
             aria-label={t('Filter category')}
@@ -844,7 +851,10 @@ export function ProductsPage() {
                             variant="ghost"
                             size="icon"
                             aria-label={t('Delete {value0}', { value0: p.name })}
-                            onClick={() => { removal.reset(); setRemove(p); }}
+                            onClick={() => {
+                              removal.reset();
+                              setRemove(p);
+                            }}
                           >
                             <Trash2 size={15} />
                           </Button>
@@ -892,15 +902,27 @@ export function ProductsPage() {
       </Dialog>
       <Dialog
         open={!!remove}
-        onOpenChange={(open) => { if (!open && !removal.isPending) setRemove(null); }}
+        onOpenChange={(open) => {
+          if (!open && !removal.isPending) setRemove(null);
+        }}
         title={t('Delete product?')}
-        description={t('Only products with zero stock and no sales, purchase, inventory, count or list history can be deleted. Deactivate products that must remain in your records.')}
+        description={t(
+          'Only products with zero stock and no sales, purchase, inventory, count or list history can be deleted. Deactivate products that must remain in your records.',
+        )}
       >
         <p className="confirm-name">{remove?.name}</p>
         <ErrorMessage error={removal.error} />
         <div className="form-actions">
-          <Button variant="outline" disabled={removal.isPending} onClick={() => setRemove(null)}>{t('Cancel')}</Button>
-          <Button variant="destructive" disabled={removal.isPending} onClick={() => remove && removal.mutate(remove)}>{removal.isPending ? t('Deleting…') : t('Delete product')}</Button>
+          <Button variant="outline" disabled={removal.isPending} onClick={() => setRemove(null)}>
+            {t('Cancel')}
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={removal.isPending}
+            onClick={() => remove && removal.mutate(remove)}
+          >
+            {removal.isPending ? t('Deleting…') : t('Delete product')}
+          </Button>
         </div>
       </Dialog>
       <Dialog

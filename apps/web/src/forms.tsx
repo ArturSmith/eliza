@@ -27,6 +27,7 @@ import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { prepareProductImage } from './product-image';
 import { BarcodeLookup } from './barcode-lookup';
+import { CameraBarcodeScanner } from './camera-barcode-scanner';
 export function ErrorMessage({ error }: { error: unknown }) {
   useLanguage();
   return error ? (
@@ -580,12 +581,15 @@ export function ProductForm({
         label={t('Barcodes (optional)')}
         hint={t('Add one per line, or separate with commas. Products can have no barcode.')}
       >
-        <textarea
-          name="barcodes"
-          rows={2}
-          defaultValue={(initial?.barcodes ?? prefill?.barcodes)?.join('\n')}
-          placeholder={t('Scan or enter a barcode')}
-        />
+        <div className="barcode-input-with-camera">
+          <textarea
+            name="barcodes"
+            rows={2}
+            defaultValue={(initial?.barcodes ?? prefill?.barcodes)?.join('\n')}
+            placeholder={t('Scan or enter a barcode')}
+          />
+          <CameraBarcodeScanner onScan={(code) => fillField('barcodes', code, true)} />
+        </div>
       </Field>
       {!initial && (
         <p className="muted">

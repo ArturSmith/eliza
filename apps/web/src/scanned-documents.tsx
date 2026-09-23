@@ -1,9 +1,15 @@
 import { useEffect, useState } from 'react';
-import { type DocumentData, type DocumentProduct, type DocumentValidation, validateDocument } from '@eliza/contracts';
+import {
+  type DocumentData,
+  type DocumentProduct,
+  type DocumentValidation,
+  validateDocument,
+} from '@eliza/contracts';
 import { api, queryClient } from './api';
 import { t, useLanguage } from './i18n';
 import { ErrorMessage } from './forms';
 import { Button } from './components/ui/button';
+import { CameraBarcodeScanner } from './camera-barcode-scanner';
 
 export type DocumentRecord = {
   id: string;
@@ -57,10 +63,17 @@ export function DocumentViewer({
     });
   }
   function productIndex(table: DocumentData['tables'][number]) {
-    return table.columns.findIndex((column) => /^(product|item|товар|наименование)$/i.test(column.key) || /^(product|item|товар|наименование)$/i.test(column.label.trim()));
+    return table.columns.findIndex(
+      (column) =>
+        /^(product|item|товар|наименование)$/i.test(column.key) ||
+        /^(product|item|товар|наименование)$/i.test(column.label.trim()),
+    );
   }
   function costIndex(table: DocumentData['tables'][number]) {
-    return table.columns.findIndex((column) => column.kind === 'price' || /^(unit cost|unit price|price|цена)$/i.test(column.label.trim()));
+    return table.columns.findIndex(
+      (column) =>
+        column.kind === 'price' || /^(unit cost|unit price|price|цена)$/i.test(column.label.trim()),
+    );
   }
   function productValue(tableIndex: number, rowIndex: number, key: keyof DocumentProduct) {
     const table = data.tables[tableIndex];
@@ -70,17 +83,38 @@ export function DocumentViewer({
     if (key === 'cost') return table.rows[rowIndex].cells[costIndex(table)] || '';
     return '';
   }
-  function setProductValue(tableIndex: number, rowIndex: number, key: keyof DocumentProduct, value: string) {
+  function setProductValue(
+    tableIndex: number,
+    rowIndex: number,
+    key: keyof DocumentProduct,
+    value: string,
+  ) {
     change((draft) => {
       const table = draft.tables[tableIndex];
       const row = table.rows[rowIndex];
-      row.product ??= { name: row.cells[productIndex(table)] || '', sku: '', barcode: '', plu: '', image: '', description: '', category: '', unit: '', price: '', cost: row.cells[costIndex(table)] || '', taxRate: '', minStock: '' };
+      row.product ??= {
+        name: row.cells[productIndex(table)] || '',
+        sku: '',
+        barcode: '',
+        plu: '',
+        image: '',
+        description: '',
+        category: '',
+        unit: '',
+        price: '',
+        cost: row.cells[costIndex(table)] || '',
+        taxRate: '',
+        minStock: '',
+      };
       row.product[key] = value;
     });
   }
   async function addProductImage(tableIndex: number, rowIndex: number, file?: File) {
     if (!file) return;
-    if (!file.type.startsWith('image/')) { setError(new Error(t('Choose an image file.'))); return; }
+    if (!file.type.startsWith('image/')) {
+      setError(new Error(t('Choose an image file.')));
+      return;
+    }
     try {
       const bitmap = await createImageBitmap(file);
       const scale = Math.min(1, 260 / Math.max(bitmap.width, bitmap.height));
@@ -93,7 +127,9 @@ export function DocumentViewer({
       if (image.length > 60000) throw new Error(t('Choose a smaller product photo.'));
       setProductValue(tableIndex, rowIndex, 'image', image);
       setError(null);
-    } catch (error) { setError(error); }
+    } catch (error) {
+      setError(error);
+    }
   }
   const productFields: { key: keyof DocumentProduct; label: string; multiline?: boolean }[] = [
     { key: 'barcode', label: t('Barcode') },
@@ -158,27 +194,43 @@ export function DocumentViewer({
     <section className="scanned-document-result">
       <div className="document-result-toolbar">
         <div>
-          <span className={validation.incomplete ? 'document-review-badge' : 'document-scan-badge'}>{validation.incomplete ? '⚠ ' + t('Review required') : '✓ ' + t('Scan complete')}</span>
+          <span className={validation.incomplete ? 'document-review-badge' : 'document-scan-badge'}>
+            {validation.incomplete ? '⚠ ' + t('Review required') : '✓ ' + t('Scan complete')}
+          </span>
           <span className="document-type-badge">{data.documentType || t('Document')}</span>
         </div>
         <div className="document-result-actions">
-          <span className={record.status === 'draft' ? 'document-review-badge' : 'document-scan-badge'}>{record.status === 'draft' ? t('Draft digital document') : t('Saved digital document')}</span>
+          <span
+            className={record.status === 'draft' ? 'document-review-badge' : 'document-scan-badge'}
+          >
+            {record.status === 'draft' ? t('Draft digital document') : t('Saved digital document')}
+          </span>
           <Button type="button" variant="outline" onClick={() => window.print()}>
             {t('Export PDF')}
           </Button>
-          {canEdit && <Button
-            type="button"
-            variant="outline"
-            onClick={() => {
-              setData(structuredClone(record.edited));
-              setEditing(!editing);
-            }}
-          >
-            {editing ? t('Cancel editing') : t('Edit document')}
-          </Button>}
+          {canEdit && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setData(structuredClone(record.edited));
+                setEditing(!editing);
+              }}
+            >
+              {editing ? t('Cancel editing') : t('Edit document')}
+            </Button>
+          )}
           {editing && (
-            <Button type="button" disabled={busy || (!changed && record.status !== 'draft')} onClick={() => void save()}>
-              {busy ? t('Saving…') : record.status === 'draft' ? t('Save digital document') : t('Save corrections')}
+            <Button
+              type="button"
+              disabled={busy || (!changed && record.status !== 'draft')}
+              onClick={() => void save()}
+            >
+              {busy
+                ? t('Saving…')
+                : record.status === 'draft'
+                  ? t('Save digital document')
+                  : t('Save corrections')}
             </Button>
           )}
         </div>
@@ -200,7 +252,11 @@ export function DocumentViewer({
         <article className="document-paper">
           <header className="document-paper-header">
             <div className="document-paper-heading">
-              <span className={validation.incomplete ? 'document-review-badge' : 'document-scan-badge'}>{validation.incomplete ? '⚠ ' + t('Review required') : '✓ ' + t('Scan complete')}</span>
+              <span
+                className={validation.incomplete ? 'document-review-badge' : 'document-scan-badge'}
+              >
+                {validation.incomplete ? '⚠ ' + t('Review required') : '✓ ' + t('Scan complete')}
+              </span>
               <span className="document-type-badge">{data.documentType || t('Document')}</span>
             </div>
             <h2>
@@ -371,11 +427,23 @@ export function DocumentViewer({
                   record.extracted.tables[tableIndex]?.title,
                 )}
               </h3>
-              {productIndex(table) >= 0 && <p className="document-product-help">{t('Fill product details, save the digital document, then ask Eliza AI to create the products. Review each proposal before approval.')}</p>}
+              {productIndex(table) >= 0 && (
+                <p className="document-product-help">
+                  {t(
+                    'Fill product details, save the digital document, then ask Eliza AI to create the products. Review each proposal before approval.',
+                  )}
+                </p>
+              )}
               <div className="document-table-scroll">
                 <table>
                   <thead>
-                    {productIndex(table) >= 0 && <tr className="document-table-groups"><th colSpan={table.columns.length + 1}>{t('Scanned document')}</th><th colSpan={productFields.length + 1}>{t('Product setup')}</th>{editing && <th />}</tr>}
+                    {productIndex(table) >= 0 && (
+                      <tr className="document-table-groups">
+                        <th colSpan={table.columns.length + 1}>{t('Scanned document')}</th>
+                        <th colSpan={productFields.length + 1}>{t('Product setup')}</th>
+                        {editing && <th />}
+                      </tr>
+                    )}
                     <tr>
                       <th>#</th>
                       {table.columns.map((column, columnIndex) => (
@@ -398,10 +466,16 @@ export function DocumentViewer({
                           )}
                         </th>
                       ))}
-                      {productIndex(table) >= 0 && <>
-                        {productFields.map((field) => <th key={'product-' + field.key} className="document-product-column">{field.label}</th>)}
-                        <th className="document-product-column">{t('Product photo')}</th>
-                      </>}
+                      {productIndex(table) >= 0 && (
+                        <>
+                          {productFields.map((field) => (
+                            <th key={'product-' + field.key} className="document-product-column">
+                              {field.label}
+                            </th>
+                          ))}
+                          <th className="document-product-column">{t('Product photo')}</th>
+                        </>
+                      )}
                       {editing && <th>{t('Actions')}</th>}
                     </tr>
                   </thead>
@@ -435,23 +509,140 @@ export function DocumentViewer({
                               (value) =>
                                 change((draft) => {
                                   const changedRow = draft.tables[tableIndex].rows[rowIndex];
-                                changedRow.cells[cellIndex] = value;
-                                if (cellIndex === productIndex(draft.tables[tableIndex]) && changedRow.product)
-                                  changedRow.product.name = value;
+                                  changedRow.cells[cellIndex] = value;
+                                  if (
+                                    cellIndex === productIndex(draft.tables[tableIndex]) &&
+                                    changedRow.product
+                                  )
+                                    changedRow.product.name = value;
                                 }),
                               table.columns[cellIndex]?.label || t('Cell'),
                               record.extracted.tables[tableIndex]?.rows[rowIndex]?.cells[cellIndex],
                             )}
-                            {row.uncertainCells?.includes(cellIndex) && <small className="document-cell-uncertain">{t('Uncertain')}</small>}
+                            {row.uncertainCells?.includes(cellIndex) && (
+                              <small className="document-cell-uncertain">{t('Uncertain')}</small>
+                            )}
                           </td>
                         ))}
-                        {productIndex(table) >= 0 && <>
-                          {productFields.map((field) => <td key={'product-' + field.key} className="document-product-cell">
-                            {editing ? field.key === 'unit' ? <select aria-label={field.label + ' ' + (rowIndex + 1)} value={productValue(tableIndex, rowIndex, field.key)} onChange={(event) => setProductValue(tableIndex, rowIndex, field.key, event.target.value)}><option value="">{t('Choose unit')}</option>{['piece','kilogram','gram','liter','milliliter','pack','box','other'].map((unit) => <option key={unit} value={unit}>{t(unit)}</option>)}</select> : field.multiline ? <textarea aria-label={field.label + ' ' + (rowIndex + 1)} value={productValue(tableIndex, rowIndex, field.key)} onChange={(event) => setProductValue(tableIndex, rowIndex, field.key, event.target.value)} /> : <input aria-label={field.label + ' ' + (rowIndex + 1)} value={productValue(tableIndex, rowIndex, field.key)} placeholder={field.key === 'sku' || field.key === 'plu' ? t('Auto') : undefined} onChange={(event) => setProductValue(tableIndex, rowIndex, field.key, event.target.value)} />
-                            : <span>{productValue(tableIndex, rowIndex, field.key) || '—'}</span>}
-                          </td>)}
-                          <td className="document-product-cell">{row.product?.image && <img className="document-product-image" src={row.product.image} alt={t('Product photo')} />}{editing && <input type="file" accept="image/*" aria-label={t('Product photo') + ' ' + (rowIndex + 1)} onChange={(event) => { void addProductImage(tableIndex, rowIndex, event.target.files?.[0]); event.target.value = ''; }} />}</td>
-                        </>}
+                        {productIndex(table) >= 0 && (
+                          <>
+                            {productFields.map((field) => (
+                              <td key={'product-' + field.key} className="document-product-cell">
+                                {editing ? (
+                                  field.key === 'barcode' ? (
+                                    <div className="barcode-input-with-camera">
+                                      <input
+                                        aria-label={field.label + ' ' + (rowIndex + 1)}
+                                        value={productValue(tableIndex, rowIndex, field.key)}
+                                        onChange={(event) =>
+                                          setProductValue(
+                                            tableIndex,
+                                            rowIndex,
+                                            field.key,
+                                            event.target.value,
+                                          )
+                                        }
+                                      />
+                                      <CameraBarcodeScanner
+                                        onScan={(code) =>
+                                          setProductValue(tableIndex, rowIndex, 'barcode', code)
+                                        }
+                                      />
+                                    </div>
+                                  ) : field.key === 'unit' ? (
+                                    <select
+                                      aria-label={field.label + ' ' + (rowIndex + 1)}
+                                      value={productValue(tableIndex, rowIndex, field.key)}
+                                      onChange={(event) =>
+                                        setProductValue(
+                                          tableIndex,
+                                          rowIndex,
+                                          field.key,
+                                          event.target.value,
+                                        )
+                                      }
+                                    >
+                                      <option value="">{t('Choose unit')}</option>
+                                      {[
+                                        'piece',
+                                        'kilogram',
+                                        'gram',
+                                        'liter',
+                                        'milliliter',
+                                        'pack',
+                                        'box',
+                                        'other',
+                                      ].map((unit) => (
+                                        <option key={unit} value={unit}>
+                                          {t(unit)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : field.multiline ? (
+                                    <textarea
+                                      aria-label={field.label + ' ' + (rowIndex + 1)}
+                                      value={productValue(tableIndex, rowIndex, field.key)}
+                                      onChange={(event) =>
+                                        setProductValue(
+                                          tableIndex,
+                                          rowIndex,
+                                          field.key,
+                                          event.target.value,
+                                        )
+                                      }
+                                    />
+                                  ) : (
+                                    <input
+                                      aria-label={field.label + ' ' + (rowIndex + 1)}
+                                      value={productValue(tableIndex, rowIndex, field.key)}
+                                      placeholder={
+                                        field.key === 'sku' || field.key === 'plu'
+                                          ? t('Auto')
+                                          : undefined
+                                      }
+                                      onChange={(event) =>
+                                        setProductValue(
+                                          tableIndex,
+                                          rowIndex,
+                                          field.key,
+                                          event.target.value,
+                                        )
+                                      }
+                                    />
+                                  )
+                                ) : (
+                                  <span>
+                                    {productValue(tableIndex, rowIndex, field.key) || '—'}
+                                  </span>
+                                )}
+                              </td>
+                            ))}
+                            <td className="document-product-cell">
+                              {row.product?.image && (
+                                <img
+                                  className="document-product-image"
+                                  src={row.product.image}
+                                  alt={t('Product photo')}
+                                />
+                              )}
+                              {editing && (
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  aria-label={t('Product photo') + ' ' + (rowIndex + 1)}
+                                  onChange={(event) => {
+                                    void addProductImage(
+                                      tableIndex,
+                                      rowIndex,
+                                      event.target.files?.[0],
+                                    );
+                                    event.target.value = '';
+                                  }}
+                                />
+                              )}
+                            </td>
+                          </>
+                        )}
                         {editing && (
                           <td>
                             <Button
@@ -474,7 +665,12 @@ export function DocumentViewer({
                     <tfoot>
                       {table.footerRows.map((footer, footerIndex) => (
                         <tr key={footerIndex}>
-                          <th colSpan={table.columns.length + (productIndex(table) >= 0 ? productFields.length + 1 : 0)}>
+                          <th
+                            colSpan={
+                              table.columns.length +
+                              (productIndex(table) >= 0 ? productFields.length + 1 : 0)
+                            }
+                          >
                             {editText(
                               footer.label,
                               (value) =>
@@ -574,13 +770,21 @@ export function DocumentViewer({
               </div>
               {validation.rowSum !== null && (
                 <div>
-                  <span>{validation.incomplete ? t('Partial sum of extracted rows') : t('Sum of table rows')}</span>
+                  <span>
+                    {validation.incomplete
+                      ? t('Partial sum of extracted rows')
+                      : t('Sum of table rows')}
+                  </span>
                   <span>{displayAmount(validation.rowSum, data.currency, data.language)}</span>
                 </div>
               )}
               {validation.difference !== null && validation.difference !== '0.00' && (
                 <p className="document-discrepancy">
-                  ⚠ {validation.incomplete ? t('Partial sum differs from printed total') : t('Discrepancy detected')}:{' '}
+                  ⚠{' '}
+                  {validation.incomplete
+                    ? t('Partial sum differs from printed total')
+                    : t('Discrepancy detected')}
+                  :{' '}
                   {displayAmount(
                     String(Math.abs(Number(validation.difference))),
                     data.currency,
@@ -591,8 +795,15 @@ export function DocumentViewer({
             </section>
           )}
           {validation.expectedRows !== null && (
-            <p className={validation.incomplete ? 'document-row-count incomplete' : 'document-row-count'}>
-              {t('Extracted {count} of {expected} expected rows.', { count: validation.extractedRows, expected: validation.expectedRows })}
+            <p
+              className={
+                validation.incomplete ? 'document-row-count incomplete' : 'document-row-count'
+              }
+            >
+              {t('Extracted {count} of {expected} expected rows.', {
+                count: validation.extractedRows,
+                expected: validation.expectedRows,
+              })}
             </p>
           )}
           {validation.warnings.length > 0 && (

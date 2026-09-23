@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { Product } from '@eliza/contracts';
 import { api } from './api';
 import { Button } from './components/ui/button';
+import { CameraBarcodeScanner } from './camera-barcode-scanner';
 import { Field, ErrorMessage } from './forms';
 type Suggestion = {
   barcode: string;
@@ -54,21 +55,31 @@ export function BarcodeLookup({
           'Optional. Look up packaged food in Open Food Facts, then review before importing.',
         )}
       >
-        <input
-          value={barcode}
-          maxLength={100}
-          onChange={(e) => {
-            setBarcode(e.target.value);
-            setResult(undefined);
-            setError(undefined);
-          }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              void lookup();
-            }
-          }}
-        />
+        <div className="barcode-input-with-camera">
+          <input
+            value={barcode}
+            maxLength={100}
+            onChange={(e) => {
+              setBarcode(e.target.value);
+              setResult(undefined);
+              setError(undefined);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void lookup();
+              }
+            }}
+          />
+          <CameraBarcodeScanner
+            disabled={busy}
+            onScan={(code) => {
+              setBarcode(code);
+              setResult(undefined);
+              setError(undefined);
+            }}
+          />
+        </div>
       </Field>
       <Button
         type="button"

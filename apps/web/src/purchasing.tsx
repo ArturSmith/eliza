@@ -18,6 +18,7 @@ import { Field, ErrorMessage, ProductForm, SearchSelect } from './forms';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { SupplierCatalog } from './supplier-products';
+import { CameraBarcodeScanner } from './camera-barcode-scanner';
 import { formatMoney } from './receipts';
 type Order = {
   close_reason: string;
@@ -1207,15 +1208,23 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
             }}
           >
             <Field label={t('Barcode')}>
-              <input
-                autoFocus
-                required
-                value={barcode}
-                onChange={(e) => {
-                  setBarcode(e.target.value);
-                  setScanError('');
-                }}
-              />
+              <div className="barcode-input-with-camera">
+                <input
+                  autoFocus
+                  required
+                  value={barcode}
+                  onChange={(e) => {
+                    setBarcode(e.target.value);
+                    setScanError('');
+                  }}
+                />
+                <CameraBarcodeScanner
+                  onScan={(code) => {
+                    setBarcode(code);
+                    setScanError('');
+                  }}
+                />
+              </div>
             </Field>
             <ErrorMessage error={scanError} />
             <Button type="submit" disabled={products.isPending}>

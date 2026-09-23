@@ -1,4 +1,5 @@
 import { t, useLanguage, translateError } from './i18n';
+import { CameraBarcodeScanner } from './camera-barcode-scanner';
 import { ReceiptSearch } from './refunds';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -718,6 +719,13 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                 setMessage('');
               }}
               disabled={frozen || noShift}
+            />
+            <CameraBarcodeScanner
+              disabled={frozen || noShift}
+              onScan={(code) => {
+                setSearch(code);
+                setMessage('');
+              }}
             />
             <kbd>{t('Enter')}</kbd>
           </form>

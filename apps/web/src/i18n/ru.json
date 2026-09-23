@@ -1531,5 +1531,12 @@
   "Delete purchase draft {value0}? This is permanent.": "Удалить черновик закупки {value0}? Это действие нельзя отменить.",
   "This supplier is used by purchases, product offers or shopping lists. Deactivate it instead.": "Поставщик используется в закупках, предложениях товаров или списках покупок. Вместо удаления сделайте его неактивным.",
   "Only draft purchases can be deleted. Keep placed and received orders for history.": "Удалить можно только черновики закупок. Размещённые и полученные заказы должны остаться в истории.",
-  "This purchase is linked to a delivery, stock movement or shopping list and cannot be deleted.": "Эта закупка связана с доставкой, движением склада или списком покупок и не может быть удалена."
+  "This purchase is linked to a delivery, stock movement or shopping list and cannot be deleted.": "Эта закупка связана с доставкой, движением склада или списком покупок и не может быть удалена.",
+  "Scan with camera": "Сканировать камерой",
+  "Scan barcode with camera": "Сканировать штрихкод камерой",
+  "Point your camera at a barcode. The code will fill this field automatically.": "Наведите камеру на штрихкод. Код автоматически заполнит это поле.",
+  "Camera preview": "Изображение с камеры",
+  "Camera access is unavailable. Use HTTPS or localhost and allow camera access.": "Камера недоступна. Откройте приложение через HTTPS или localhost и разрешите доступ к камере.",
+  "Camera permission was denied. Allow camera access in your browser settings.": "Доступ к камере запрещён. Разрешите его в настройках браузера.",
+  "Could not start the camera. Check that it is connected and not in use.": "Не удалось включить камеру. Проверьте подключение и убедитесь, что её не использует другое приложение."
 }
