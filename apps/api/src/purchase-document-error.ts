@@ -42,6 +42,6 @@ export function providerFailure(status: number, code: unknown, requestId?: strin
   else if (status >= 500) message = 'OpenAI is temporarily unavailable. Try again later.';
   else if (status === 400 || status === 422)
     message =
-      'OpenAI rejected the image or request settings. Try a valid image; if it persists, check the model configuration.';
+      'OpenAI rejected the request settings or uploaded file. Check the model configuration and file, then try again.';
   return new PurchaseDocumentError(message, { providerStatus: status, providerCode, requestId });
 }

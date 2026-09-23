@@ -1295,7 +1295,7 @@
   "The configured OpenAI model is unavailable to this API project. Check OPENAI_MODEL and model access.": "Настроенная модель OpenAI недоступна этому проекту API. Проверьте OPENAI_MODEL и доступ к модели.",
   "OpenAI rate limit reached. Wait briefly and try again.": "Превышена частота запросов OpenAI. Немного подождите и повторите попытку.",
   "OpenAI is temporarily unavailable. Try again later.": "OpenAI временно недоступен. Попробуйте позже.",
-  "OpenAI rejected the image or request settings. Try a valid image; if it persists, check the model configuration.": "OpenAI отклонил изображение или параметры запроса. Попробуйте другое изображение; если ошибка повторится, проверьте настройки модели.",
+  "OpenAI rejected the request settings or uploaded file. Check the model configuration and file, then try again.": "OpenAI отклонил параметры запроса или загруженный файл. Проверьте настройки модели и файл, затем попробуйте ещё раз.",
   "OpenAI rejected the document request. Check the technical details and server configuration.": "OpenAI отклонил запрос распознавания. Проверьте технические сведения и настройки сервера.",
   "OpenAI declined to read this document. Try another image or enter the purchase manually.": "OpenAI отказался распознавать этот документ. Попробуйте другое изображение или заполните закупку вручную.",
   "OpenAI could not finish reading within the response limit. Split the document into smaller images.": "OpenAI не смог завершить распознавание в пределах лимита ответа. Разделите документ на несколько изображений.",

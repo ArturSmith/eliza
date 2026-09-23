@@ -35,8 +35,8 @@ const browseAreas = [
 const browse = z
   .object({
     area: z.enum(browseAreas),
-    id: z.string().uuid().optional(),
-    offset: z.number().int().min(0).max(1000).default(0),
+    id: z.string().uuid().nullable().optional(),
+    offset: z.number().int().min(0).max(1000).nullable().optional(),
   })
   .strict();
 const browsePermissions: Record<(typeof browseAreas)[number], Permission> = {
@@ -88,10 +88,10 @@ export const aiToolDefinitions = [
       type: 'object',
       properties: {
         area: { type: 'string', enum: [...browseAreas] },
-        id: { type: 'string', description: 'Optional exact record UUID' },
-        offset: { type: 'integer', description: 'Pagination offset starting at 0' },
+        id: { type: ['string', 'null'], description: 'Exact record UUID or null for the list' },
+        offset: { type: ['integer', 'null'], description: 'Pagination offset or null for the first page' },
       },
-      required: ['area'],
+      required: ['area', 'id', 'offset'],
       additionalProperties: false,
     },
     schema: browse,
@@ -436,7 +436,7 @@ export async function executeAiTool(
         devices: `SELECT id,name,type,active,created_at FROM devices WHERE store_id=$1 AND ($2::uuid IS NULL OR id=$2) ORDER BY created_at DESC LIMIT 30 OFFSET $3`,
         audit: `SELECT id,employee_id,device_id,action,entity_id,details,created_at FROM audits WHERE store_id=$1 AND ($2::uuid IS NULL OR id=$2) ORDER BY created_at DESC LIMIT 30 OFFSET $3`,
       };
-      return { area, offset, rows: await query(statements[area], [store.id, id ?? null, offset]) };
+      return { area, offset: offset ?? 0, rows: await query(statements[area], [store.id, id ?? null, offset ?? 0]) };
     }
 
     case 'propose_change':

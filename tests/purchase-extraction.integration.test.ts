@@ -287,7 +287,7 @@ describe.sequential('purchase document extraction', () => {
     [429, 'rate_limit_exceeded', 'rate limit reached'],
     [403, 'permission_denied', 'denied access'],
     [404, 'model_not_found', 'model is unavailable'],
-    [400, 'invalid_request_error', 'image or request settings'],
+    [400, 'invalid_request_error', 'request settings or uploaded file'],
     [503, 'server_error', 'temporarily unavailable'],
   ])(
     'explains provider HTTP %s / %s without exposing provider prose',

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { executeAiTool, availableAiTools } from '../apps/api/src/ai-tools';
+import { executeAiTool, availableAiTools, aiToolDefinitions } from '../apps/api/src/ai-tools';
 import type { Database } from '../apps/api/src/database';
 import type { AuthRequest } from '../apps/api/src/security';
 function fixture(permissions: string[] = ['sales.read', 'purchases.read']) {
@@ -38,6 +38,12 @@ describe('AI read tool boundaries', () => {
     expect(
       availableAiTools(['costs.read', 'sales.read']).some((t) => t.name === 'gross_profit'),
     ).toBe(true);
+  });
+  it('defines every strict browse argument as required, with null for unused filters', () => {
+    const browse = aiToolDefinitions.find((tool) => tool.name === 'browse_store_data');
+    expect(browse?.parameters.required).toEqual(['area', 'id', 'offset']);
+    expect(browse?.parameters.properties.id.type).toEqual(['string', 'null']);
+    expect(browse?.parameters.properties.offset.type).toEqual(['integer', 'null']);
   });
   it('checks each browsed area separately and scopes every query to the authenticated store', async () => {
     const { database, req, query } = fixture(['inventory.read']);
