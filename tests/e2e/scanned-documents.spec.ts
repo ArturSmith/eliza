@@ -121,10 +121,13 @@ test('scans, edits, saves, and reopens a digital invoice inside Eliza AI', async
   await paper.getByLabel('Barcode 1').fill('5449000000996');
   await paper.getByLabel('Category 1').fill('Drinks');
   await paper.getByLabel('Selling unit 1').selectOption('piece');
+  await expect(paper.getByLabel('Box cost 1')).toHaveValue('59.00');
+  await expect(paper.getByLabel('Selling price 1')).toHaveValue('67.85');
+  await expect(paper.getByLabel('Tax rate 1')).toHaveValue('0');
+  await expect(paper.getByLabel('Minimum stock 1')).toHaveValue('5');
   await paper.getByLabel('Selling price 1').fill('75');
-  await paper.getByLabel('Product cost 1').fill('59');
-  await paper.getByLabel('Tax rate 1').fill('0');
-  await paper.getByLabel('Minimum stock 1').fill('0');
+  await expect(paper.getByRole('columnheader', { name: 'Product cost' })).toHaveCount(0);
+  await expect(paper.getByRole('columnheader', { name: 'Barcode (optional)' })).toBeVisible();
   await expect(paper.getByLabel('Items per box 8')).toHaveValue('24');
   await expect(paper.getByLabel('Box cost 8')).toHaveValue('564.00');
   await expect(paper.getByLabel('Cost per item 8')).toHaveText('23.50');
@@ -140,7 +143,7 @@ test('scans, edits, saves, and reopens a digital invoice inside Eliza AI', async
   await expect(paper.getByLabel('Printed document total')).toHaveValue('9 192,00');
   await page.getByRole('button', { name: 'Save digital document' }).click();
   await expect(page.getByText('Saved digital document')).toBeVisible();
-  expect(record.edited.tables[0].rows[0].product).toMatchObject({ name: 'Чай Манго', barcode: '5449000000996', category: 'Drinks', price: '75', cost: '59' });
+  expect(record.edited.tables[0].rows[0].product).toMatchObject({ name: 'Чай Манго', barcode: '5449000000996', category: 'Drinks', price: '75', cost: '59.00', boxCost: '59.00', taxRate: '0', minStock: '5' });
   expect(record.edited.tables[0].rows[0].product.image).toMatch(/^data:image\/jpeg;base64,/);
   expect(record.edited.tables[0].rows[7].product).toMatchObject({ itemsPerBox: '24', boxCost: '480.00' });
   await expect(paper).toContainText('9 192,00');

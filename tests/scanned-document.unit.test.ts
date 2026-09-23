@@ -4,6 +4,7 @@ import {
   validateDocument,
   inferDocumentPack,
   costPerItem,
+  documentProductDefaults,
   type DocumentData,
 } from '../packages/contracts/src/index';
 function invoice(): DocumentData {
@@ -52,6 +53,16 @@ function invoice(): DocumentData {
   };
 }
 describe('scanned document reconstruction', () => {
+  it('prefills invoice cost, markup price, zero tax, and minimum stock', () => {
+    const table = invoice().tables[0];
+    expect(documentProductDefaults(table, table.rows[0], '15')).toMatchObject({
+      boxCost: '59.00', price: '67.85', taxRate: '0', minStock: '5',
+    });
+    table.rows[0].product = { name: 'Чай Манго', sku: '', barcode: '', plu: '', image: '', description: '', category: '', unit: 'piece', price: '70', cost: '', taxRate: '8', minStock: '2' };
+    expect(documentProductDefaults(table, table.rows[0], '25')).toMatchObject({
+      price: '70', taxRate: '8', minStock: '2',
+    });
+  });
   it('preserves all nine original rows and flags the printed-total difference', () => {
     const source = documentDataSchema.parse(invoice());
     expect(source.tables[0].rows).toHaveLength(9);

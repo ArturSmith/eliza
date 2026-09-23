@@ -155,6 +155,47 @@ export function inferDocumentPack(
   return { itemsPerBox, boxCost, itemCost: costPerItem(boxCost, itemsPerBox) };
 }
 
+export function documentPurchaseCost(
+  table: DocumentData['tables'][number],
+  row: DocumentData['tables'][number]['rows'][number],
+): string {
+  const priceIndex = table.columns.findIndex((column) =>
+    column.kind === 'price' || /^(unit cost|unit price|price|цена)$/i.test(column.label.trim()));
+  const price = priceIndex >= 0 ? parsePrintedAmount(row.cells[priceIndex] ?? '') : null;
+  if (price !== null && price >= 0n) return formatCents(price);
+  const amountIndex = table.columns.findIndex((column) => column.kind === 'amount');
+  const quantityIndex = table.columns.findIndex((column) => column.kind === 'quantity');
+  const amount = amountIndex >= 0 ? parsePrintedAmount(row.cells[amountIndex] ?? '') : null;
+  const quantity = quantityIndex >= 0 ? (row.cells[quantityIndex] ?? '').trim() : '';
+  const count = quantity.match(/^(\d+)\s*(?:[^\d].*)?$/)?.[1];
+  if (amount === null || amount < 0n || !count || BigInt(count) === 0n) return '';
+  return formatCents((amount + BigInt(count) / 2n) / BigInt(count));
+}
+export function documentProductDefaults(
+  table: DocumentData['tables'][number],
+  row: DocumentData['tables'][number]['rows'][number],
+  markup: string,
+): { itemsPerBox: string; boxCost: string; itemCost: string; price: string; taxRate: string; minStock: string; cost: string } {
+  const product = row.product;
+  const inferred = inferDocumentPack(table, row);
+  const itemsPerBox = product?.itemsPerBox ?? inferred.itemsPerBox;
+  const boxCost = product?.boxCost ?? (itemsPerBox ? inferred.boxCost : documentPurchaseCost(table, row));
+  const itemCost = costPerItem(boxCost, itemsPerBox);
+  const cost = itemsPerBox && product?.unit === 'piece' ? itemCost : boxCost || product?.cost || '';
+  return {
+    itemsPerBox, boxCost, itemCost, cost,
+    price: product?.price || suggestDocumentSellingPrice(cost, markup),
+    taxRate: product?.taxRate || '0',
+    minStock: product?.minStock || '5',
+  };
+}
+function suggestDocumentSellingPrice(cost: string, markup: string): string {
+  const cents = parsePrintedAmount(cost);
+  if (cents === null || cents < 0n || !/^(?:\d{1,4})(?:\.\d{1,2})?$/.test(markup) || Number(markup) > 1000) return '';
+  const rate = BigInt(Math.round(Number(markup) * 100));
+  return formatCents((cents * (10000n + rate) + 5000n) / 10000n);
+}
+
 function parsePrintedQuantity(raw: string): bigint | null {
   const compact = raw.replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
   if (!/^\d+(\.\d{1,3})?$/.test(compact)) return null;

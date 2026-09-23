@@ -543,6 +543,19 @@ describe('approved AI writes', () => {
       rowIndex: 0,
     });
     expect(box).toMatchObject({ kind: 'product', payload: { unit: 'box', cost: '120.00' } });
+    product.price = '';
+    product.taxRate = '';
+    product.minStock = '';
+    await db.pool.query('UPDATE scanned_documents SET edited=$2 WHERE id=$1', [
+      scanId,
+      JSON.stringify(edited),
+    ]);
+    const suggested = await stageDocumentProductProposal(db, actor, {
+      documentId: scanId,
+      tableIndex: 0,
+      rowIndex: 0,
+    });
+    expect(suggested).toMatchObject({ kind: 'product', payload: { cost: '120.00', price: '138.00', taxRate: '0', minStock: '5' } });
     product.unit = 'piece';
     product.boxCost = '';
     await db.pool.query('UPDATE scanned_documents SET edited=$2 WHERE id=$1', [

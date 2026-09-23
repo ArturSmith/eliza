@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   type DocumentData,
   type DocumentProduct,
   type DocumentValidation,
   validateDocument,
-  inferDocumentPack,
-  costPerItem,
+  documentProductDefaults,
 } from '@eliza/contracts';
 import { api, queryClient } from './api';
 import { t, useLanguage } from './i18n';
@@ -55,6 +55,8 @@ export function DocumentViewer({
     setEditing(canEdit && record.status === 'draft');
     setError(null);
   }, [record.id, record.version]);
+  const profile = useQuery({ queryKey: ['store-profile'], queryFn: () => api<{ defaultMarkupPercent: string }>('/store-profile'), enabled: canEdit });
+  const markup = profile.data?.defaultMarkupPercent ?? '15';
   const validation = validateDocument(data);
   const changed = JSON.stringify(data) !== JSON.stringify(record.edited);
   function change(mutator: (draft: DocumentData) => void) {
@@ -71,12 +73,6 @@ export function DocumentViewer({
         /^(product|item|товар|наименование)$/i.test(column.label.trim()),
     );
   }
-  function costIndex(table: DocumentData['tables'][number]) {
-    return table.columns.findIndex(
-      (column) =>
-        column.kind === 'price' || /^(unit cost|unit price|price|цена)$/i.test(column.label.trim()),
-    );
-  }
   function productValue(
     tableIndex: number,
     rowIndex: number,
@@ -85,19 +81,15 @@ export function DocumentViewer({
     const table = data.tables[tableIndex];
     const row = table.rows[rowIndex];
     const product = row.product;
-    const inferred = inferDocumentPack(table, row);
-    const itemsPerBox = product?.itemsPerBox ?? inferred.itemsPerBox;
-    const boxCost = product?.boxCost ?? inferred.boxCost;
-    if (key === 'itemsPerBox') return itemsPerBox;
-    if (key === 'boxCost') return boxCost;
-    if (key === 'itemCost') return costPerItem(boxCost, itemsPerBox);
-    if (key === 'cost' && itemsPerBox && boxCost) {
-      if (product?.unit === 'piece') return costPerItem(boxCost, itemsPerBox);
-      if (product?.unit === 'box' || product?.unit === 'pack') return boxCost;
-    }
+    const defaults = documentProductDefaults(table, row, markup);
+    if (key === 'itemCost') return defaults.itemCost;
+    if (key === 'itemsPerBox') return defaults.itemsPerBox;
+    if (key === 'boxCost') return defaults.boxCost;
+    if (key === 'price') return defaults.price;
+    if (key === 'taxRate') return defaults.taxRate;
+    if (key === 'minStock') return defaults.minStock;
     if (product && product[key]) return product[key] ?? '';
     if (key === 'name') return row.cells[productIndex(table)] || '';
-    if (key === 'cost' && !itemsPerBox) return row.cells[costIndex(table)] || '';
     return '';
   }
   function setProductValue(
@@ -110,22 +102,13 @@ export function DocumentViewer({
     change((draft) => {
       const table = draft.tables[tableIndex];
       const row = table.rows[rowIndex];
-      const inferred = inferDocumentPack(table, row);
+      const defaults = documentProductDefaults(table, row, markup);
       row.product ??= {
         name: row.cells[productIndex(table)] || '',
-        sku: '',
-        barcode: '',
-        plu: '',
-        image: '',
-        description: '',
-        category: '',
-        unit: '',
-        price: '',
-        cost: inferred.itemsPerBox ? '' : row.cells[costIndex(table)] || '',
-        itemsPerBox: inferred.itemsPerBox,
-        boxCost: inferred.boxCost,
-        taxRate: '',
-        minStock: '',
+        sku: '', barcode: '', plu: '', image: '', description: '', category: '',
+        unit: '', price: '', cost: '',
+        itemsPerBox: defaults.itemsPerBox, boxCost: defaults.boxCost,
+        taxRate: defaults.taxRate, minStock: defaults.minStock,
       };
       row.product[key] = value;
     });
@@ -152,18 +135,17 @@ export function DocumentViewer({
       setError(error);
     }
   }
-  const productFields: { key: keyof DocumentProduct | 'itemCost'; label: string; multiline?: boolean }[] = [
-    { key: 'barcode', label: t('Barcode') },
-    { key: 'sku', label: t('SKU') },
-    { key: 'plu', label: t('PLU') },
-    { key: 'description', label: t('Description'), multiline: true },
+  const productFields: { key: keyof DocumentProduct | 'itemCost'; label: string; multiline?: boolean; optional?: boolean }[] = [
+    { key: 'barcode', label: t('Barcode'), optional: true },
+    { key: 'sku', label: t('SKU'), optional: true },
+    { key: 'plu', label: t('PLU'), optional: true },
+    { key: 'description', label: t('Description'), multiline: true, optional: true },
     { key: 'category', label: t('Category') },
     { key: 'unit', label: t('Selling unit') },
     { key: 'price', label: t('Selling price') },
-    { key: 'itemsPerBox', label: t('Items per box') },
+    { key: 'itemsPerBox', label: t('Items per box'), optional: true },
     { key: 'boxCost', label: t('Box cost') },
     { key: 'itemCost', label: t('Cost per item') },
-    { key: 'cost', label: t('Product cost') },
     { key: 'taxRate', label: t('Tax rate') },
     { key: 'minStock', label: t('Minimum stock') },
   ];
@@ -171,8 +153,24 @@ export function DocumentViewer({
     setBusy(true);
     setError(null);
     try {
+      const completed = structuredClone(data);
+      for (const table of completed.tables) {
+        const index = productIndex(table);
+        if (index < 0) continue;
+        for (const row of table.rows) {
+          const defaults = documentProductDefaults(table, row, markup);
+          row.product = {
+            name: row.cells[index] || '', sku: '', barcode: '', plu: '',
+            image: '', description: '', category: '', unit: '',
+            ...row.product,
+            itemsPerBox: defaults.itemsPerBox, boxCost: defaults.boxCost,
+            price: defaults.price, cost: defaults.cost,
+            taxRate: defaults.taxRate, minStock: defaults.minStock,
+          };
+        }
+      }
       const saved = await api<DocumentRecord>('/documents/' + record.id + '/save', {
-        data,
+        data: completed,
         version: record.version,
       });
       onSaved(saved);
@@ -498,10 +496,10 @@ export function DocumentViewer({
                         <>
                           {productFields.map((field) => (
                             <th key={'product-' + field.key} className="document-product-column">
-                              {field.label}
+                              {field.label}{field.optional ? ' (' + t('optional') + ')' : ''}
                             </th>
                           ))}
-                          <th className="document-product-column">{t('Product photo')}</th>
+                          <th className="document-product-column">{t('Product photo')} ({t('optional')})</th>
                         </>
                       )}
                       {editing && <th>{t('Actions')}</th>}
@@ -612,13 +610,6 @@ export function DocumentViewer({
                                         </option>
                                       ))}
                                     </select>
-                                  ) : field.key === 'cost' &&
-                                    productValue(tableIndex, rowIndex, 'itemsPerBox') &&
-                                    productValue(tableIndex, rowIndex, 'boxCost') &&
-                                    ['piece', 'box', 'pack'].includes(productValue(tableIndex, rowIndex, 'unit')) ? (
-                                    <output aria-label={field.label + ' ' + (rowIndex + 1)}>
-                                      {productValue(tableIndex, rowIndex, 'cost')}
-                                    </output>
                                   ) : field.multiline ? (
                                     <textarea
                                       aria-label={field.label + ' ' + (rowIndex + 1)}
