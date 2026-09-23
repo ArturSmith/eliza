@@ -40,7 +40,7 @@ const source = {
         ['Энерджи Белая Вишня', '12', '1 056'],
         ['Энерджи Виноград', '12', '1 056'],
         ['САШ Лимон', '1', '288'],
-        ['Конфеты Red 500 г', '1', '564'],
+        ['Конфеты Red 24шт в уп', '1 короб', '564'],
         ['Конфеты Red 800 г', '1', '564'],
       ].map((cells, i) => ({ rowNumber: String(i + 1), cells })),
       footerRows: [],
@@ -122,9 +122,14 @@ test('scans, edits, saves, and reopens a digital invoice inside Eliza AI', async
   await paper.getByLabel('Category 1').fill('Drinks');
   await paper.getByLabel('Selling unit 1').selectOption('piece');
   await paper.getByLabel('Selling price 1').fill('75');
-  await paper.getByLabel('Unit cost 1').fill('59');
+  await paper.getByLabel('Product cost 1').fill('59');
   await paper.getByLabel('Tax rate 1').fill('0');
   await paper.getByLabel('Minimum stock 1').fill('0');
+  await expect(paper.getByLabel('Items per box 8')).toHaveValue('24');
+  await expect(paper.getByLabel('Box cost 8')).toHaveValue('564.00');
+  await expect(paper.getByLabel('Cost per item 8')).toHaveText('23.50');
+  await paper.getByLabel('Box cost 8').fill('480.00');
+  await expect(paper.getByLabel('Cost per item 8')).toHaveText('20.00');
   const photo = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#dd3333' } }).jpeg().toBuffer();
   await paper.getByLabel('Product photo 1').setInputFiles({ name: 'product.jpg', mimeType: 'image/jpeg', buffer: photo });
   await expect(paper.locator('tbody tr').first().locator('.document-product-image')).toBeVisible();
@@ -137,6 +142,7 @@ test('scans, edits, saves, and reopens a digital invoice inside Eliza AI', async
   await expect(page.getByText('Saved digital document')).toBeVisible();
   expect(record.edited.tables[0].rows[0].product).toMatchObject({ name: 'Чай Манго', barcode: '5449000000996', category: 'Drinks', price: '75', cost: '59' });
   expect(record.edited.tables[0].rows[0].product.image).toMatch(/^data:image\/jpeg;base64,/);
+  expect(record.edited.tables[0].rows[7].product).toMatchObject({ itemsPerBox: '24', boxCost: '480.00' });
   await expect(paper).toContainText('9 192,00');
   const thread = page.locator('.ai-thread');
   const composer = page.locator('.ai-composer-wrap');

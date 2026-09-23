@@ -3,6 +3,7 @@ import { execFileSync } from 'node:child_process';
 import sharp from 'sharp';
 import { createApp } from '../apps/api/dist/app.js';
 import { Database } from '../apps/api/dist/database.js';
+import { extractScannedDocument } from '../apps/api/src/scanned-document-vision';
 import type { DocumentData } from '../packages/contracts/src/index';
 const admin = new Database();
 const originalUrl =
@@ -218,6 +219,31 @@ describe.sequential('scanned document persistence and access', () => {
     expect(own.headers.get('content-type')).toContain('image/png');
     const anonymous = await originalFetch(url + '/api/documents/' + id + '/file');
     expect(anonymous.status).toBe(401);
+  });
+  it('suggests pack count and box cost while preserving printed invoice values', async () => {
+    const boxed = structuredClone(invoice);
+    boxed.printedTotal = '240,00';
+    boxed.tables[0].columns = [
+      { key: 'product', label: 'Товар', kind: 'text' },
+      { key: 'quantity', label: 'Количество', kind: 'quantity' },
+      { key: 'price', label: 'Цена', kind: 'price' },
+      { key: 'amount', label: 'Сумма', kind: 'amount' },
+    ];
+    boxed.tables[0].rows = [{
+      rowNumber: '1', cells: ['Конфеты 24шт в уп', '2 короб', '120,00', '240,00'],
+    }];
+    providerData = boxed;
+    try {
+      const result = await extractScannedDocument(
+        png, 'boxed.png', 'image/png', Buffer.from(png.split(',')[1], 'base64'),
+      );
+      expect(result.tables[0].rows[0]).toMatchObject({
+        cells: ['Конфеты 24шт в уп', '2 короб', '120,00', '240,00'],
+        product: { itemsPerBox: '24', boxCost: '120.00', cost: '' },
+      });
+    } finally {
+      providerData = invoice;
+    }
   });
   it('recovers all 31 numbered rows from overlapping high-resolution sections', async () => {
     denseMode = 'complete'; sectionIndex = 0; visionRequests = [];

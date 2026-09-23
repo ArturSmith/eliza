@@ -134,7 +134,7 @@ export const aiToolDefinitions = [
   {
     name: 'propose_document_product',
     permission: 'catalog.write',
-    description: 'Prepare a product creation proposal from one SAVED scanned-document row and its reviewed catalog fields, including the uploaded photo. First search the catalog for an existing product. Pass the document ID and zero-based table/row indexes. The user must approve the proposal before any product is created. If fields are missing, ask the user to complete and save the digital document.',
+    description: 'Prepare a product creation proposal from one SAVED scanned-document row and its reviewed catalog fields, including the uploaded photo. For boxed goods, the reviewed items-per-box count and box cost determine per-piece cost when the selling unit is piece, or box cost when the selling unit is box; never treat a box price as a piece price. First search the catalog for an existing product. Pass the document ID and zero-based table/row indexes. The user must approve the proposal before any product is created. If fields are missing, ask the user to complete and save the digital document.',
     parameters: { type: 'object', properties: { documentId: { type: 'string' }, tableIndex: { type: 'integer' }, rowIndex: { type: 'integer' } }, required: ['documentId', 'tableIndex', 'rowIndex'], additionalProperties: false },
     schema: z.object({ documentId: z.string().uuid(), tableIndex: z.number().int().min(0).max(29), rowIndex: z.number().int().min(0).max(499) }).strict(),
   },

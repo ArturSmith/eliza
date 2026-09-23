@@ -4892,6 +4892,12 @@ input.shopping-section-title {
   }
 }
 
+/* Keep the full scanned product description readable while other columns stay compact. */
+.document-table-scroll .document-scanned-product {
+  min-width: 440px;
+  width: 440px;
+}
+
 /* Product details reviewed alongside each scanned line item. */
 .document-table-scroll table:has(.document-product-column) {
   min-width: 2450px;

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
-import { documentDataSchema, productSchema, productSku, purchaseDraftSchema, supplierSchema, type Permission } from '@eliza/contracts';
+import { costPerItem, documentDataSchema, inferDocumentPack, productSchema, productSku, purchaseDraftSchema, supplierSchema, type Permission } from '@eliza/contracts';
 import type { Database } from './database.js';
 import type { AuthRequest } from './security.js';
 import { CatalogController } from './catalog.js';
@@ -76,9 +76,24 @@ export async function stageDocumentProductProposal(
   const product = row.product;
   const productColumn = table.columns.findIndex((column) => /^(product|item|товар|наименование)$/i.test(column.key) || /^(product|item|товар|наименование)$/i.test(column.label.trim()));
   const name = productColumn >= 0 ? (row.cells[productColumn] || '').trim() : product.name.trim();
+  const inferredPack = inferDocumentPack(table, row);
+  const itemsPerBox = product.itemsPerBox ?? inferredPack.itemsPerBox;
+  const boxCost = product.boxCost ?? inferredPack.boxCost;
+  const derivedCost = itemsPerBox && boxCost
+    ? product.unit === 'piece'
+      ? costPerItem(boxCost, itemsPerBox)
+      : ['box', 'pack'].includes(product.unit)
+        ? boxCost.replace(',', '.')
+        : ''
+    : '';
+  if (itemsPerBox && product.unit === 'piece' && !boxCost)
+    return { error: 'Enter and save the box cost before creating a piece product from this boxed item.' };
+  if (itemsPerBox && boxCost && ['piece', 'box', 'pack'].includes(product.unit) && !derivedCost)
+    return { error: 'Check the items-per-box count and box cost in the saved document.' };
+  const productCost = derivedCost || product.cost;
   const missing = [
     !name && 'name', !product.category && 'category', !product.unit && 'unit',
-    !product.price && 'selling price', !product.cost && 'unit cost',
+    !product.price && 'selling price', !productCost && 'unit cost',
     !product.taxRate && 'tax rate', !product.minStock && 'minimum stock',
   ].filter(Boolean);
   if (missing.length) return { error: 'Complete and save these product fields: ' + missing.join(', ') + '.' };
@@ -86,7 +101,7 @@ export async function stageDocumentProductProposal(
   const parsed = productSchema.omit({ source: true }).extend({ autoSku: z.boolean(), autoPlu: z.boolean() }).safeParse({
     name, sku, plu: product.plu, autoSku: !product.sku, autoPlu: !product.plu,
     category: product.category, unit: product.unit, price: product.price.replace(',', '.'),
-    cost: product.cost.replace(',', '.'), taxRate: product.taxRate.replace(',', '.'),
+    cost: productCost.replace(',', '.'), taxRate: product.taxRate.replace(',', '.'),
     minStock: product.minStock.replace(',', '.'), description: product.description,
     image: product.image, barcodes: product.barcode ? [product.barcode] : [],
   });
@@ -97,7 +112,9 @@ export async function stageDocumentProductProposal(
     [req.context.store.id, name, product.sku, product.barcode],
   );
   if (duplicate.rowCount) return { error: 'Possible existing product: ' + duplicate.rows.map((item) => item.name + ' (' + item.id + ')').join(', ') + '. Review it before creating another.' };
-  return { id: randomUUID(), kind: 'product', operation: 'create', summary: 'Create product ' + name, payload: parsed.data };
+  return { id: randomUUID(), kind: 'product', operation: 'create',
+    summary: 'Create product ' + name + (derivedCost ? ' (' + itemsPerBox + ' items/box, ' + derivedCost + ' cost/' + product.unit + ')' : ''),
+    payload: parsed.data };
 }
 export async function applyProposal(database: Database, req: AuthRequest, proposal: Proposal) {
   if (!req.context.user.permissions.includes(permissionFor[proposal.kind]))

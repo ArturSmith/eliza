@@ -1541,5 +1541,10 @@
   "Could not start the camera. Check that it is connected and not in use.": "Не удалось включить камеру. Проверьте подключение и убедитесь, что её не использует другое приложение.",
   "Point your camera at each barcode. Scanning continues until you close this window.": "Наведите камеру на каждый штрихкод. Сканирование продолжится, пока вы не закроете это окно.",
   "This code matches multiple products. Select the correct product.": "Этот код соответствует нескольким товарам. Выберите нужный товар.",
-  "No active product matches this barcode. Check the code or select a product.": "По этому штрихкоду не найден активный товар. Проверьте код или выберите товар вручную."
+  "No active product matches this barcode. Check the code or select a product.": "По этому штрихкоду не найден активный товар. Проверьте код или выберите товар вручную.",
+  "Items per box": "Штук в коробке",
+  "Box cost": "Стоимость коробки",
+  "Cost per item": "Себестоимость штуки",
+  "Product cost": "Себестоимость товара",
+  "For boxed goods, check items per box and box cost. The cost per item is calculated; printed invoice values stay unchanged.": "Для товаров в коробках проверьте количество штук и стоимость коробки. Себестоимость штуки рассчитывается автоматически; данные оригинального документа не меняются."
 }

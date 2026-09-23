@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   documentDataSchema,
   validateDocument,
+  inferDocumentPack,
+  costPerItem,
   type DocumentData,
 } from '../packages/contracts/src/index';
 function invoice(): DocumentData {
@@ -158,5 +160,37 @@ describe('scanned document reconstruction', () => {
     edited.printedTotal = '9 192,00';
     expect(validateDocument(edited).difference).toBe('0.00');
     expect(source.printedTotal).toBe('8 638,00');
+  });
+});
+
+
+describe('boxed purchase costs', () => {
+  const table: DocumentData['tables'][number] = {
+    id: 'items', title: 'Items',
+    columns: [
+      { key: 'product', label: 'Товар', kind: 'text' as const },
+      { key: 'quantity', label: 'Количество', kind: 'quantity' as const },
+      { key: 'price', label: 'Цена', kind: 'price' as const },
+      { key: 'amount', label: 'Сумма', kind: 'amount' as const },
+    ],
+    footerRows: [],
+    rows: [],
+  };
+  it('calculates cost per piece only when the invoice quantity identifies boxes', () => {
+    const boxed = inferDocumentPack(table, {
+      rowNumber: '1', cells: ['Конфеты 24шт в уп.', '2 короб', '120,00', '240,00'],
+    });
+    expect(boxed).toEqual({ itemsPerBox: '24', boxCost: '120.00', itemCost: '5.00' });
+    const pieces = inferDocumentPack(table, {
+      rowNumber: '2', cells: ['Конфеты 24шт в уп.', '24 шт', '5,00', '120,00'],
+    });
+    expect(pieces).toEqual({ itemsPerBox: '24', boxCost: '', itemCost: '' });
+  });
+  it('avoids guessing through nested packaging and rounds displayed item cost', () => {
+    expect(inferDocumentPack(table, {
+      rowNumber: '3', cells: ['Конфеты в 1уп 20б по 30шт', '1 короб', '600,00', '600,00'],
+    }).itemsPerBox).toBe('');
+    expect(costPerItem('100,00', '24')).toBe('4.17');
+    expect(costPerItem('100,00', '0')).toBe('');
   });
 });

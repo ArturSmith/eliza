@@ -141,6 +141,46 @@ describe('approved AI writes', () => {
     expect(created).toMatchObject({ name: 'Test biscuits', description: 'Small pack', image });
     expect((await stageDocumentProductProposal(db, actor, { documentId: scanId, tableIndex: 0, rowIndex: 0 })).error).toContain('Possible existing product');
   });
+  it('uses reviewed box quantities when proposing piece or box products', async () => {
+    const deviceId = (await db.pool.query('SELECT id FROM devices WHERE store_id=$1 LIMIT 1', [storeId])).rows[0].id;
+    const product = {
+      name: 'Boxed sweets 24шт в уп', sku: '', barcode: '', plu: '', image: '',
+      description: '', category: 'Sweets', unit: 'piece', price: '12',
+      cost: '120', itemsPerBox: '24', boxCost: '120.00', taxRate: '0', minStock: '0',
+    };
+    const edited = {
+      documentType: 'invoice', language: 'ru', title: 'Box invoice', number: 'BOX-1',
+      date: '', currency: 'NOK', summary: '', pages: 1, parties: [], fields: [],
+      sections: [], additionalText: [], annotations: [], printedTotal: '',
+      extractionWarnings: [], tables: [{
+        id: 'items', title: 'Items', columns: [
+          { key: 'product', label: 'Товар', kind: 'text' },
+          { key: 'quantity', label: 'Количество', kind: 'quantity' },
+          { key: 'price', label: 'Цена', kind: 'price' },
+        ], footerRows: [], rows: [{
+          rowNumber: '1', cells: ['Boxed sweets 24шт в уп', '1 короб', '120,00'], product,
+        }],
+      }],
+    };
+    const scanId = (await db.pool.query(
+      `INSERT INTO scanned_documents(store_id,created_by,device_id,filename,mime_type,original_file,extracted,edited,validation,document_type,status)
+       VALUES($1,$2,$3,'box.png','image/png',$4,$5,$5,'{}','invoice','saved') RETURNING id`,
+      [storeId, employeeId, deviceId, Buffer.from('test'), JSON.stringify(edited)],
+    )).rows[0].id;
+    const actor = { context: { store: { id: storeId }, user: { id: employeeId, permissions: ['catalog.write', 'purchases.read'] } } } as any;
+    const piece = await stageDocumentProductProposal(db, actor, { documentId: scanId, tableIndex: 0, rowIndex: 0 });
+    expect(piece).toMatchObject({ kind: 'product', payload: { unit: 'piece', cost: '5.00' } });
+    product.unit = 'box';
+    product.price = '150';
+    await db.pool.query('UPDATE scanned_documents SET edited=$2 WHERE id=$1', [scanId, JSON.stringify(edited)]);
+    const box = await stageDocumentProductProposal(db, actor, { documentId: scanId, tableIndex: 0, rowIndex: 0 });
+    expect(box).toMatchObject({ kind: 'product', payload: { unit: 'box', cost: '120.00' } });
+    product.unit = 'piece';
+    product.boxCost = '';
+    await db.pool.query('UPDATE scanned_documents SET edited=$2 WHERE id=$1', [scanId, JSON.stringify(edited)]);
+    expect((await stageDocumentProductProposal(db, actor, { documentId: scanId, tableIndex: 0, rowIndex: 0 })).error).toContain('box cost');
+  });
+
   it('deletes scans without deleting chats and deletes chats without deleting saved records', async () => {
     const deviceId = (await db.pool.query('SELECT id FROM devices WHERE store_id=$1 LIMIT 1', [storeId])).rows[0].id;
     const scanId = (await db.pool.query(

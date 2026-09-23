@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import { BadRequestException, HttpException } from '@nestjs/common';
 import { z } from 'zod';
-import { documentDataSchema, type DocumentData } from '@eliza/contracts';
+import { documentDataSchema, documentProductSchema, inferDocumentPack, type DocumentData } from '@eliza/contracts';
 import {
   PurchaseDocumentError,
   providerFailure,
@@ -115,7 +115,7 @@ const instructions = [
   'Transcribe exactly what is visible in the original language. Do not paraphrase, translate, normalize product names, replace article numbers, or use catalog knowledge.',
   'Preserve title, number, date, parties, contact details, fields, sections, annotations, and every table.',
   'Preserve printed row numbers, column order, all rows including duplicates, quantity, selling unit, unit price, line amount, and totals as separate printed strings.',
-  'Package counts embedded in a product description (for example 12шт or 24шт) are not the purchased quantity.',
+  'Package counts embedded in a product description (for example 12шт or 24шт) are not the purchased quantity. Preserve any printed box, pack, or piece unit so the app can suggest a per-item cost for review; never divide printed prices in the source table.',
   'Use null for an unreadable cell and include its zero-based column index in uncertainCells. Never guess text or default a missing quantity to 1.',
   'Separate handwritten annotations from printed values. Keep printed total separate from calculated amounts; never calculate or repair source values.',
   'For each numbered table, report the visible printed first and last row number and expected count independently of how many rows you transcribe.',
@@ -426,6 +426,23 @@ export async function extractScannedDocument(
     result.extractionWarnings.push(
       `Layout inspection found ${layout.tableCount} tables, but extraction returned ${result.tables.length}; review the original.`,
     );
+  }
+  // Suggest pack details only where the printed name gives an unambiguous count.
+  // Keep printed quantities and prices in the original table cells.
+  for (const table of result.tables) {
+    const productIndex = table.columns.findIndex((column) =>
+      /^(product|item|товар|наименование)$/i.test(column.key) ||
+      /^(product|item|товар|наименование)$/i.test(column.label.trim()));
+    if (productIndex < 0) continue;
+    for (const row of table.rows) {
+      const pack = inferDocumentPack(table, row);
+      if (!pack.itemsPerBox) continue;
+      row.product = documentProductSchema.parse({
+        name: row.cells[productIndex] ?? '',
+        itemsPerBox: pack.itemsPerBox,
+        boxCost: pack.boxCost,
+      });
+    }
   }
   console.info(
     JSON.stringify({

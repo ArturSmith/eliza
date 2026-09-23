@@ -12,6 +12,8 @@ export const documentProductSchema = z.object({
   unit: z.string().max(30).default(''),
   price: z.string().max(50).default(''),
   cost: z.string().max(50).default(''),
+  itemsPerBox: z.string().max(30).refine((value) => value === '' || /^[1-9]\d{0,5}$/.test(value), 'Enter a whole number of items per box').optional(),
+  boxCost: z.string().max(50).refine((value) => value === '' || (parsePrintedAmount(value) ?? -1n) >= 0n, 'Enter a valid box cost').optional(),
   taxRate: z.string().max(50).default(''),
   minStock: z.string().max(50).default(''),
 }).strict();
@@ -107,6 +109,52 @@ export function formatCents(amount: bigint): string {
   const value = amount < 0n ? -amount : amount;
   return sign + (value / 100n).toString() + '.' + (value % 100n).toString().padStart(2, '0');
 }
+/** Suggestions only: preserve invoice quantities and prices exactly as printed. */
+export function costPerItem(boxCost: string, itemsPerBox: string): string {
+  const cents = parsePrintedAmount(boxCost);
+  if (cents === null || cents < 0n || !/^[1-9]\d{0,5}$/.test(itemsPerBox.trim())) return '';
+  const count = BigInt(itemsPerBox.trim());
+  return formatCents((cents + count / 2n) / count);
+}
+
+export function inferDocumentPack(
+  table: DocumentData['tables'][number],
+  row: DocumentData['tables'][number]['rows'][number],
+): { itemsPerBox: string; boxCost: string; itemCost: string } {
+  const productIndex = table.columns.findIndex((column) =>
+    /^(product|item|товар|наименование)$/i.test(column.key) ||
+    /^(product|item|товар|наименование)$/i.test(column.label.trim()));
+  const name = productIndex >= 0 ? row.cells[productIndex] ?? '' : '';
+  const counts = [...name.matchAll(/(\d{1,6})\s*(?:шт\.?|штук|pieces?|pcs|units?)/giu)]
+    .map((match) => match[1]);
+  const distinct = [...new Set(counts)];
+  const nestedPacks = [...name.matchAll(/(\d+)\s*(?:б(?:л(?:ок)?)?|уп(?:ак)?|кор(?:об)?)/giu)]
+    .some((match) => Number(match[1]) > 1);
+  const itemsPerBox = distinct.length === 1 && !nestedPacks ? distinct[0] : '';
+  if (!itemsPerBox) return { itemsPerBox: '', boxCost: '', itemCost: '' };
+
+  const quantityIndex = table.columns.findIndex((column) => column.kind === 'quantity');
+  const quantity = quantityIndex >= 0 ? row.cells[quantityIndex] ?? '' : '';
+  const unitIndex = table.columns.findIndex((column) =>
+    /^(unit|uom|ед\.?|единица|единица измерения)$/iu.test(column.label.trim()));
+  const purchaseUnit = unitIndex >= 0 ? row.cells[unitIndex] ?? '' : '';
+  const boxUnit = /(?:короб|кор\.|ящик|упак|уп\.|блок|бл\.|box|carton|case|pack)/iu;
+  if (!boxUnit.test(purchaseUnit) && !boxUnit.test(quantity))
+    return { itemsPerBox, boxCost: '', itemCost: '' };
+
+  const priceIndex = table.columns.findIndex((column) => column.kind === 'price');
+  let cents = priceIndex >= 0 ? parsePrintedAmount(row.cells[priceIndex] ?? '') : null;
+  if (cents === null) {
+    const amountIndex = table.columns.findIndex((column) => column.kind === 'amount');
+    const amount = amountIndex >= 0 ? parsePrintedAmount(row.cells[amountIndex] ?? '') : null;
+    const count = quantity.match(/^\s*(\d+)\s*/)?.[1];
+    if (amount !== null && count && Number(count) > 0 && amount % BigInt(count) === 0n)
+      cents = amount / BigInt(count);
+  }
+  const boxCost = cents !== null && cents >= 0n ? formatCents(cents) : '';
+  return { itemsPerBox, boxCost, itemCost: costPerItem(boxCost, itemsPerBox) };
+}
+
 function parsePrintedQuantity(raw: string): bigint | null {
   const compact = raw.replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
   if (!/^\d+(\.\d{1,3})?$/.test(compact)) return null;

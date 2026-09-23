@@ -4,6 +4,8 @@ import {
   type DocumentProduct,
   type DocumentValidation,
   validateDocument,
+  inferDocumentPack,
+  costPerItem,
 } from '@eliza/contracts';
 import { api, queryClient } from './api';
 import { t, useLanguage } from './i18n';
@@ -75,23 +77,40 @@ export function DocumentViewer({
         column.kind === 'price' || /^(unit cost|unit price|price|цена)$/i.test(column.label.trim()),
     );
   }
-  function productValue(tableIndex: number, rowIndex: number, key: keyof DocumentProduct) {
+  function productValue(
+    tableIndex: number,
+    rowIndex: number,
+    key: keyof DocumentProduct | 'itemCost',
+  ): string {
     const table = data.tables[tableIndex];
-    const product = table.rows[rowIndex].product;
-    if (product) return product[key];
-    if (key === 'name') return table.rows[rowIndex].cells[productIndex(table)] || '';
-    if (key === 'cost') return table.rows[rowIndex].cells[costIndex(table)] || '';
+    const row = table.rows[rowIndex];
+    const product = row.product;
+    const inferred = inferDocumentPack(table, row);
+    const itemsPerBox = product?.itemsPerBox ?? inferred.itemsPerBox;
+    const boxCost = product?.boxCost ?? inferred.boxCost;
+    if (key === 'itemsPerBox') return itemsPerBox;
+    if (key === 'boxCost') return boxCost;
+    if (key === 'itemCost') return costPerItem(boxCost, itemsPerBox);
+    if (key === 'cost' && itemsPerBox && boxCost) {
+      if (product?.unit === 'piece') return costPerItem(boxCost, itemsPerBox);
+      if (product?.unit === 'box' || product?.unit === 'pack') return boxCost;
+    }
+    if (product && product[key]) return product[key] ?? '';
+    if (key === 'name') return row.cells[productIndex(table)] || '';
+    if (key === 'cost' && !itemsPerBox) return row.cells[costIndex(table)] || '';
     return '';
   }
   function setProductValue(
     tableIndex: number,
     rowIndex: number,
-    key: keyof DocumentProduct,
+    key: keyof DocumentProduct | 'itemCost',
     value: string,
   ) {
+    if (key === 'itemCost') return;
     change((draft) => {
       const table = draft.tables[tableIndex];
       const row = table.rows[rowIndex];
+      const inferred = inferDocumentPack(table, row);
       row.product ??= {
         name: row.cells[productIndex(table)] || '',
         sku: '',
@@ -102,7 +121,9 @@ export function DocumentViewer({
         category: '',
         unit: '',
         price: '',
-        cost: row.cells[costIndex(table)] || '',
+        cost: inferred.itemsPerBox ? '' : row.cells[costIndex(table)] || '',
+        itemsPerBox: inferred.itemsPerBox,
+        boxCost: inferred.boxCost,
         taxRate: '',
         minStock: '',
       };
@@ -131,7 +152,7 @@ export function DocumentViewer({
       setError(error);
     }
   }
-  const productFields: { key: keyof DocumentProduct; label: string; multiline?: boolean }[] = [
+  const productFields: { key: keyof DocumentProduct | 'itemCost'; label: string; multiline?: boolean }[] = [
     { key: 'barcode', label: t('Barcode') },
     { key: 'sku', label: t('SKU') },
     { key: 'plu', label: t('PLU') },
@@ -139,7 +160,10 @@ export function DocumentViewer({
     { key: 'category', label: t('Category') },
     { key: 'unit', label: t('Selling unit') },
     { key: 'price', label: t('Selling price') },
-    { key: 'cost', label: t('Unit cost') },
+    { key: 'itemsPerBox', label: t('Items per box') },
+    { key: 'boxCost', label: t('Box cost') },
+    { key: 'itemCost', label: t('Cost per item') },
+    { key: 'cost', label: t('Product cost') },
     { key: 'taxRate', label: t('Tax rate') },
     { key: 'minStock', label: t('Minimum stock') },
   ];
@@ -432,6 +456,8 @@ export function DocumentViewer({
                   {t(
                     'Fill product details, save the digital document, then ask Eliza AI to create the products. Review each proposal before approval.',
                   )}
+                  {' '}
+                  {t('For boxed goods, check items per box and box cost. The cost per item is calculated; printed invoice values stay unchanged.')}
                 </p>
               )}
               <div className="document-table-scroll">
@@ -452,7 +478,9 @@ export function DocumentViewer({
                           className={
                             ['amount', 'price', 'quantity', 'number'].includes(column.kind)
                               ? 'numeric'
-                              : ''
+                              : columnIndex === productIndex(table)
+                                ? 'document-scanned-product'
+                                : ''
                           }
                         >
                           {editText(
@@ -501,7 +529,9 @@ export function DocumentViewer({
                                 table.columns[cellIndex]?.kind,
                               )
                                 ? 'numeric'
-                                : ''
+                                : cellIndex === productIndex(table)
+                                  ? 'document-scanned-product'
+                                  : ''
                             }
                           >
                             {editText(
@@ -529,7 +559,11 @@ export function DocumentViewer({
                             {productFields.map((field) => (
                               <td key={'product-' + field.key} className="document-product-cell">
                                 {editing ? (
-                                  field.key === 'barcode' ? (
+                                  field.key === 'itemCost' ? (
+                                    <output aria-label={field.label + ' ' + (rowIndex + 1)}>
+                                      {productValue(tableIndex, rowIndex, 'itemCost') || '—'}
+                                    </output>
+                                  ) : field.key === 'barcode' ? (
                                     <div className="barcode-input-with-camera">
                                       <input
                                         aria-label={field.label + ' ' + (rowIndex + 1)}
@@ -578,6 +612,13 @@ export function DocumentViewer({
                                         </option>
                                       ))}
                                     </select>
+                                  ) : field.key === 'cost' &&
+                                    productValue(tableIndex, rowIndex, 'itemsPerBox') &&
+                                    productValue(tableIndex, rowIndex, 'boxCost') &&
+                                    ['piece', 'box', 'pack'].includes(productValue(tableIndex, rowIndex, 'unit')) ? (
+                                    <output aria-label={field.label + ' ' + (rowIndex + 1)}>
+                                      {productValue(tableIndex, rowIndex, 'cost')}
+                                    </output>
                                   ) : field.multiline ? (
                                     <textarea
                                       aria-label={field.label + ' ' + (rowIndex + 1)}
