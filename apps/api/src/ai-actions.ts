@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { z } from 'zod';
-import { productSchema, purchaseDraftSchema, supplierSchema, type Permission } from '@eliza/contracts';
+import { documentDataSchema, productSchema, productSku, purchaseDraftSchema, supplierSchema, type Permission } from '@eliza/contracts';
 import type { Database } from './database.js';
 import type { AuthRequest } from './security.js';
 import { CatalogController } from './catalog.js';
@@ -31,7 +31,7 @@ function validate(kind: Proposal['kind'], operation: Proposal['operation'], raw:
     ...(operation === 'update' ? identity.shape : {}),
     active: z.boolean().default(true),
   }).strict().parse(raw);
-  if (kind === 'product') return productSchema.omit({ image: true, source: true }).extend({
+  if (kind === 'product') return productSchema.omit({ source: true }).extend({
     ...(operation === 'update' ? { id: z.uuid() } : {}),
     autoPlu: z.boolean().default(false),
     autoSku: z.boolean().default(false),
@@ -52,6 +52,52 @@ export function stageProposal(raw: unknown, permissions: readonly Permission[]):
       : 'Malformed JSON.';
     return { error: 'Invalid proposal: ' + detail };
   }
+}
+export async function stageDocumentProductProposal(
+  database: Database,
+  req: AuthRequest,
+  raw: unknown,
+): Promise<Proposal | { error: string }> {
+  if (!req.context.user.permissions.includes('catalog.write') || !req.context.user.permissions.includes('purchases.read'))
+    return { error: 'Permission denied.' };
+  const args = z.object({ documentId: z.uuid(), tableIndex: z.number().int().min(0).max(29), rowIndex: z.number().int().min(0).max(499) }).strict().safeParse(raw);
+  if (!args.success) return { error: 'Choose a valid saved document row.' };
+  const result = await database.pool.query(
+    "SELECT edited,status FROM scanned_documents WHERE id=$1 AND store_id=$2",
+    [args.data.documentId, req.context.store.id],
+  );
+  if (!result.rowCount || result.rows[0].status !== 'saved')
+    return { error: 'Save and review the digital document before proposing products.' };
+  const document = documentDataSchema.safeParse(result.rows[0].edited);
+  if (!document.success) return { error: 'The saved document needs correction before use.' };
+  const table = document.data.tables[args.data.tableIndex];
+  const row = table?.rows[args.data.rowIndex];
+  if (!row?.product) return { error: 'Fill the product details in this row and save the document.' };
+  const product = row.product;
+  const productColumn = table.columns.findIndex((column) => /^(product|item|товар|наименование)$/i.test(column.key) || /^(product|item|товар|наименование)$/i.test(column.label.trim()));
+  const name = product.name.trim() || (productColumn >= 0 ? (row.cells[productColumn] || '').trim() : '');
+  const missing = [
+    !name && 'name', !product.category && 'category', !product.unit && 'unit',
+    !product.price && 'selling price', !product.cost && 'unit cost',
+    !product.taxRate && 'tax rate', !product.minStock && 'minimum stock',
+  ].filter(Boolean);
+  if (missing.length) return { error: 'Complete and save these product fields: ' + missing.join(', ') + '.' };
+  const sku = product.sku || productSku(name, product.plu);
+  const parsed = productSchema.omit({ source: true }).extend({ autoSku: z.boolean(), autoPlu: z.boolean() }).safeParse({
+    name, sku, plu: product.plu, autoSku: !product.sku, autoPlu: !product.plu,
+    category: product.category, unit: product.unit, price: product.price.replace(',', '.'),
+    cost: product.cost.replace(',', '.'), taxRate: product.taxRate.replace(',', '.'),
+    minStock: product.minStock.replace(',', '.'), description: product.description,
+    image: product.image, barcodes: product.barcode ? [product.barcode] : [],
+  });
+  if (!parsed.success) return { error: 'Correct the product fields before proposing creation: ' + parsed.error.issues.slice(0, 3).map((issue) => issue.path.join('.') + ': ' + issue.message).join('; ') };
+  const duplicate = await database.pool.query(
+    `SELECT DISTINCT p.id,p.name FROM products p LEFT JOIN barcodes b ON b.product_id=p.id AND b.store_id=p.store_id
+     WHERE p.store_id=$1 AND (lower(p.name)=lower($2) OR ($3<>'' AND p.sku=$3) OR ($4<>'' AND b.value=$4)) LIMIT 3`,
+    [req.context.store.id, name, product.sku, product.barcode],
+  );
+  if (duplicate.rowCount) return { error: 'Possible existing product: ' + duplicate.rows.map((item) => item.name + ' (' + item.id + ')').join(', ') + '. Review it before creating another.' };
+  return { id: randomUUID(), kind: 'product', operation: 'create', summary: 'Create product ' + name, payload: parsed.data };
 }
 export async function applyProposal(database: Database, req: AuthRequest, proposal: Proposal) {
   if (!req.context.user.permissions.includes(permissionFor[proposal.kind]))

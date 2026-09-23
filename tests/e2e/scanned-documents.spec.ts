@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import sharp from 'sharp';
 const pixel = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7WQAAAAASUVORK5CYII=',
   'base64',
@@ -104,12 +105,25 @@ test('scans, edits, saves, and reopens a digital invoice inside Eliza AI', async
   await expect(paper).toBeHidden();
   await page.getByRole('button', { name: 'Expand document' }).click();
   await expect(paper).toBeVisible();
+  await paper.getByLabel('Barcode 1').fill('5449000000996');
+  await paper.getByLabel('Category 1').fill('Drinks');
+  await paper.getByLabel('Selling unit 1').selectOption('piece');
+  await paper.getByLabel('Selling price 1').fill('75');
+  await paper.getByLabel('Unit cost 1').fill('59');
+  await paper.getByLabel('Tax rate 1').fill('0');
+  await paper.getByLabel('Minimum stock 1').fill('0');
+  const photo = await sharp({ create: { width: 16, height: 16, channels: 3, background: '#dd3333' } }).jpeg().toBuffer();
+  await paper.getByLabel('Product photo 1').setInputFiles({ name: 'product.jpg', mimeType: 'image/jpeg', buffer: photo });
+  await expect(paper.locator('tbody tr').first().locator('.document-product-image')).toBeVisible();
+
   await paper.getByLabel('Printed document total').fill('9 192,00');
   await page.getByRole('button', { name: 'Collapse document' }).click();
   await page.getByRole('button', { name: 'Expand document' }).click();
   await expect(paper.getByLabel('Printed document total')).toHaveValue('9 192,00');
   await page.getByRole('button', { name: 'Save digital document' }).click();
   await expect(page.getByText('Saved digital document')).toBeVisible();
+  expect(record.edited.tables[0].rows[0].product).toMatchObject({ name: 'Чай Манго', barcode: '5449000000996', category: 'Drinks', price: '75', cost: '59' });
+  expect(record.edited.tables[0].rows[0].product.image).toMatch(/^data:image\/jpeg;base64,/);
   await expect(paper).toContainText('9 192,00');
   const thread = page.locator('.ai-thread');
   const composer = page.locator('.ai-composer-wrap');

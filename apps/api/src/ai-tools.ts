@@ -132,6 +132,13 @@ export const aiToolDefinitions = [
     schema: search,
   },
   {
+    name: 'propose_document_product',
+    permission: 'catalog.write',
+    description: 'Prepare a product creation proposal from one SAVED scanned-document row and its reviewed catalog fields, including the uploaded photo. First search the catalog for an existing product. Pass the document ID and zero-based table/row indexes. The user must approve the proposal before any product is created. If fields are missing, ask the user to complete and save the digital document.',
+    parameters: { type: 'object', properties: { documentId: { type: 'string' }, tableIndex: { type: 'integer' }, rowIndex: { type: 'integer' } }, required: ['documentId', 'tableIndex', 'rowIndex'], additionalProperties: false },
+    schema: z.object({ documentId: z.string().uuid(), tableIndex: z.number().int().min(0).max(29), rowIndex: z.number().int().min(0).max(499) }).strict(),
+  },
+  {
     name: 'propose_change',
     permission: 'catalog.read',
     description: 'Prepare a supplier, product, or purchase draft create/update for explicit user approval. This does not write anything. First search existing records. Data is a JSON string matching the normal Eliza form fields. Supplier fields: code,name,contactName,contactPhone,email,phone,address,companyNumber,paymentTerms,notes,active; update also needs id,version. Product fields: name,sku,category,unit,price,cost,minStock,plu,barcodes,description (optional),autoSku,autoPlu; update also needs id and full current fields. Purchase fields: supplierId,supplierReference,documentDate,expectedDate,notes,lines array of productId,quantity,unitCost,taxRate and optional sellingPrice; optional buyerName,buyerDetails,driverName,driverPhone,goodsNumber,buyerTaxNumber,grossWeight,documentVat,returnAmount,documentComment; update also needs id,version and must be a draft. Never invent IDs, prices, costs, tax rates, or missing required fields. Ask user for missing information first. The proposal is saved only after user clicks Approve.',
@@ -247,7 +254,8 @@ export function availableAiTools(permissions: readonly Permission[]) {
     (tool) =>
       (tool.name === 'propose_change' ? canPropose(permissions) : permissions.includes(tool.permission as Permission)) &&
       (tool.name !== 'gross_profit' || permissions.includes('sales.read')) &&
-      (tool.name !== 'product_details' || permissions.includes('costs.read')),
+      (tool.name !== 'product_details' || permissions.includes('costs.read')) &&
+      (tool.name !== 'propose_document_product' || permissions.includes('purchases.read')),
   );
 }
 export async function executeAiTool(
@@ -261,7 +269,8 @@ export async function executeAiTool(
   if (
     !req.context.user.permissions.includes(tool.permission as Permission) ||
     (name === 'gross_profit' && !req.context.user.permissions.includes('sales.read')) ||
-    (name === 'product_details' && !req.context.user.permissions.includes('costs.read'))
+    (name === 'product_details' && !req.context.user.permissions.includes('costs.read')) ||
+    (name === 'propose_document_product' && !req.context.user.permissions.includes('purchases.read'))
   )
     throw new ForbiddenException('Tool access denied.');
   const parsed = tool.schema.safeParse(raw);
@@ -294,6 +303,8 @@ export async function executeAiTool(
   switch (name) {
     case 'propose_change':
       return { error: 'Proposals are handled by the conversation service.' };
+    case 'propose_document_product':
+      return { error: 'Product proposals are handled by the conversation service.' };
     case 'gross_profit':
       return new GrossProfitController(database).report({ from: a.from, to: a.to }, req);
     case 'sales_summary': {
@@ -384,6 +395,10 @@ export async function executeAiTool(
       return rows.length
         ? {
             ...rows[0],
+            edited: {
+              ...rows[0].edited,
+              tables: rows[0].edited.tables?.map((table: any) => ({ ...table, rows: table.rows?.map((row: any) => row.product ? { ...row, product: { ...row.product, image: row.product.image ? '[uploaded image available for product proposal]' : '' } } : row) })),
+            },
             verified: false,
             source: 'AI-extracted scanned document',
             url: '/ai?document=' + a.id,

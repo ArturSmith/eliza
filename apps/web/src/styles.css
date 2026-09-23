@@ -3781,15 +3781,22 @@ input.shopping-section-title {
 .document-cell-uncertain { display: block; color: #9b5a17; font-size: .75rem; }
 
 /* Eliza AI */
+@media screen {
+  body:has(.ai-page) .workspace > main { height: calc(100dvh - 81px); min-height: 0; max-width: none; margin: 0; padding: 0; overflow: hidden; }
+  body:has(.ai-page) .workspace > footer { display: none; }
+}
 .ai-page {
   display: grid;
   grid-template-columns: minmax(220px, 270px) minmax(0, 1fr);
-  min-height: calc(100dvh - 110px);
+  width: 100%;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
   background: #fff;
-  border: 1px solid #e1e8df;
-  border-radius: 22px;
 }
+.ai-page.history-collapsed { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 801px) { .ai-page.history-collapsed .ai-history { display: none; } }
+.ai-history-scrim { display: none; }
 .ai-history {
   display: flex;
   flex-direction: column;
@@ -3813,7 +3820,7 @@ input.shopping-section-title {
   color: #526256;
   cursor: pointer;
 }
-.ai-history-heading button { display: none; }
+.ai-history-heading button { display: inline-grid; }
 .ai-new, .ai-history-list button {
   display: flex;
   align-items: center;
@@ -3834,14 +3841,14 @@ input.shopping-section-title {
 .ai-history-list button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ai-history-list button:hover, .ai-history-list button.active { background: #e8f0e5; }
 .ai-history-list p { padding: 0 12px; color: #788579; }
-.ai-main { position: relative; display: flex; flex-direction: column; width: 100%; min-width: 0; min-height: 0; height: calc(100dvh - 110px); max-width: none; max-height: calc(100dvh - 110px); margin: 0; padding: 0; }
-.ai-history-toggle { display: none; }
+.ai-main { position: relative; display: flex; flex-direction: column; width: 100%; min-width: 0; min-height: 0; height: 100%; max-width: none; max-height: none; margin: 0; padding: 0; }
+.ai-history-toggle { display: grid; place-items: center; position: absolute; z-index: 3; top: 12px; left: 14px; width: 38px; height: 38px; border: 1px solid #dce6da; border-radius: 10px; background: #fff; color: #3a5d42; cursor: pointer; }
 .ai-thread { position: absolute; inset: 0; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .ai-welcome { display: grid; justify-items: center; align-content: center; min-height: 45vh; padding: 30px; text-align: center; }
 .ai-welcome-icon { display: grid; place-items: center; width: 62px; height: 62px; border-radius: 20px; color: #275640; background: #eaf4e8; }
 .ai-welcome h1 { margin: 22px 0 10px; color: #1c3025; font-size: clamp(1.8rem, 3vw, 2.7rem); }
 .ai-welcome p { margin: 0; color: #718075; }
-.ai-messages { width: min(100%, 900px); margin: 0 auto; padding: 26px 28px var(--ai-composer-height, 190px); }
+.ai-messages { width: min(100%, 900px); margin: 0 auto; padding: 62px 28px var(--ai-composer-height, 190px); }
 .ai-message { margin: 0 0 27px; }
 .ai-message-user { width: fit-content; max-width: 80%; margin-left: auto; padding: 13px 17px; border-radius: 18px; background: #edf3ea; }
 .ai-message-label { margin-bottom: 7px; color: #637467; font-size: .78rem; font-weight: 700; }
@@ -3882,15 +3889,20 @@ input.shopping-section-title {
 .ai-document-picker button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px; border: 0; border-radius: 7px; background: transparent; color: #294937; font: inherit; text-align: left; cursor: pointer; }
 .ai-document-picker button:hover { background: #f0f6ee; }
 @media (max-width: 800px) {
-  .ai-page { display: block; min-height: calc(100dvh - 85px); border-radius: 14px; }
+  .ai-page { display: block; }
+  .ai-history-scrim { display: block; position: fixed; z-index: 29; inset: 0; border: 0; background: #17271d66; }
   .ai-history { position: fixed; z-index: 30; top: 0; bottom: 0; left: 0; width: min(300px, 80vw); box-shadow: 8px 0 30px rgba(20, 40, 25, .17); transform: translateX(-110%); transition: transform .2s; }
   .ai-history.is-open { transform: translateX(0); }
   .ai-history-heading button { display: inline-grid; }
-  .ai-main { height: calc(100dvh - 85px); min-height: calc(100dvh - 85px); max-height: calc(100dvh - 85px); }
-  .ai-history-toggle { display: grid; place-items: center; position: absolute; z-index: 3; top: 10px; left: 10px; width: 38px; height: 38px; border: 1px solid #dce6da; border-radius: 10px; background: #fff; color: #3a5d42; cursor: pointer; box-shadow: 0 2px 8px rgba(25, 50, 32, .1); }
-  .ai-messages { padding: 18px 15px var(--ai-composer-height, 190px); }
+  .ai-main { height: 100%; min-height: 0; max-height: none; }
+  .ai-history-toggle { top: 10px; left: 10px; box-shadow: 0 2px 8px rgba(25, 50, 32, .1); }
+  .ai-messages { padding: 62px 15px var(--ai-composer-height, 190px); }
   .ai-composer-wrap { width: calc(100% - 24px); }
   .ai-message-user { max-width: 93%; }
+}
+
+@media screen and (max-width: 740px) {
+  body:has(.ai-page) .workspace > main { height: calc(100dvh - 66px); }
 }
 
 /* Editable scans live inside the Eliza AI conversation. */
@@ -3996,3 +4008,16 @@ input.shopping-section-title {
 .digital-purchases-actions, .dialog-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .dialog-actions { justify-content: flex-end; margin-top: 24px; }
 @media (max-width: 640px) { .digital-purchases-delete { margin-right: 8px; } }
+
+/* Product details reviewed alongside each scanned line item. */
+.document-table-scroll table:has(.document-product-column) { min-width: 2450px; }
+.document-product-column, .document-product-cell { min-width: 155px; background: #f7faf5; }
+.document-product-cell input, .document-product-cell select, .document-product-cell textarea { width: 100%; min-width: 135px; font: inherit; padding: 6px; border: 1px solid #9cad9d; border-radius: 6px; background: white; }
+.document-product-cell textarea { min-height: 72px; }
+.document-product-cell input[type=file] { max-width: 180px; min-width: 140px; font-size: .78rem; }
+.document-product-image { display: block; max-width: 72px; max-height: 72px; margin-bottom: 6px; object-fit: contain; }
+
+.ai-proposed-product-image { display: block; max-width: 100px; max-height: 100px; margin: 10px 0; object-fit: contain; border-radius: 8px; }
+
+.document-product-help { margin: 6px 0 14px; color: #617061; font-size: .88rem; }
+.document-table-groups th { background: #eef4ec; color: #405b45; font-size: .83rem; font-weight: 700; }

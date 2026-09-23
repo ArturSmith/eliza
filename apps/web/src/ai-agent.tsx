@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowUp, ChevronDown, ChevronUp, Clock3, FileText, Paperclip, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { ArrowUp, ChevronDown, ChevronUp, Clock3, FileText, Paperclip, PanelLeftClose, PanelLeftOpen, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { api, queryClient, useProducts, useSession } from './api';
 import { ErrorMessage } from './forms';
 import { Dialog } from './components/ui/dialog';
@@ -163,7 +163,7 @@ export function AiAgentPage() {
   const [pending, setPending] = useState('');
   const [streamed, setStreamed] = useState('');
   const [localMessages, setLocalMessages] = useState<Message[] | null>(null);
-  const [showHistory, setShowHistory] = useState(false);
+  const [showHistory, setShowHistory] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 801px)').matches);
   const [deletingConversation, setDeletingConversation] = useState<Conversation | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<unknown>(null);
@@ -191,6 +191,12 @@ export function AiAgentPage() {
     queryFn: () => api<Document[]>('/documents?search=' + encodeURIComponent(documentSearch)),
     enabled: canDocuments && showDocuments,
   });
+  useEffect(() => {
+    const mobile = window.matchMedia('(max-width: 800px)');
+    const sync = () => setShowHistory(!mobile.matches);
+    mobile.addEventListener('change', sync);
+    return () => mobile.removeEventListener('change', sync);
+  }, []);
   useEffect(() => {
     setLocalMessages(null);
   }, [id]);
@@ -240,7 +246,7 @@ export function AiAgentPage() {
     setDocumentId('');
     setDocumentName('');
     setError(null);
-    setShowHistory(false);
+    if (window.matchMedia('(max-width: 800px)').matches) setShowHistory(false);
     setShowDocuments(false);
     window.history.replaceState(null, '', next ? '/ai?id=' + next : '/ai');
     setActiveDocumentId('');
@@ -308,7 +314,7 @@ export function AiAgentPage() {
       documentVat: 'VAT on document', returnAmount: 'Return amount', documentComment: 'Document comment',
       notes: 'Notes', description: 'Description', barcodes: 'Barcodes',
     };
-    return Object.entries(payload).filter(([key, value]) => !['id', 'version', 'lines', 'supplierId', 'autoSku', 'autoPlu', 'active'].includes(key) && value !== '' && value !== undefined && value !== null && (!Array.isArray(value) || value.length)).map(([key, value]) => <div key={key}><dt>{t(labels[key] ?? key)}</dt><dd>{Array.isArray(value) ? value.join(', ') : String(value)}</dd></div>);
+    return Object.entries(payload).filter(([key, value]) => !['id', 'version', 'lines', 'supplierId', 'autoSku', 'autoPlu', 'active', 'image'].includes(key) && value !== '' && value !== undefined && value !== null && (!Array.isArray(value) || value.length)).map(([key, value]) => <div key={key}><dt>{t(labels[key] ?? key)}</dt><dd>{Array.isArray(value) ? value.join(', ') : String(value)}</dd></div>);
   }
   async function send() {
     const text =
@@ -357,13 +363,13 @@ export function AiAgentPage() {
     }
   }
   return (
-    <div className="ai-page">
-      <aside className={'ai-history' + (showHistory ? ' is-open' : '')}>
+    <div className={'ai-page' + (showHistory ? '' : ' history-collapsed')}>
+      <aside id="ai-history" aria-label={t('Conversation history')} inert={!showHistory} className={'ai-history' + (showHistory ? ' is-open' : '')}>
         <div className="ai-history-heading">
           <strong>{t('Eliza AI')}</strong>
           <button
             type="button"
-            aria-label={t('Close history')}
+            aria-label={t('Hide conversations')}
             onClick={() => setShowHistory(false)}
           >
             <X size={18} />
@@ -387,14 +393,18 @@ export function AiAgentPage() {
           {history.data?.length === 0 && <p>{t('No conversations yet.')}</p>}
         </div>
       </aside>
+      {showHistory && <button type="button" className="ai-history-scrim" aria-label={t('Close history')} onClick={() => setShowHistory(false)} />}
       <main className="ai-main" ref={main}>
         <button
           type="button"
           className="ai-history-toggle"
           onClick={() => setShowHistory((current) => !current)}
-          aria-label={t('Conversation history')}
+          aria-label={showHistory ? t('Hide conversations') : t('Show conversations')}
+          aria-controls="ai-history"
+          aria-expanded={showHistory}
+          title={showHistory ? t('Hide conversations') : t('Show conversations')}
         >
-          <Clock3 size={20} />
+          {showHistory ? <PanelLeftClose size={20} /> : <PanelLeftOpen size={20} />}
         </button>
         <div className="ai-thread" ref={thread} role="log" aria-live="polite">
           {!id && !messages.length && (
@@ -421,6 +431,7 @@ export function AiAgentPage() {
                     {action.kind === 'purchase' && <div><dt>{t('Supplier')}</dt><dd>{suppliers.data?.find((supplier) => supplier.id === action.payload.supplierId)?.name ?? String(action.payload.supplierId ?? '')}</dd></div>}
                     {actionFields(action)}
                   </dl>
+                  {action.kind === 'product' && typeof action.payload.image === 'string' && action.payload.image.startsWith('data:image/jpeg;base64,') && <img className="ai-proposed-product-image" src={action.payload.image} alt={t('Product photo')} />}
                   {action.kind === 'product' && Boolean(action.payload.autoSku || action.payload.autoPlu) && <p className="ai-action-generated">{t('Eliza will generate: {value0}', { value0: [action.payload.autoSku ? 'SKU' : '', action.payload.autoPlu ? 'PLU' : ''].filter(Boolean).join(', ') })}</p>}
                   {action.kind === 'purchase' && Array.isArray(action.payload.lines) && <div className="ai-action-lines"><strong>{t('Purchase items')}</strong>{(action.payload.lines as { productId: string; quantity: string; unitCost: string; taxRate: string; sellingPrice?: string }[]).map((line, index) => <div key={index}>{products.data?.find((product) => product.id === line.productId)?.name ?? line.productId} · {line.quantity} × {line.unitCost} · {line.taxRate}% {t('tax')}{line.sellingPrice ? ' · ' + t('Selling price') + ': ' + line.sellingPrice : ''}</div>)}</div>}
                   {action.status === 'pending' && <div className="ai-action-buttons"><button type="button" className="button" disabled={!!actionBusy} onClick={() => void decideAction(action, true)}>{t('Approve and save')}</button><button type="button" className="button button-outline" disabled={!!actionBusy} onClick={() => void decideAction(action, false)}>{t('Decline')}</button></div>}

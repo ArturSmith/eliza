@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Module,
   Param,
@@ -11,6 +12,7 @@ import {
   UseGuards,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { and, eq, asc, sql } from 'drizzle-orm';
 import { productSchema, productSku } from '@eliza/contracts';
@@ -183,6 +185,39 @@ export class CatalogController {
       });
       return { ...product, plu: plu ?? '', barcodes: values };
     });
+  }
+  @Delete(':id') @Require('catalog.write') async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    const { store, user, device } = req.context;
+    const client = await this.database.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const selected = await client.query(
+        'SELECT id,name,sku,stock FROM products WHERE id=$1 AND store_id=$2 FOR UPDATE',
+        [id, store.id],
+      );
+      const product = selected.rows[0];
+      if (!product) throw new NotFoundException('Product not found.');
+      if (Number(product.stock) !== 0)
+        throw new ConflictException('This product has stock on hand. Count or adjust it to zero before deleting.');
+      await client.query('DELETE FROM barcodes WHERE product_id=$1 AND store_id=$2', [id, store.id]);
+      await client.query('DELETE FROM products WHERE id=$1 AND store_id=$2', [id, store.id]);
+      await client.query(
+        'INSERT INTO audits(store_id,employee_id,device_id,action,entity_id,details) VALUES($1,$2,$3,$4,$5,$6)',
+        [store.id, user.id, device.id, 'Product deleted', id, JSON.stringify({ name: product.name, sku: product.sku })],
+      );
+      await client.query('COMMIT');
+      return { deleted: true };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23503')
+        throw new ConflictException('This product is used in sales, purchases, inventory, counts or lists. Deactivate it instead to preserve those records.');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
   @Patch(':id/status') @Require('catalog.write') async status(
     @Param('id', ParseUUIDPipe) id: string,

@@ -151,6 +151,7 @@ export async function createApp() {
       if (
         (route === '/api/purchases/extract' && buf.length <= 6 * 1024 * 1024) ||
         (route === '/api/documents/scan' && buf.length <= 12 * 1024 * 1024) ||
+        (/^\/api\/documents\/[0-9a-f-]{36}\/save$/i.test(route) && buf.length <= 8 * 1024 * 1024) ||
         buf.length <= 100 * 1024
       )
         return;

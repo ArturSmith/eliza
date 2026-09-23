@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { createApp } from '../apps/api/dist/app.js';
 import { Database } from '../apps/api/dist/database.js';
-import { stageProposal } from '../apps/api/src/ai-actions';
+import { stageDocumentProductProposal, stageProposal } from '../apps/api/src/ai-actions';
+import { executeAiTool } from '../apps/api/src/ai-tools';
 
 const originalUrl = process.env.DATABASE_URL;
 const admin = new Database();
@@ -111,6 +112,34 @@ describe('approved AI writes', () => {
       vi.unstubAllGlobals();
       if (originalKey === undefined) delete process.env.OPENAI_API_KEY; else process.env.OPENAI_API_KEY = originalKey;
     }
+  });
+  it('proposes a reviewed scanned product with its photo and creates it only after approval', async () => {
+    const deviceId = (await db.pool.query('SELECT id FROM devices WHERE store_id=$1 LIMIT 1', [storeId])).rows[0].id;
+    const image = 'data:image/jpeg;base64,/9j/' + 'A'.repeat(80);
+    const edited = {
+      documentType: 'invoice', language: 'en', title: 'Supplier invoice', number: 'A-1', date: '', currency: 'NOK', summary: '', pages: 1,
+      parties: [], fields: [], sections: [], additionalText: [], annotations: [], printedTotal: '', extractionWarnings: [],
+      tables: [{ id: 'items', title: 'Items', columns: [{ key: 'product', label: 'Product', kind: 'text' }], footerRows: [], rows: [{ rowNumber: '1', cells: ['Test biscuits'], product: { name: 'Test biscuits', sku: '', barcode: '5449000000996', plu: '', image, description: 'Small pack', category: 'Snacks', unit: 'piece', price: '15', cost: '10', taxRate: '0', minStock: '0' } }] }],
+    };
+    const scanId = (await db.pool.query(
+      `INSERT INTO scanned_documents(store_id,created_by,device_id,filename,mime_type,original_file,extracted,edited,validation,document_type,status)
+       VALUES($1,$2,$3,'invoice.png','image/png',$4,$5,$5,'{}','invoice','saved') RETURNING id`,
+      [storeId, employeeId, deviceId, Buffer.from('test'), JSON.stringify(edited)],
+    )).rows[0].id;
+    const actor = { context: { store: { id: storeId }, user: { id: employeeId, permissions: ['catalog.write', 'purchases.read'] } } } as any;
+    const readable = await executeAiTool(db, actor, 'document_details', { id: scanId }) as any;
+    expect(readable.edited.tables[0].rows[0].product).toMatchObject({ name: 'Test biscuits', barcode: '5449000000996', image: '[uploaded image available for product proposal]' });
+    const draft = await stageDocumentProductProposal(db, actor, { documentId: scanId, tableIndex: 0, rowIndex: 0 });
+    expect(draft).toMatchObject({ kind: 'product', operation: 'create', payload: { name: 'Test biscuits', image, barcodes: ['5449000000996'], autoSku: true, autoPlu: true } });
+    expect((await db.pool.query("SELECT count(*)::int AS count FROM products WHERE name='Test biscuits'")).rows[0].count).toBe(0);
+    if (!('payload' in draft)) throw new Error(draft.error);
+    const conversation = (await request('/ai/conversations', {})).body.id;
+    const message = (await db.pool.query("INSERT INTO ai_messages(store_id,conversation_id,role,content) VALUES($1,$2,'assistant','Review product') RETURNING id", [storeId, conversation])).rows[0].id;
+    await db.pool.query('INSERT INTO ai_action_proposals(id,store_id,employee_id,conversation_id,message_id,kind,operation,summary,payload) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)', [draft.id, storeId, employeeId, conversation, message, draft.kind, draft.operation, draft.summary, JSON.stringify(draft.payload)]);
+    expect((await request('/ai/actions/' + draft.id + '/approve', {})).status).toBe(201);
+    const created = (await db.pool.query("SELECT name,description,image FROM products WHERE name='Test biscuits'")).rows[0];
+    expect(created).toMatchObject({ name: 'Test biscuits', description: 'Small pack', image });
+    expect((await stageDocumentProductProposal(db, actor, { documentId: scanId, tableIndex: 0, rowIndex: 0 })).error).toContain('Possible existing product');
   });
   it('deletes scans without deleting chats and deletes chats without deleting saved records', async () => {
     const deviceId = (await db.pool.query('SELECT id FROM devices WHERE store_id=$1 LIMIT 1', [storeId])).rows[0].id;

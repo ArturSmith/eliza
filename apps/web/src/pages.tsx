@@ -33,6 +33,7 @@ import {
   Users,
   X,
   Pencil,
+  Trash2,
   AlertTriangle,
   Menu,
 } from 'lucide-react';
@@ -694,6 +695,15 @@ export function ProductsPage() {
   const [edit, setEdit] = useState<Product | null>(null);
   const [offersFor, setOffersFor] = useState<Product | null>(null);
   const [status, setStatus] = useState<Product | null>(null);
+  const [remove, setRemove] = useState<Product | null>(null);
+  const removal = useMutation({
+    mutationFn: (product: Product) => api('/products/' + product.id, undefined, 'DELETE'),
+    onSuccess: () => {
+      void refresh();
+      setRemove(null);
+    },
+  });
+
   const mutation = useMutation({
     mutationFn: (p: Product) => api(`/products/${p.id}/status`, { active: !p.active }, 'PATCH'),
     onSuccess: () => {
@@ -830,6 +840,14 @@ export function ProductsPage() {
                           >
                             {p.active ? t('Deactivate') : t('Activate')}
                           </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={t('Delete {value0}', { value0: p.name })}
+                            onClick={() => { removal.reset(); setRemove(p); }}
+                          >
+                            <Trash2 size={15} />
+                          </Button>
                         </div>
                       </td>
                     )}
@@ -871,6 +889,19 @@ export function ProductsPage() {
         {offersFor && (
           <ProductSuppliers productId={offersFor.id} unit={offersFor.unit ?? 'piece'} />
         )}
+      </Dialog>
+      <Dialog
+        open={!!remove}
+        onOpenChange={(open) => { if (!open && !removal.isPending) setRemove(null); }}
+        title={t('Delete product?')}
+        description={t('Only products with zero stock and no sales, purchase, inventory, count or list history can be deleted. Deactivate products that must remain in your records.')}
+      >
+        <p className="confirm-name">{remove?.name}</p>
+        <ErrorMessage error={removal.error} />
+        <div className="form-actions">
+          <Button variant="outline" disabled={removal.isPending} onClick={() => setRemove(null)}>{t('Cancel')}</Button>
+          <Button variant="destructive" disabled={removal.isPending} onClick={() => remove && removal.mutate(remove)}>{removal.isPending ? t('Deleting…') : t('Delete product')}</Button>
+        </div>
       </Dialog>
       <Dialog
         open={!!status}

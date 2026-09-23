@@ -1,6 +1,21 @@
 import { z } from 'zod';
 
 const text = z.string().max(5000);
+export const documentProductSchema = z.object({
+  name: z.string().max(200).default(''),
+  sku: z.string().max(200).default(''),
+  barcode: z.string().max(100).default(''),
+  plu: z.string().max(20).default(''),
+  image: z.string().max(60000).refine((value) => value === '' || /^data:image\/jpeg;base64,\/9j\/[A-Za-z0-9+/]*={0,2}$/.test(value), 'Choose a valid product photo').default(''),
+  description: z.string().max(2000).default(''),
+  category: z.string().max(200).default(''),
+  unit: z.string().max(30).default(''),
+  price: z.string().max(50).default(''),
+  cost: z.string().max(50).default(''),
+  taxRate: z.string().max(50).default(''),
+  minStock: z.string().max(50).default(''),
+}).strict();
+export type DocumentProduct = z.infer<typeof documentProductSchema>;
 export const documentDataSchema = z
   .object({
     documentType: z.string().max(80),
@@ -44,7 +59,7 @@ export const documentDataSchema = z
             .min(1)
             .max(30),
           rows: z
-            .array(z.object({ rowNumber: z.string().max(30), cells: z.array(text.nullable()).max(30), uncertainCells: z.array(z.number().int().min(0).max(29)).max(30).optional() }))
+            .array(z.object({ rowNumber: z.string().max(30), cells: z.array(text.nullable()).max(30), product: documentProductSchema.optional(), uncertainCells: z.array(z.number().int().min(0).max(29)).max(30).optional() }))
             .max(500),
           footerRows: z
             .array(z.object({ label: z.string().max(150), value: z.string().max(120) }))

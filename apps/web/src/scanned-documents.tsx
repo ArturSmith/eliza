@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { type DocumentData, type DocumentValidation, validateDocument } from '@eliza/contracts';
+import { type DocumentData, type DocumentProduct, type DocumentValidation, validateDocument } from '@eliza/contracts';
 import { api, queryClient } from './api';
 import { t, useLanguage } from './i18n';
 import { ErrorMessage } from './forms';
@@ -56,6 +56,58 @@ export function DocumentViewer({
       return draft;
     });
   }
+  function productIndex(table: DocumentData['tables'][number]) {
+    return table.columns.findIndex((column) => /^(product|item|товар|наименование)$/i.test(column.key) || /^(product|item|товар|наименование)$/i.test(column.label.trim()));
+  }
+  function costIndex(table: DocumentData['tables'][number]) {
+    return table.columns.findIndex((column) => column.kind === 'price' || /^(unit cost|unit price|price|цена)$/i.test(column.label.trim()));
+  }
+  function productValue(tableIndex: number, rowIndex: number, key: keyof DocumentProduct) {
+    const table = data.tables[tableIndex];
+    const product = table.rows[rowIndex].product;
+    if (product) return product[key];
+    if (key === 'name') return table.rows[rowIndex].cells[productIndex(table)] || '';
+    if (key === 'cost') return table.rows[rowIndex].cells[costIndex(table)] || '';
+    return '';
+  }
+  function setProductValue(tableIndex: number, rowIndex: number, key: keyof DocumentProduct, value: string) {
+    change((draft) => {
+      const table = draft.tables[tableIndex];
+      const row = table.rows[rowIndex];
+      row.product ??= { name: row.cells[productIndex(table)] || '', sku: '', barcode: '', plu: '', image: '', description: '', category: '', unit: '', price: '', cost: row.cells[costIndex(table)] || '', taxRate: '', minStock: '' };
+      row.product[key] = value;
+    });
+  }
+  async function addProductImage(tableIndex: number, rowIndex: number, file?: File) {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { setError(new Error(t('Choose an image file.'))); return; }
+    try {
+      const bitmap = await createImageBitmap(file);
+      const scale = Math.min(1, 260 / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      bitmap.close();
+      const image = canvas.toDataURL('image/jpeg', 0.72);
+      if (image.length > 60000) throw new Error(t('Choose a smaller product photo.'));
+      setProductValue(tableIndex, rowIndex, 'image', image);
+      setError(null);
+    } catch (error) { setError(error); }
+  }
+  const productFields: { key: keyof DocumentProduct; label: string; multiline?: boolean }[] = [
+    { key: 'name', label: t('Product name') },
+    { key: 'barcode', label: t('Barcode') },
+    { key: 'sku', label: t('SKU') },
+    { key: 'plu', label: t('PLU') },
+    { key: 'description', label: t('Description'), multiline: true },
+    { key: 'category', label: t('Category') },
+    { key: 'unit', label: t('Selling unit') },
+    { key: 'price', label: t('Selling price') },
+    { key: 'cost', label: t('Unit cost') },
+    { key: 'taxRate', label: t('Tax rate') },
+    { key: 'minStock', label: t('Minimum stock') },
+  ];
   async function save() {
     setBusy(true);
     setError(null);
@@ -320,9 +372,11 @@ export function DocumentViewer({
                   record.extracted.tables[tableIndex]?.title,
                 )}
               </h3>
+              {productIndex(table) >= 0 && <p className="document-product-help">{t('Fill product details, save the digital document, then ask Eliza AI to create the products. Review each proposal before approval.')}</p>}
               <div className="document-table-scroll">
                 <table>
                   <thead>
+                    {productIndex(table) >= 0 && <tr className="document-table-groups"><th colSpan={table.columns.length + 1}>{t('Scanned document')}</th><th colSpan={productFields.length + 1}>{t('Product setup')}</th>{editing && <th />}</tr>}
                     <tr>
                       <th>#</th>
                       {table.columns.map((column, columnIndex) => (
@@ -345,6 +399,10 @@ export function DocumentViewer({
                           )}
                         </th>
                       ))}
+                      {productIndex(table) >= 0 && <>
+                        {productFields.map((field) => <th key={'product-' + field.key} className="document-product-column">{field.label}</th>)}
+                        <th className="document-product-column">{t('Product photo')}</th>
+                      </>}
                       {editing && <th>{t('Actions')}</th>}
                     </tr>
                   </thead>
@@ -385,6 +443,13 @@ export function DocumentViewer({
                             {row.uncertainCells?.includes(cellIndex) && <small className="document-cell-uncertain">{t('Uncertain')}</small>}
                           </td>
                         ))}
+                        {productIndex(table) >= 0 && <>
+                          {productFields.map((field) => <td key={'product-' + field.key} className="document-product-cell">
+                            {editing ? field.key === 'unit' ? <select aria-label={field.label + ' ' + (rowIndex + 1)} value={productValue(tableIndex, rowIndex, field.key)} onChange={(event) => setProductValue(tableIndex, rowIndex, field.key, event.target.value)}><option value="">{t('Choose unit')}</option>{['piece','kilogram','gram','liter','milliliter','pack','box','other'].map((unit) => <option key={unit} value={unit}>{t(unit)}</option>)}</select> : field.multiline ? <textarea aria-label={field.label + ' ' + (rowIndex + 1)} value={productValue(tableIndex, rowIndex, field.key)} onChange={(event) => setProductValue(tableIndex, rowIndex, field.key, event.target.value)} /> : <input aria-label={field.label + ' ' + (rowIndex + 1)} value={productValue(tableIndex, rowIndex, field.key)} placeholder={field.key === 'sku' || field.key === 'plu' ? t('Auto') : undefined} onChange={(event) => setProductValue(tableIndex, rowIndex, field.key, event.target.value)} />
+                            : <span>{productValue(tableIndex, rowIndex, field.key) || '—'}</span>}
+                          </td>)}
+                          <td className="document-product-cell">{row.product?.image && <img className="document-product-image" src={row.product.image} alt={t('Product photo')} />}{editing && <input type="file" accept="image/*" aria-label={t('Product photo') + ' ' + (rowIndex + 1)} onChange={(event) => { void addProductImage(tableIndex, rowIndex, event.target.files?.[0]); event.target.value = ''; }} />}</td>
+                        </>}
                         {editing && (
                           <td>
                             <Button
@@ -407,7 +472,7 @@ export function DocumentViewer({
                     <tfoot>
                       {table.footerRows.map((footer, footerIndex) => (
                         <tr key={footerIndex}>
-                          <th colSpan={table.columns.length}>
+                          <th colSpan={table.columns.length + (productIndex(table) >= 0 ? productFields.length + 1 : 0)}>
                             {editText(
                               footer.label,
                               (value) =>
