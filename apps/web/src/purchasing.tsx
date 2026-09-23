@@ -178,6 +178,14 @@ export function SuppliersPage() {
   const q = useQuery({ queryKey: ['suppliers'], queryFn: () => api<Supplier[]>('/suppliers') });
   const [editing, setEditing] = useState<Supplier | null | undefined>();
   const [catalogFor, setCatalogFor] = useState<Supplier | undefined>();
+  const [deletingSupplier, setDeletingSupplier] = useState<Supplier | undefined>();
+  const deleteSupplier = useMutation({
+    mutationFn: (id: string) => api<{ deleted: true }>(`/suppliers/${id}`, undefined, 'DELETE'),
+    onSuccess: () => {
+      setDeletingSupplier(undefined);
+      void refresh();
+    },
+  });
   const [search, setSearch] = useState('');
   const rows = (q.data ?? []).filter((s) =>
     [s.name, s.code, s.contactName, s.contactPhone, s.email, s.phone].some((v) =>
@@ -229,7 +237,9 @@ export function SuppliersPage() {
                     <td>
                       {s.contactName || '—'}
                       {(s.contactPhone || s.email || s.phone) && (
-                        <small>{[s.contactPhone, s.email, s.phone].filter(Boolean).join(' · ')}</small>
+                        <small>
+                          {[s.contactPhone, s.email, s.phone].filter(Boolean).join(' · ')}
+                        </small>
                       )}
                     </td>
                     <td>{s.paymentTerms || '—'}</td>
@@ -245,6 +255,9 @@ export function SuppliersPage() {
                       <Button variant="ghost" onClick={() => setEditing(s)}>
                         {t('Edit ')}
                       </Button>
+                      <Button variant="ghost" onClick={() => setDeletingSupplier(s)}>
+                        {t('Delete')}
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -259,6 +272,28 @@ export function SuppliersPage() {
           </p>
         )}
       </section>
+      <Dialog
+        open={deletingSupplier !== undefined}
+        onOpenChange={(open) => !open && setDeletingSupplier(undefined)}
+        title={t('Delete supplier')}
+        description={t(
+          'Delete {value0}? This is permanent. Suppliers used by purchases, offers or shopping lists cannot be deleted.',
+          { value0: deletingSupplier?.name ?? '' },
+        )}
+      >
+        <ErrorMessage error={deleteSupplier.error} />
+        <div className="form-actions">
+          <Button variant="outline" onClick={() => setDeletingSupplier(undefined)}>
+            {t('Cancel')}
+          </Button>
+          <Button
+            disabled={deleteSupplier.isPending}
+            onClick={() => deletingSupplier && deleteSupplier.mutate(deletingSupplier.id)}
+          >
+            {deleteSupplier.isPending ? t('Deleting…') : t('Delete supplier')}
+          </Button>
+        </div>
+      </Dialog>
       <Dialog
         open={editing !== undefined}
         onOpenChange={(v) => !v && setEditing(undefined)}
@@ -294,7 +329,10 @@ export function SupplierForm({
   done: () => void;
   onCreated?: (supplier: Supplier) => void;
   prefill?: Partial<
-    Pick<Supplier, 'name' | 'code' | 'companyNumber' | 'contactName' | 'contactPhone' | 'phone' | 'notes'>
+    Pick<
+      Supplier,
+      'name' | 'code' | 'companyNumber' | 'contactName' | 'contactPhone' | 'phone' | 'notes'
+    >
   >;
 }) {
   useLanguage();
@@ -407,6 +445,15 @@ export function PurchasesPage() {
   const [create, setCreate] = useState(() =>
     new URLSearchParams(window.location.search).has('document'),
   );
+  const [deletingPurchase, setDeletingPurchase] = useState<Order | undefined>();
+  const deletePurchase = useMutation({
+    mutationFn: (id: string) => api<{ deleted: true }>(`/purchases/${id}`, undefined, 'DELETE'),
+    onSuccess: () => {
+      setDeletingPurchase(undefined);
+      setSelected(undefined);
+      void refresh();
+    },
+  });
   const [filter, setFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const terms = search.trim().toLowerCase();
@@ -521,6 +568,11 @@ export function PurchasesPage() {
                       <Button variant="ghost" onClick={() => setSelected(p.id)}>
                         {t('View ')}
                       </Button>
+                      {p.status === 'draft' && (
+                        <Button variant="ghost" onClick={() => setDeletingPurchase(p)}>
+                          {t('Delete')}
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -535,6 +587,27 @@ export function PurchasesPage() {
           </p>
         )}
       </section>
+      <Dialog
+        open={deletingPurchase !== undefined}
+        onOpenChange={(open) => !open && setDeletingPurchase(undefined)}
+        title={t('Delete purchase draft')}
+        description={t('Delete purchase draft {value0}? This is permanent.', {
+          value0: deletingPurchase?.number ?? '',
+        })}
+      >
+        <ErrorMessage error={deletePurchase.error} />
+        <div className="form-actions">
+          <Button variant="outline" onClick={() => setDeletingPurchase(undefined)}>
+            {t('Cancel')}
+          </Button>
+          <Button
+            disabled={deletePurchase.isPending}
+            onClick={() => deletingPurchase && deletePurchase.mutate(deletingPurchase.id)}
+          >
+            {deletePurchase.isPending ? t('Deleting…') : t('Delete purchase draft')}
+          </Button>
+        </div>
+      </Dialog>
       {selected && <OrderDetail id={selected} close={() => setSelected(undefined)} />}
       <Dialog
         wide
@@ -799,15 +872,27 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
         <fieldset className="purchase-document-details">
           <legend>{t('Supplier document details (optional)')}</legend>
           <div className="form-grid">
-            {([
-              ['buyerName', 'Buyer'], ['buyerDetails', 'Buyer details'],
-              ['driverName', 'Driver'], ['driverPhone', 'Driver phone'],
-              ['goodsNumber', 'Goods number'], ['buyerTaxNumber', 'Buyer tax number'],
-              ['grossWeight', 'Gross weight'], ['documentVat', 'VAT on document'],
-              ['returnAmount', 'Return amount'], ['documentComment', 'Document comment'],
-            ] as const).map(([key, label]) => (
+            {(
+              [
+                ['buyerName', 'Buyer'],
+                ['buyerDetails', 'Buyer details'],
+                ['driverName', 'Driver'],
+                ['driverPhone', 'Driver phone'],
+                ['goodsNumber', 'Goods number'],
+                ['buyerTaxNumber', 'Buyer tax number'],
+                ['grossWeight', 'Gross weight'],
+                ['documentVat', 'VAT on document'],
+                ['returnAmount', 'Return amount'],
+                ['documentComment', 'Document comment'],
+              ] as const
+            ).map(([key, label]) => (
               <Field key={key} label={t(label)}>
-                <input value={documentDetails[key]} onChange={(event) => setDocumentDetails((current) => ({ ...current, [key]: event.target.value }))} />
+                <input
+                  value={documentDetails[key]}
+                  onChange={(event) =>
+                    setDocumentDetails((current) => ({ ...current, [key]: event.target.value }))
+                  }
+                />
               </Field>
             ))}
           </div>
@@ -1343,22 +1428,64 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
         <>
           <div className="order-detail-document">
             <h3>{t('Supplier')}</h3>
-            <dl>{([
-              ['Supplier name', p.supplierName], ['Supplier code', p.supplierCode],
-              ['Supplier phone', p.supplierPhone], ['Company number', p.supplierCompanyNumber],
-              ['Sales representative', p.supplierContactName], ['Representative phone', p.supplierContactPhone],
-            ] as const).filter(([, value]) => value).map(([label, value]) => <div key={label}><dt>{t(label)}</dt><dd>{value}</dd></div>)}</dl>
+            <dl>
+              {(
+                [
+                  ['Supplier name', p.supplierName],
+                  ['Supplier code', p.supplierCode],
+                  ['Supplier phone', p.supplierPhone],
+                  ['Company number', p.supplierCompanyNumber],
+                  ['Sales representative', p.supplierContactName],
+                  ['Representative phone', p.supplierContactPhone],
+                ] as const
+              )
+                .filter(([, value]) => value)
+                .map(([label, value]) => (
+                  <div key={label}>
+                    <dt>{t(label)}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
+            </dl>
           </div>
-          {Object.values([p.buyer_name, p.buyer_details, p.driver_name, p.driver_phone, p.goods_number, p.buyer_tax_number, p.gross_weight, p.document_vat, p.return_amount, p.document_comment]).some(Boolean) && (
+          {Object.values([
+            p.buyer_name,
+            p.buyer_details,
+            p.driver_name,
+            p.driver_phone,
+            p.goods_number,
+            p.buyer_tax_number,
+            p.gross_weight,
+            p.document_vat,
+            p.return_amount,
+            p.document_comment,
+          ]).some(Boolean) && (
             <div className="order-detail-document">
               <h3>{t('Supplier document details')}</h3>
-              <dl>{([
-                ['Supplier', p.supplierName], ['Buyer', p.buyer_name], ['Buyer details', p.buyer_details],
-                ['Driver', p.driver_name], ['Driver phone', p.driver_phone], ['Goods number', p.goods_number],
-                ['Buyer tax number', p.buyer_tax_number], ['Gross weight', p.gross_weight],
-                ['VAT on document', p.document_vat], ['Return amount', p.return_amount],
-                ['Document comment', p.document_comment],
-              ] as const).filter(([, value]) => value).map(([label, value]) => <div key={label}><dt>{t(label)}</dt><dd>{value}</dd></div>)}</dl>
+              <dl>
+                {(
+                  [
+                    ['Supplier', p.supplierName],
+                    ['Buyer', p.buyer_name],
+                    ['Buyer details', p.buyer_details],
+                    ['Driver', p.driver_name],
+                    ['Driver phone', p.driver_phone],
+                    ['Goods number', p.goods_number],
+                    ['Buyer tax number', p.buyer_tax_number],
+                    ['Gross weight', p.gross_weight],
+                    ['VAT on document', p.document_vat],
+                    ['Return amount', p.return_amount],
+                    ['Document comment', p.document_comment],
+                  ] as const
+                )
+                  .filter(([, value]) => value)
+                  .map(([label, value]) => (
+                    <div key={label}>
+                      <dt>{t(label)}</dt>
+                      <dd>{value}</dd>
+                    </div>
+                  ))}
+              </dl>
             </div>
           )}
           {p.notes && <p className="order-detail-notes">{p.notes}</p>}

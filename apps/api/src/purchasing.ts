@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Module,
   Param,
@@ -476,6 +477,45 @@ export class PurchasingController {
     });
   }
 
+  @Delete('suppliers/:id') @Require('suppliers.manage') async deleteSupplier(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    try {
+      return await this.run(req, randomUUID(), 'supplier', { id, delete: true }, async (c) => {
+        const supplier = (
+          await c.query('SELECT code,name FROM suppliers WHERE id=$1 AND store_id=$2 FOR UPDATE', [
+            id,
+            req.context.store.id,
+          ])
+        ).rows[0];
+        if (!supplier) throw new NotFoundException('Supplier not found.');
+        await c.query('DELETE FROM suppliers WHERE id=$1 AND store_id=$2', [
+          id,
+          req.context.store.id,
+        ]);
+        await audit(
+          c,
+          {
+            storeId: req.context.store.id,
+            employeeId: req.context.user.id,
+            deviceId: req.context.device.id,
+          },
+          'Supplier deleted',
+          id,
+          { code: supplier.code, name: supplier.name },
+        );
+        return { deleted: true };
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === '23503')
+        throw new ConflictException(
+          'This supplier is used by purchases, product offers or shopping lists. Deactivate it instead.',
+        );
+      throw error;
+    }
+  }
+
   // Quoted offers joined with what each supplier was actually last paid, so the
   // manager can see whether a quote is still being honoured.
   private offerQuery(where: string) {
@@ -664,6 +704,52 @@ export class PurchasingController {
       return await this.details(c, id, req.context.store.id);
     } finally {
       c.release();
+    }
+  }
+  @Delete('purchases/:id') @Require('purchases.write') async deletePurchase(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    try {
+      return await this.run(req, randomUUID(), 'purchase-delete', { id }, async (c) => {
+        const order = (
+          await c.query(
+            'SELECT number,status FROM purchases WHERE id=$1 AND store_id=$2 FOR UPDATE',
+            [id, req.context.store.id],
+          )
+        ).rows[0];
+        if (!order) throw new NotFoundException('Order not found.');
+        if (order.status !== 'draft')
+          throw new ConflictException(
+            'Only draft purchases can be deleted. Keep placed and received orders for history.',
+          );
+        await c.query('DELETE FROM purchase_lines WHERE purchase_id=$1 AND store_id=$2', [
+          id,
+          req.context.store.id,
+        ]);
+        await c.query('DELETE FROM purchases WHERE id=$1 AND store_id=$2', [
+          id,
+          req.context.store.id,
+        ]);
+        await audit(
+          c,
+          {
+            storeId: req.context.store.id,
+            employeeId: req.context.user.id,
+            deviceId: req.context.device.id,
+          },
+          'Purchase deleted',
+          id,
+          { number: order.number },
+        );
+        return { deleted: true };
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code === '23503')
+        throw new ConflictException(
+          'This purchase is linked to a delivery, stock movement or shopping list and cannot be deleted.',
+        );
+      throw error;
     }
   }
   private async details(c: PoolClient, id: string, store: string) {
@@ -866,8 +952,16 @@ export class PurchasingController {
               req.context.user.id,
               req.context.device.id,
               b.documentDate || null,
-              b.buyerName, b.buyerDetails, b.driverName, b.driverPhone, b.goodsNumber,
-              b.buyerTaxNumber, b.grossWeight, b.documentVat, b.returnAmount, b.documentComment,
+              b.buyerName,
+              b.buyerDetails,
+              b.driverName,
+              b.driverPhone,
+              b.goodsNumber,
+              b.buyerTaxNumber,
+              b.grossWeight,
+              b.documentVat,
+              b.returnAmount,
+              b.documentComment,
             ],
           )
         ).rows[0];
@@ -885,8 +979,16 @@ export class PurchasingController {
           fromScaled(tax, 2),
           fromScaled(subtotal + tax, 2),
           b.documentDate || null,
-          b.buyerName, b.buyerDetails, b.driverName, b.driverPhone, b.goodsNumber,
-          b.buyerTaxNumber, b.grossWeight, b.documentVat, b.returnAmount, b.documentComment,
+          b.buyerName,
+          b.buyerDetails,
+          b.driverName,
+          b.driverPhone,
+          b.goodsNumber,
+          b.buyerTaxNumber,
+          b.grossWeight,
+          b.documentVat,
+          b.returnAmount,
+          b.documentComment,
         ],
       );
     }

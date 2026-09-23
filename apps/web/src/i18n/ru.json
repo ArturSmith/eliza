@@ -1524,5 +1524,12 @@
   "This product has stock on hand. Count or adjust it to zero before deleting.": "У товара есть остаток. Проведите пересчёт или скорректируйте остаток до нуля перед удалением.",
   "This product is used in sales, purchases, inventory, counts or lists. Deactivate it instead to preserve those records.": "Товар используется в продажах, закупках, движениях склада, пересчётах или списках. Деактивируйте его, чтобы сохранить эти записи.",
   "Hide conversations": "Скрыть диалоги",
-  "Show conversations": "Показать диалоги"
+  "Show conversations": "Показать диалоги",
+  "Delete supplier": "Удалить поставщика",
+  "Delete {value0}? This is permanent. Suppliers used by purchases, offers or shopping lists cannot be deleted.": "Удалить {value0}? Это действие нельзя отменить. Поставщиков, связанных с закупками, предложениями или списками покупок, удалить нельзя.",
+  "Delete purchase draft": "Удалить черновик закупки",
+  "Delete purchase draft {value0}? This is permanent.": "Удалить черновик закупки {value0}? Это действие нельзя отменить.",
+  "This supplier is used by purchases, product offers or shopping lists. Deactivate it instead.": "Поставщик используется в закупках, предложениях товаров или списках покупок. Вместо удаления сделайте его неактивным.",
+  "Only draft purchases can be deleted. Keep placed and received orders for history.": "Удалить можно только черновики закупок. Размещённые и полученные заказы должны остаться в истории.",
+  "This purchase is linked to a delivery, stock movement or shopping list and cannot be deleted.": "Эта закупка связана с доставкой, движением склада или списком покупок и не может быть удалена."
 }

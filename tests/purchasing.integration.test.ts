@@ -479,4 +479,47 @@ describe.sequential('purchasing and receiving', () => {
     );
     expect(history.rowCount).toBe(1);
   });
+
+  it('removes only unused suppliers and draft purchases', async () => {
+    expect((await manager.request('/suppliers/' + supplier.id, undefined, 'DELETE')).status).toBe(
+      409,
+    );
+    expect((await manager.request('/purchases/' + order.id, undefined, 'DELETE')).status).toBe(409);
+
+    const unused = await manager.request('/suppliers', {
+      requestId: requestId(),
+      code: 'UNUSED',
+      name: 'Unused supplier',
+    });
+    expect(unused.status).toBe(201);
+    expect(
+      (await manager.request('/suppliers/' + unused.body.id, undefined, 'DELETE')).status,
+    ).toBe(200);
+    expect(
+      (await manager.request('/suppliers/' + unused.body.id, undefined, 'DELETE')).status,
+    ).toBe(404);
+
+    const fresh = await manager.request('/suppliers', {
+      requestId: requestId(),
+      code: 'DRAFTONLY',
+      name: 'Draft supplier',
+    });
+    expect(fresh.status).toBe(201);
+    const draft = await manager.request('/purchases', {
+      requestId: requestId(),
+      supplierId: fresh.body.id,
+      lines: [{ productId, quantity: '2', unitCost: '8', taxRate: '15', sellingPrice: '19' }],
+    });
+    expect(draft.status).toBe(201);
+    expect((await manager.request('/suppliers/' + fresh.body.id, undefined, 'DELETE')).status).toBe(
+      409,
+    );
+    expect((await manager.request('/purchases/' + draft.body.id, undefined, 'DELETE')).status).toBe(
+      200,
+    );
+    expect((await manager.request('/purchases/' + draft.body.id)).status).toBe(404);
+    expect((await manager.request('/suppliers/' + fresh.body.id, undefined, 'DELETE')).status).toBe(
+      200,
+    );
+  });
 });
