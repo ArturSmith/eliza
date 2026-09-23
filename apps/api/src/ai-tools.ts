@@ -17,6 +17,43 @@ const range = z
   .refine((v) => v.from <= v.to && Date.parse(v.to) - Date.parse(v.from) <= 366 * 86400000);
 const search = z.object({ query: z.string().trim().min(1).max(100) }).strict();
 const uuid = z.object({ id: z.string().uuid() }).strict();
+const browseAreas = [
+  'shopping_lists',
+  'stock_counts',
+  'inventory_movements',
+  'supplier_offers',
+  'shifts',
+  'sales_receipts',
+  'cash_movements',
+  'receipts',
+  'refunds',
+  'store_profile',
+  'team',
+  'devices',
+  'audit',
+] as const;
+const browse = z
+  .object({
+    area: z.enum(browseAreas),
+    id: z.string().uuid().optional(),
+    offset: z.number().int().min(0).max(1000).default(0),
+  })
+  .strict();
+const browsePermissions: Record<(typeof browseAreas)[number], Permission> = {
+  shopping_lists: 'purchases.read',
+  stock_counts: 'inventory.read',
+  inventory_movements: 'inventory.read',
+  supplier_offers: 'suppliers.read',
+  shifts: 'sales.read',
+  sales_receipts: 'sales.read',
+  cash_movements: 'sales.read',
+  receipts: 'purchases.read',
+  refunds: 'sales.read',
+  store_profile: 'catalog.read',
+  team: 'team.read',
+  devices: 'devices.manage',
+  audit: 'audit.read',
+};
 const supplierSummary = z
   .object({ supplierId: z.string().uuid(), from: date.nullable(), to: date.nullable() })
   .strict()
@@ -42,6 +79,24 @@ const analytics = range.safeExtend({
   ]),
 });
 export const aiToolDefinitions = [
+  {
+    name: 'browse_store_data',
+    permission: 'catalog.read',
+    description:
+      'Read additional business data the signed-in user is allowed to see: shopping lists, stock counts, inventory movements, supplier offers, shifts, sales receipts, cash movements, delivery receipts, refunds, store profile, team, devices, or audit events. Use an exact ID for detail, and offset for the next page. Do not infer access to other stores or other users’ private conversations.',
+    parameters: {
+      type: 'object',
+      properties: {
+        area: { type: 'string', enum: [...browseAreas] },
+        id: { type: 'string', description: 'Optional exact record UUID' },
+        offset: { type: 'integer', description: 'Pagination offset starting at 0' },
+      },
+      required: ['area'],
+      additionalProperties: false,
+    },
+    schema: browse,
+  },
+
   {
     name: 'sales_summary',
     permission: 'sales.read',
@@ -87,8 +142,14 @@ export const aiToolDefinitions = [
   {
     name: 'product_details',
     permission: 'catalog.write',
-    description: 'Get full editable product fields and barcodes by exact ID, including cost. Use before proposing a product update; do not guess fields.',
-    parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false },
+    description:
+      'Get full editable product fields and barcodes by exact ID, including cost. Use before proposing a product update; do not guess fields.',
+    parameters: {
+      type: 'object',
+      properties: { id: { type: 'string' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
     schema: uuid,
   },
   {
@@ -107,8 +168,14 @@ export const aiToolDefinitions = [
   {
     name: 'supplier_details',
     permission: 'suppliers.read',
-    description: 'Get full editable supplier fields and version by exact ID. Use before proposing a supplier update.',
-    parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false },
+    description:
+      'Get full editable supplier fields and version by exact ID. Use before proposing a supplier update.',
+    parameters: {
+      type: 'object',
+      properties: { id: { type: 'string' } },
+      required: ['id'],
+      additionalProperties: false,
+    },
     schema: uuid,
   },
   {
@@ -127,27 +194,53 @@ export const aiToolDefinitions = [
   {
     name: 'search_suppliers',
     permission: 'suppliers.read',
-    description: 'Find suppliers by name, code, business or representative phone, or company number. Returns IDs and contact details for matching before proposing changes.',
-    parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false },
+    description:
+      'Find suppliers by name, code, business or representative phone, or company number. Returns IDs and contact details for matching before proposing changes.',
+    parameters: {
+      type: 'object',
+      properties: { query: { type: 'string' } },
+      required: ['query'],
+      additionalProperties: false,
+    },
     schema: search,
   },
   {
     name: 'propose_document_product',
     permission: 'catalog.write',
-    description: 'Prepare a product creation proposal from one SAVED scanned-document row and its reviewed catalog fields, including the uploaded photo. For boxed goods, the reviewed items-per-box count and box cost determine per-piece cost when the selling unit is piece, or box cost when the selling unit is box; never treat a box price as a piece price. First search the catalog for an existing product. Pass the document ID and zero-based table/row indexes. The user must approve the proposal before any product is created. If fields are missing, ask the user to complete and save the digital document.',
-    parameters: { type: 'object', properties: { documentId: { type: 'string' }, tableIndex: { type: 'integer' }, rowIndex: { type: 'integer' } }, required: ['documentId', 'tableIndex', 'rowIndex'], additionalProperties: false },
-    schema: z.object({ documentId: z.string().uuid(), tableIndex: z.number().int().min(0).max(29), rowIndex: z.number().int().min(0).max(499) }).strict(),
+    description:
+      'Prepare a product creation proposal from one SAVED scanned-document row and its reviewed catalog fields, including the uploaded photo. For boxed goods, the reviewed items-per-box count and box cost determine per-piece cost when the selling unit is piece, or box cost when the selling unit is box; never treat a box price as a piece price. First search the catalog for an existing product. Pass the document ID and zero-based table/row indexes. The user must approve the proposal before any product is created. If fields are missing, ask the user to complete and save the digital document.',
+    parameters: {
+      type: 'object',
+      properties: {
+        documentId: { type: 'string' },
+        tableIndex: { type: 'integer' },
+        rowIndex: { type: 'integer' },
+      },
+      required: ['documentId', 'tableIndex', 'rowIndex'],
+      additionalProperties: false,
+    },
+    schema: z
+      .object({
+        documentId: z.string().uuid(),
+        tableIndex: z.number().int().min(0).max(29),
+        rowIndex: z.number().int().min(0).max(499),
+      })
+      .strict(),
   },
   {
     name: 'propose_change',
     permission: 'catalog.read',
-    description: 'Prepare a supplier, product, or purchase draft create/update for explicit user approval. This does not write anything. First search existing records. Data is a JSON string matching the normal Eliza form fields. Supplier fields: code,name,contactName,contactPhone,email,phone,address,companyNumber,paymentTerms,notes,active; update also needs id,version. Product fields: name,sku,category,unit,price,cost,minStock,plu,barcodes,description (optional),autoSku,autoPlu; update also needs id and full current fields. Purchase fields: supplierId,supplierReference,documentDate,expectedDate,notes,lines array of productId,quantity,unitCost,taxRate and optional sellingPrice; optional buyerName,buyerDetails,driverName,driverPhone,goodsNumber,buyerTaxNumber,grossWeight,documentVat,returnAmount,documentComment; update also needs id,version and must be a draft. Never invent IDs, prices, costs, tax rates, or missing required fields. Ask user for missing information first. The proposal is saved only after user clicks Approve.',
+    description:
+      'Prepare a supplier, product, or purchase draft create/update for explicit user approval. This does not write anything. First search existing records. Data is a JSON string matching the normal Eliza form fields. Supplier fields: code,name,contactName,contactPhone,email,phone,address,companyNumber,paymentTerms,notes,active; update also needs id,version. Product fields: name,sku,category,unit,price,cost,minStock,plu,barcodes,description (optional),autoSku,autoPlu; update also needs id and full current fields. Purchase fields: supplierId,supplierReference,documentDate,expectedDate,notes,lines array of productId,quantity,unitCost,taxRate and optional sellingPrice; optional buyerName,buyerDetails,driverName,driverPhone,goodsNumber,buyerTaxNumber,grossWeight,documentVat,returnAmount,documentComment; update also needs id,version and must be a draft. Never invent IDs, prices, costs, tax rates, or missing required fields. Ask user for missing information first. The proposal is saved only after user clicks Approve.',
     parameters: {
       type: 'object',
       properties: {
         kind: { type: 'string', enum: ['supplier', 'product', 'purchase'] },
         operation: { type: 'string', enum: ['create', 'update'] },
-        summary: { type: 'string', description: 'Human-readable short summary of the exact change.' },
+        summary: {
+          type: 'string',
+          description: 'Human-readable short summary of the exact change.',
+        },
         data: { type: 'string', description: 'JSON object of complete validated form fields.' },
       },
       required: ['kind', 'operation', 'summary', 'data'],
@@ -252,7 +345,11 @@ export type AiToolName = (typeof aiToolDefinitions)[number]['name'];
 export function availableAiTools(permissions: readonly Permission[]) {
   return aiToolDefinitions.filter(
     (tool) =>
-      (tool.name === 'propose_change' ? canPropose(permissions) : permissions.includes(tool.permission as Permission)) &&
+      (tool.name === 'propose_change'
+        ? canPropose(permissions)
+        : tool.name === 'browse_store_data'
+          ? Object.values(browsePermissions).some((permission) => permissions.includes(permission))
+          : permissions.includes(tool.permission as Permission)) &&
       (tool.name !== 'gross_profit' || permissions.includes('sales.read')) &&
       (tool.name !== 'product_details' || permissions.includes('costs.read')) &&
       (tool.name !== 'propose_document_product' || permissions.includes('purchases.read')),
@@ -267,13 +364,23 @@ export async function executeAiTool(
   const tool = aiToolDefinitions.find((t) => t.name === name);
   if (!tool) return { error: 'Unknown tool.' };
   if (
-    !req.context.user.permissions.includes(tool.permission as Permission) ||
+    (name !== 'browse_store_data' &&
+      !req.context.user.permissions.includes(tool.permission as Permission)) ||
     (name === 'gross_profit' && !req.context.user.permissions.includes('sales.read')) ||
     (name === 'product_details' && !req.context.user.permissions.includes('costs.read')) ||
-    (name === 'propose_document_product' && !req.context.user.permissions.includes('purchases.read'))
+    (name === 'propose_document_product' &&
+      !req.context.user.permissions.includes('purchases.read'))
   )
     throw new ForbiddenException('Tool access denied.');
   const parsed = tool.schema.safeParse(raw);
+  if (
+    name === 'browse_store_data' &&
+    parsed.success &&
+    !req.context.user.permissions.includes(
+      browsePermissions[(parsed.data as z.infer<typeof browse>).area],
+    )
+  )
+    return { error: 'Permission denied for this data.' };
   if (!parsed.success) return { error: 'Invalid tool arguments.' };
   const a = parsed.data as {
     query?: string;
@@ -301,6 +408,37 @@ export async function executeAiTool(
   };
   const pattern = '%' + (a.query ?? '').replace(/[\\%_]/g, '\\$&') + '%';
   switch (name) {
+    case 'browse_store_data': {
+      const { area, id, offset } = parsed.data as z.infer<typeof browse>;
+      const statements: Record<typeof area, string> = {
+        shopping_lists: `SELECT s.id,s.name,s.notes,s.sections,s.version,s.created_at,
+          (SELECT coalesce(jsonb_agg(jsonb_build_object('productId',l.product_id,'product',p.name,'quantity',l.quantity,'targetStock',l.target_stock,'supplierId',l.supplier_id,'notes',l.notes,'purchaseId',l.purchase_id)),'[]'::jsonb)
+           FROM shopping_list_lines l JOIN products p ON p.id=l.product_id AND p.store_id=l.store_id WHERE l.store_id=$1 AND l.list_id=s.id) AS lines
+          FROM shopping_lists s WHERE s.store_id=$1 AND ($2::uuid IS NULL OR s.id=$2) ORDER BY s.created_at DESC LIMIT 30 OFFSET $3`,
+        stock_counts: `SELECT c.id,c.name,c.notes,c.status,c.version,c.created_at,c.started_at,c.finalized_at,
+          (SELECT coalesce(jsonb_agg(jsonb_build_object('productId',l.product_id,'product',l.product_name,'sku',l.sku,'systemQuantity',l.system_quantity,'countedQuantity',l.counted_quantity)),'[]'::jsonb)
+           FROM stock_count_lines l WHERE l.store_id=$1 AND l.count_id=c.id) AS lines
+          FROM stock_counts c WHERE c.store_id=$1 AND ($2::uuid IS NULL OR c.id=$2) ORDER BY c.created_at DESC LIMIT 30 OFFSET $3`,
+        inventory_movements: `SELECT m.id,m.product_id,p.name AS product,m.quantity::text,m.balance::text,m.reason,m.notes,m.created_at
+          FROM movements m JOIN products p ON p.id=m.product_id AND p.store_id=m.store_id WHERE m.store_id=$1 AND ($2::uuid IS NULL OR m.id=$2) ORDER BY m.created_at DESC LIMIT 30 OFFSET $3`,
+        supplier_offers: `SELECT o.id,o.supplier_id,s.name AS supplier,o.product_id,p.name AS product,o.supplier_sku,o.pack_size::text,o.pack_cost::text,o.lead_time_days,o.minimum_order::text,o.notes,o.active,o.updated_at
+          FROM supplier_products o JOIN suppliers s ON s.id=o.supplier_id AND s.store_id=o.store_id JOIN products p ON p.id=o.product_id AND p.store_id=o.store_id WHERE o.store_id=$1 AND ($2::uuid IS NULL OR o.id=$2) ORDER BY o.updated_at DESC LIMIT 30 OFFSET $3`,
+        shifts: `SELECT sh.id,sh.status,sh.opening_cash::text,sh.expected_cash::text,sh.counted_cash::text,sh.difference::text,sh.opened_at,sh.closed_at,sh.notes,e.name AS employee,d.name AS device
+          FROM shifts sh JOIN employees e ON e.id=sh.employee_id AND e.store_id=sh.store_id JOIN devices d ON d.id=sh.device_id AND d.store_id=sh.store_id WHERE sh.store_id=$1 AND ($2::uuid IS NULL OR sh.id=$2) ORDER BY sh.opened_at DESC LIMIT 30 OFFSET $3`,
+        sales_receipts: `SELECT id,receipt_number,receipt,created_at FROM sales WHERE store_id=$1 AND ($2::uuid IS NULL OR id=$2) ORDER BY created_at DESC LIMIT 30 OFFSET $3`,
+        cash_movements: `SELECT c.id,c.shift_id,c.amount::text,c.kind,c.reason,c.created_at,e.name AS employee FROM cash_movements c JOIN employees e ON e.id=c.employee_id AND e.store_id=c.store_id WHERE c.store_id=$1 AND ($2::uuid IS NULL OR c.id=$2) ORDER BY c.created_at DESC LIMIT 30 OFFSET $3`,
+        receipts: `SELECT r.id,r.number,r.purchase_id,p.number AS purchase_number,r.delivery_reference,r.notes,r.total::text,r.created_at,
+          (SELECT coalesce(jsonb_agg(jsonb_build_object('productId',l.product_id,'product',l.product_name,'quantity',l.quantity,'unitCost',l.unit_cost,'total',l.total)),'[]'::jsonb) FROM goods_receipt_lines l WHERE l.store_id=$1 AND l.receipt_id=r.id) AS lines
+          FROM goods_receipts r JOIN purchases p ON p.id=r.purchase_id AND p.store_id=r.store_id WHERE r.store_id=$1 AND ($2::uuid IS NULL OR r.id=$2) ORDER BY r.created_at DESC LIMIT 30 OFFSET $3`,
+        refunds: `SELECT r.id,r.number,r.sale_id,r.method,r.total::text,r.reason,r.created_at FROM refunds r WHERE r.store_id=$1 AND ($2::uuid IS NULL OR r.id=$2) ORDER BY r.created_at DESC LIMIT 30 OFFSET $3`,
+        store_profile: `SELECT id,name,currency,timezone,address,phone,business_number,receipt_footer,default_tax_rate::text,default_markup_percent::text,scale_barcode FROM stores WHERE id=$1 AND ($2::uuid IS NULL OR id=$2) LIMIT 1 OFFSET $3`,
+        team: `SELECT e.id,e.name,e.email,e.employee_code,e.active,e.created_at,r.name AS role,r.permissions FROM employees e JOIN roles r ON r.id=e.role_id AND r.store_id=e.store_id WHERE e.store_id=$1 AND ($2::uuid IS NULL OR e.id=$2) ORDER BY e.created_at DESC LIMIT 30 OFFSET $3`,
+        devices: `SELECT id,name,type,active,created_at FROM devices WHERE store_id=$1 AND ($2::uuid IS NULL OR id=$2) ORDER BY created_at DESC LIMIT 30 OFFSET $3`,
+        audit: `SELECT id,employee_id,device_id,action,entity_id,details,created_at FROM audits WHERE store_id=$1 AND ($2::uuid IS NULL OR id=$2) ORDER BY created_at DESC LIMIT 30 OFFSET $3`,
+      };
+      return { area, offset, rows: await query(statements[area], [store.id, id ?? null, offset]) };
+    }
+
     case 'propose_change':
       return { error: 'Proposals are handled by the conversation service.' };
     case 'propose_document_product':
@@ -397,7 +535,22 @@ export async function executeAiTool(
             ...rows[0],
             edited: {
               ...rows[0].edited,
-              tables: rows[0].edited.tables?.map((table: any) => ({ ...table, rows: table.rows?.map((row: any) => row.product ? { ...row, product: { ...row.product, image: row.product.image ? '[uploaded image available for product proposal]' : '' } } : row) })),
+              tables: rows[0].edited.tables?.map((table: any) => ({
+                ...table,
+                rows: table.rows?.map((row: any) =>
+                  row.product
+                    ? {
+                        ...row,
+                        product: {
+                          ...row.product,
+                          image: row.product.image
+                            ? '[uploaded image available for product proposal]'
+                            : '',
+                        },
+                      }
+                    : row,
+                ),
+              })),
             },
             verified: false,
             source: 'AI-extracted scanned document',

@@ -22,17 +22,51 @@ function fixture(permissions: string[] = ['sales.read', 'purchases.read']) {
 describe('AI read tool boundaries', () => {
   it('exposes only tools permitted to the signed-in employee', () => {
     expect(availableAiTools(['sales.read']).map((t) => t.name)).toEqual([
+      'browse_store_data',
       'sales_summary',
       'sales_breakdown',
     ]);
     expect(availableAiTools(['costs.read']).some((t) => t.name === 'gross_profit')).toBe(false);
     expect(availableAiTools(['catalog.write']).some((t) => t.name === 'propose_change')).toBe(true);
     expect(availableAiTools(['sales.read']).some((t) => t.name === 'propose_change')).toBe(false);
-    expect(availableAiTools(['catalog.write']).some((t) => t.name === 'product_details')).toBe(false);
-    expect(availableAiTools(['catalog.write', 'costs.read']).some((t) => t.name === 'product_details')).toBe(true);
+    expect(availableAiTools(['catalog.write']).some((t) => t.name === 'product_details')).toBe(
+      false,
+    );
+    expect(
+      availableAiTools(['catalog.write', 'costs.read']).some((t) => t.name === 'product_details'),
+    ).toBe(true);
     expect(
       availableAiTools(['costs.read', 'sales.read']).some((t) => t.name === 'gross_profit'),
     ).toBe(true);
+  });
+  it('checks each browsed area separately and scopes every query to the authenticated store', async () => {
+    const { database, req, query } = fixture(['inventory.read']);
+    expect(
+      availableAiTools(req.context.user.permissions).some(
+        (tool) => tool.name === 'browse_store_data',
+      ),
+    ).toBe(true);
+    expect(await executeAiTool(database, req, 'browse_store_data', { area: 'team' })).toEqual({
+      error: 'Permission denied for this data.',
+    });
+    expect(query).not.toHaveBeenCalled();
+    expect(
+      await executeAiTool(database, req, 'browse_store_data', {
+        area: 'stock_counts',
+        storeId: 'another-store',
+      }),
+    ).toEqual({ error: 'Invalid tool arguments.' });
+    expect(query).not.toHaveBeenCalled();
+    await executeAiTool(database, req, 'browse_store_data', { area: 'stock_counts', offset: 30 });
+    expect(query).toHaveBeenCalledWith(expect.stringContaining('c.store_id=$1'), [
+      req.context.store.id,
+      null,
+      30,
+    ]);
+    expect(query).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.arrayContaining(['another-store']),
+    );
   });
   it('rejects a purchase tool without purchase permission before querying', async () => {
     const { database, req, query } = fixture(['sales.read']);
