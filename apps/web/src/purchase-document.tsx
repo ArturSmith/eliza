@@ -3,7 +3,6 @@ import {
   type Extraction,
   type Product,
   type Supplier,
-  confidentTextMatch,
   documentImageSchema,
   matchingTextScore,
   normalizeMatchText,
@@ -44,6 +43,41 @@ type SupplierPrefill = {
   notes: string;
 };
 
+function matchingProducts(source: Extraction['lines'][number], products: Product[]) {
+  const active = products.filter((item) => item.active);
+  const exact =
+    active.find((item) => item.id === source.productId) ??
+    active.find((item) => source.barcode && item.barcodes.includes(source.barcode)) ??
+    active.find(
+      (item) =>
+        source.supplierSku &&
+        normalizeMatchText(item.sku) === normalizeMatchText(source.supplierSku),
+    );
+  if (exact) return exact;
+  if (source.ambiguous) return undefined;
+  const ranked = active
+    .map((item) => {
+      const name = matchingTextScore(source.description, item.name);
+      const purchaseCost = Number(source.unitCost);
+      const cost = Number(item.cost);
+      const price = Number(item.price);
+      // Prices help break ties between similar names; price alone never identifies a product.
+      const costFit =
+        purchaseCost > 0 && cost > 0
+          ? Math.max(0, 1 - Math.abs(purchaseCost - cost) / Math.max(purchaseCost, cost))
+          : 0;
+      const saleFit =
+        purchaseCost > 0 && price >= purchaseCost
+          ? Math.max(0, 1 - (price - purchaseCost) / price)
+          : 0;
+      return { item, name, score: name + 0.08 * costFit + 0.02 * saleFit };
+    })
+    .sort((a, b) => b.score - a.score);
+  return ranked[0] && ranked[0].name >= 0.78 && ranked[0].score - (ranked[1]?.score ?? 0) >= 0.1
+    ? ranked[0].item
+    : undefined;
+}
+
 function matchingSuppliers(
   document: Extraction,
   suppliers: Supplier[],
@@ -58,8 +92,11 @@ function matchingSuppliers(
       const name = document.supplierName
         ? matchingTextScore(document.supplierName, supplier.name)
         : 0;
-      const phone = (digits(document.supplierPhone).length >= 7 && digits(document.supplierPhone) === digits(supplier.phone)) ||
-        (digits(document.contactPhone).length >= 7 && digits(document.contactPhone) === digits(supplier.contactPhone));
+      const phone =
+        (digits(document.supplierPhone).length >= 7 &&
+          digits(document.supplierPhone) === digits(supplier.phone)) ||
+        (digits(document.contactPhone).length >= 7 &&
+          digits(document.contactPhone) === digits(supplier.contactPhone));
       const reference = referenceMatches.some((purchase) => purchase.supplier_id === supplier.id);
       const exactCode = !!code && normalizeMatchText(supplier.code) === code;
       const exactCompany = !!company && normalizeMatchText(supplier.companyNumber) === company;
@@ -179,9 +216,7 @@ export function PurchaseDocument({
       setCandidates(matchingSuppliers(document, supplierCandidates, matchingPurchases));
       const enriched = await Promise.all(
         document.lines.map(async (source) => {
-          let product =
-            activeProducts.find((item) => item.id === source.productId) ??
-            confidentTextMatch(source.description, activeProducts, (item) => item.name);
+          let product = matchingProducts(source, activeProducts);
           let suggestion: ProductSuggestion | undefined;
           if (!product && source.barcode) {
             try {
@@ -273,7 +308,7 @@ export function PurchaseDocument({
       <div className="purchase-document-entry">
         <div className="purchase-document-actions">
           <Button type="button" variant="outline" onClick={() => setOpen(true)}>
-            {t('Read supplier document')}
+            {t('Read physical purchase')}
           </Button>
         </div>
         <small className="muted">
@@ -307,9 +342,11 @@ export function PurchaseDocument({
             ) : (
               <>
                 <p className="purchase-assistant-message">
-                  {t('I found supplier {name}. Is one of these your supplier?', {
-                    name: result.supplierName || '—',
-                  })}
+                  {candidates.length
+                    ? t('I found supplier {name}. Is one of these your supplier?', {
+                        name: result.supplierName || '—',
+                      })
+                    : t('There is no such supplier in the system. Add one?')}
                 </p>
                 {candidates.map(({ supplier, exactCode, exactCompany, reference, phone, name }) => (
                   <div className="purchase-assistant-candidate" key={supplier.id}>
@@ -425,7 +462,7 @@ export function PurchaseDocument({
         elevated
         open={open}
         onOpenChange={setOpen}
-        title={t('Read supplier document')}
+        title={t('Read physical purchase')}
         description={t(
           'Upload a purchase photo to fill the table. Review and edit every row before saving.',
         )}

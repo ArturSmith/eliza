@@ -1,4 +1,7 @@
 {
+  "Read physical purchase": "Считать бумажную накладную",
+  "Expiry date (optional)": "Срок годности (необязательно)",
+  "Expiry date": "Срок годности",
   "Language": "Язык",
   "Workspace": "Рабочее пространство",
   "Overview": "Обзор",

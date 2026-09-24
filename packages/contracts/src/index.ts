@@ -462,6 +462,7 @@ export const receiptInputSchema = z.object({
       z.object({
         purchaseLineId: z.uuid(),
         quantity: positiveQuantity,
+        expiryDate: z.iso.date().nullable().optional(),
         unitCost: money.optional(),
         sellingPrice: money.optional(),
         expectedSellingPrice: money.optional(),
@@ -636,6 +637,7 @@ export type GoodsReceipt = {
     sku: string;
     unit: string;
     quantity: string;
+    expiryDate?: string | null;
     unitCost: string;
     taxRate: string;
     subtotal: string;

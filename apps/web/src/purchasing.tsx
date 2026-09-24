@@ -1,4 +1,4 @@
-import type { DocumentDraftLine } from './purchase-document';
+import { PurchaseDocument, type DocumentDraftLine } from './purchase-document';
 import { readDocumentHandoff } from './document-purchase';
 import { countText, t, useLanguage, getLocale } from './i18n';
 import { useState, useEffect, type ReactNode } from 'react';
@@ -74,6 +74,7 @@ type Line = {
   ordered_quantity: string;
   received_quantity: string;
   quantity: string;
+  expiry_date?: string | null;
   unit_cost: string;
   proposed_selling_price?: string | null;
   tax_rate: string;
@@ -642,6 +643,16 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
   const [handoff] = useState(() => (order ? null : readDocumentHandoff()));
   const [supplierId, setSupplier] = useState(order?.supplier_id ?? handoff?.supplierId ?? '');
   const [addingSupplier, setAddingSupplier] = useState(false);
+  const [supplierPrefill, setSupplierPrefill] = useState<
+    | Partial<
+        Pick<
+          Supplier,
+          'name' | 'code' | 'companyNumber' | 'contactName' | 'contactPhone' | 'phone' | 'notes'
+        >
+      >
+    | undefined
+  >();
+  const [scanned, setScanned] = useState(false);
   const [addingProduct, setAddingProduct] = useState<number | null>(null);
   const [scanLine, setScanLine] = useState<number | null>(null);
   const [barcode, setBarcode] = useState('');
@@ -676,7 +687,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
   const [expectedDate, setDate] = useState(order?.expected_date?.slice(0, 10) ?? '');
   const [notes, setNotes] = useState(order?.notes ?? '');
   const [reviewed, setReviewed] = useState(false);
-  const hasScan = !!handoff;
+  const hasScan = !!handoff || scanned;
   const [lines, setLines] = useState<DocumentDraftLine[]>(
     handoff?.lines ??
       order?.lines.map((l) => ({
@@ -821,6 +832,34 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
           mutation.mutate();
         }}
       >
+        {!order && (
+          <PurchaseDocument
+            supplierId={supplierId}
+            products={availableProducts}
+            suppliers={availableSuppliers}
+            onApply={(scannedLines, scannedReference, scannedDate) => {
+              setLines(scannedLines);
+              setReference(scannedReference);
+              setDocumentDate(scannedDate);
+              setScanned(true);
+              setReviewed(false);
+            }}
+            onAddSupplier={(prefill) => {
+              const codeTaken = availableSuppliers.some(
+                (supplier) => supplier.code.toLowerCase() === prefill.code.toLowerCase(),
+              );
+              setSupplierPrefill({
+                ...prefill,
+                code:
+                  prefill.code && !codeTaken
+                    ? prefill.code
+                    : 'SUP-' + crypto.randomUUID().slice(0, 8).toUpperCase(),
+              });
+              setAddingSupplier(true);
+            }}
+            onSelectSupplier={setSupplier}
+          />
+        )}
         <SearchSelect
           label={t('Supplier')}
           placeholder={t('Select a supplier')}
@@ -836,7 +875,10 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
               keywords: [s.name, s.code, s.contactName, s.email, s.phone, s.companyNumber],
             }))}
           createLabel={t('Add new supplier')}
-          onCreate={() => setAddingSupplier(true)}
+          onCreate={() => {
+            setSupplierPrefill(undefined);
+            setAddingSupplier(true);
+          }}
           onSelect={setSupplier}
         />
         {selectedSupplier && <SupplierSummary supplier={selectedSupplier} />}
@@ -1125,7 +1167,9 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
       >
         {addingSupplier && (
           <SupplierForm
+            key={supplierPrefill?.code ?? 'blank'}
             supplier={null}
+            prefill={supplierPrefill}
             done={() => {
               setAddingSupplier(false);
             }}
@@ -1613,6 +1657,8 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
                             <span className="muted">
                               {Number(l.quantity)} {t(l.unit ?? '')} ×{' '}
                               {formatMoney(l.unit_cost, currency)} {t('excl. tax ')}
+                              {l.expiry_date &&
+                                `${t('Expiry date')}: ${l.expiry_date.slice(0, 10)}`}
                             </span>
                           </li>
                         ))}
@@ -1692,6 +1738,7 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
     Object.fromEntries(order.lines.map((l) => [l.id, l.proposed_selling_price ?? ''])),
   );
   const [quantities, setQuantities] = useState<Record<string, string>>({});
+  const [expiryDates, setExpiryDates] = useState<Record<string, string>>({});
   const [reference, setReference] = useState('');
   const [payload, setPayload] = useState<unknown>();
   const [pending, setPending] = useState(false);
@@ -1706,6 +1753,7 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
         .map((l) => ({
           purchaseLineId: l.id,
           quantity: quantities[l.id],
+          expiryDate: expiryDates[l.id] || null,
           unitCost: canCost ? (costs[l.id] ?? l.unit_cost) : undefined,
           sellingPrice: canPrice && prices[l.id] ? prices[l.id] : undefined,
           expectedSellingPrice:
@@ -1756,6 +1804,13 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
                   inputMode="decimal"
                   value={quantities[l.id] ?? '0'}
                   onChange={(e) => setQuantities({ ...quantities, [l.id]: e.target.value })}
+                />
+              </Field>
+              <Field label={t('Expiry date (optional)')}>
+                <input
+                  type="date"
+                  value={expiryDates[l.id] ?? ''}
+                  onChange={(e) => setExpiryDates({ ...expiryDates, [l.id]: e.target.value })}
                 />
               </Field>
               <Field label={t('Unit cost excl. tax for ') + l.product_name}>

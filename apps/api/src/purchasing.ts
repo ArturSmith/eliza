@@ -1193,7 +1193,7 @@ export class PurchasingController {
       ).rows[0];
       for (const { line, entry, cost, totals, product } of received) {
         await c.query(
-          'INSERT INTO goods_receipt_lines(store_id,receipt_id,purchase_line_id,product_id,product_name,sku,unit,quantity,unit_cost,tax_rate,subtotal,tax,total) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)',
+          'INSERT INTO goods_receipt_lines(store_id,receipt_id,purchase_line_id,product_id,product_name,sku,unit,quantity,unit_cost,tax_rate,subtotal,tax,total,expiry_date) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)',
           [
             store,
             receipt.id,
@@ -1208,6 +1208,7 @@ export class PurchasingController {
             totals.subtotal,
             totals.tax,
             totals.total,
+            entry.expiryDate ?? null,
           ],
         );
         const balance = fromScaled(toScaled(product.stock, 3) + toScaled(entry.quantity, 3), 3);
