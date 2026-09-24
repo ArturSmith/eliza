@@ -2,6 +2,7 @@ import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { createApp } from '../apps/api/dist/app.js';
 import { Database } from '../apps/api/dist/database.js';
+import { executeAiTool } from '../apps/api/dist/ai-tools.js';
 import { hash, passwordHash } from '../apps/api/dist/security.js';
 const admin = new Database();
 const base = process.env.DATABASE_URL ?? 'postgresql://eliza:eliza_local@127.0.0.1:54329/eliza';
@@ -69,11 +70,21 @@ beforeAll(async () => {
         status: next.statusCode,
       });
     if (providerCalls.at(-1).stream) {
-      const text = next.output?.filter((item: any) => item.type === 'message')
-        .flatMap((item: any) => item.content ?? []).map((item: any) => item.text ?? '').join('') ?? '';
+      const text =
+        next.output
+          ?.filter((item: any) => item.type === 'message')
+          .flatMap((item: any) => item.content ?? [])
+          .map((item: any) => item.text ?? '')
+          .join('') ?? '';
       return new Response(
-        (text ? 'event: response.output_text.delta\ndata: ' + JSON.stringify({ type: 'response.output_text.delta', delta: text }) + '\n\n' : '') +
-        'event: response.completed\ndata: ' + JSON.stringify({ type: 'response.completed', response: next }) + '\n\n',
+        (text
+          ? 'event: response.output_text.delta\ndata: ' +
+            JSON.stringify({ type: 'response.output_text.delta', delta: text }) +
+            '\n\n'
+          : '') +
+          'event: response.completed\ndata: ' +
+          JSON.stringify({ type: 'response.completed', response: next }) +
+          '\n\n',
         { status: 200, headers: { 'content-type': 'text/event-stream' } },
       );
     }
@@ -116,25 +127,98 @@ describe.sequential('Eliza AI conversations', () => {
     conversationId = created.body.id;
     expect((await owner.request('/ai/conversations')).body).toHaveLength(1);
   });
+  it('reads live expiry batches from this store without exposing another store', async () => {
+    const product = (
+      await owner.request('/products', {
+        name: 'Expiring yogurt',
+        sku: 'AI-EXPIRY-YOGURT',
+        category: 'Dairy',
+        unit: 'piece',
+        price: '10',
+        cost: '5',
+        minStock: '0',
+        barcodes: [],
+        plu: '',
+      })
+    ).body;
+    await db.pool.query(
+      `INSERT INTO stock_batches(store_id,product_id,expiry_date,quantity)
+       VALUES($1,$2,CURRENT_DATE+10,4),($1,$2,CURRENT_DATE-1,2),($1,$2,NULL,1)`,
+      [storeId, product.id],
+    );
+    await db.pool.query('UPDATE products SET stock=7 WHERE id=$1', [product.id]);
+    const other = (
+      await db.pool.query(
+        `INSERT INTO stores(organization_id,name,currency,timezone)
+       SELECT organization_id,'Other store','NOK','Europe/Oslo' FROM stores WHERE id=$1 RETURNING id`,
+        [storeId],
+      )
+    ).rows[0];
+    const otherProduct = (
+      await db.pool.query(
+        `INSERT INTO products(store_id,name,sku,category,unit,price,cost,min_stock,stock)
+       VALUES($1,'Private yogurt','PRIVATE-YOGURT','Dairy','piece',10,5,0,1) RETURNING id`,
+        [other.id],
+      )
+    ).rows[0];
+    await db.pool.query(
+      'INSERT INTO stock_batches(store_id,product_id,expiry_date,quantity) VALUES($1,$2,CURRENT_DATE+10,1)',
+      [other.id, otherProduct.id],
+    );
+    const req = {
+      context: { store: { id: storeId }, user: { permissions: ['inventory.read'] } },
+    } as any;
+    const lookup = (status: string) =>
+      executeAiTool(db, req, 'inventory_batches', {
+        productId: null,
+        status,
+        daysAhead: 30,
+        offset: 0,
+      }) as Promise<{
+        rows: {
+          product: string;
+          quantity: string;
+          expiryDate: string | null;
+          expiryStatus: string;
+        }[];
+      }>;
+    const expiring = await lookup('expiring');
+    expect(expiring.rows).toMatchObject([
+      { product: 'Expiring yogurt', quantity: '4.000', expiryStatus: 'expiring' },
+    ]);
+    expect(expiring.rows[0].expiryDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(expiring.rows.some((row) => row.product === 'Private yogurt')).toBe(false);
+    expect((await lookup('expired')).rows).toMatchObject([
+      { product: 'Expiring yogurt', quantity: '2.000', expiryStatus: 'expired' },
+    ]);
+    expect((await lookup('unknown')).rows).toMatchObject([
+      { product: 'Expiring yogurt', quantity: '1.000', expiryDate: null, expiryStatus: 'unknown' },
+    ]);
+  });
   it('streams answer chunks and saves the completed answer', async () => {
     replies = [answer('Streaming answer.')];
-    const response = await originalFetch(url + '/api/ai/conversations/' + conversationId + '/messages/stream', {
-      method: 'POST',
-      headers: {
-        Origin: 'http://localhost:5173',
-        'X-Eliza-Request': '1',
-        'Content-Type': 'application/json',
-        Cookie: [...owner.cookies].map(([k, v]) => k + '=' + v).join('; '),
+    const response = await originalFetch(
+      url + '/api/ai/conversations/' + conversationId + '/messages/stream',
+      {
+        method: 'POST',
+        headers: {
+          Origin: 'http://localhost:5173',
+          'X-Eliza-Request': '1',
+          'Content-Type': 'application/json',
+          Cookie: [...owner.cookies].map(([k, v]) => k + '=' + v).join('; '),
+        },
+        body: JSON.stringify({ message: 'Stream a response.' }),
       },
-      body: JSON.stringify({ message: 'Stream a response.' }),
-    });
+    );
     expect(response.status).toBe(201);
     const events = await response.text();
     expect(events).toContain('event: delta');
     expect(events).toContain('Streaming answer.');
     expect(events).toContain('event: done');
     expect(providerCalls.at(-1).stream).toBe(true);
-    expect((await owner.request('/ai/conversations/' + conversationId)).body.messages.at(-1).content).toBe('Streaming answer.');
+    expect(
+      (await owner.request('/ai/conversations/' + conversationId)).body.messages.at(-1).content,
+    ).toBe('Streaming answer.');
   });
   it('uses the Responses function loop and persists follow-up context', async () => {
     const account = (
@@ -168,6 +252,9 @@ describe.sequential('Eliza AI conversations', () => {
     });
     expect(providerCalls.at(-2).store).toBe(false);
     expect(providerCalls.at(-2).tools.some((tool: any) => tool.name === 'sales_summary')).toBe(
+      true,
+    );
+    expect(providerCalls.at(-2).tools.some((tool: any) => tool.name === 'inventory_batches')).toBe(
       true,
     );
     replies = [

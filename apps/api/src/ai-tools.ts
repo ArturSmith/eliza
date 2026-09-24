@@ -17,6 +17,14 @@ const range = z
   .refine((v) => v.from <= v.to && Date.parse(v.to) - Date.parse(v.from) <= 366 * 86400000);
 const search = z.object({ query: z.string().trim().min(1).max(100) }).strict();
 const uuid = z.object({ id: z.string().uuid() }).strict();
+const inventoryBatches = z
+  .object({
+    productId: z.string().uuid().nullable(),
+    status: z.enum(['all', 'expiring', 'expired', 'unknown']),
+    daysAhead: z.number().int().min(0).max(365),
+    offset: z.number().int().min(0).max(1000),
+  })
+  .strict();
 const browseAreas = [
   'shopping_lists',
   'stock_counts',
@@ -89,7 +97,10 @@ export const aiToolDefinitions = [
       properties: {
         area: { type: 'string', enum: [...browseAreas] },
         id: { type: ['string', 'null'], description: 'Exact record UUID or null for the list' },
-        offset: { type: ['integer', 'null'], description: 'Pagination offset or null for the first page' },
+        offset: {
+          type: ['integer', 'null'],
+          description: 'Pagination offset or null for the first page',
+        },
       },
       required: ['area', 'id', 'offset'],
       additionalProperties: false,
@@ -164,6 +175,27 @@ export const aiToolDefinitions = [
       additionalProperties: false,
     },
     schema: search,
+  },
+  {
+    name: 'inventory_batches',
+    permission: 'inventory.read',
+    description:
+      'Read current stock batches and expiry dates in the signed-in store. Find a product ID with search_products first, then use productId for its batches. Use status expiring with daysAhead for upcoming expiry (tomorrow through that many days), expired for past or today, unknown for stock without a recorded expiry, or all for every batch. Quantity is current remaining batch stock; unknown expiry is not proof that stock is fresh. Results are paginated. Dates use the store timezone.',
+    parameters: {
+      type: 'object',
+      properties: {
+        productId: {
+          type: ['string', 'null'],
+          description: 'Exact product UUID, or null for the whole store',
+        },
+        status: { type: 'string', enum: ['all', 'expiring', 'expired', 'unknown'] },
+        daysAhead: { type: 'integer', description: '0–365; used for expiring status' },
+        offset: { type: 'integer', description: 'Pagination offset, starting at 0' },
+      },
+      required: ['productId', 'status', 'daysAhead', 'offset'],
+      additionalProperties: false,
+    },
+    schema: inventoryBatches,
   },
   {
     name: 'supplier_details',
@@ -428,7 +460,7 @@ export async function executeAiTool(
         sales_receipts: `SELECT id,receipt_number,receipt,created_at FROM sales WHERE store_id=$1 AND ($2::uuid IS NULL OR id=$2) ORDER BY created_at DESC LIMIT 30 OFFSET $3`,
         cash_movements: `SELECT c.id,c.shift_id,c.amount::text,c.kind,c.reason,c.created_at,e.name AS employee FROM cash_movements c JOIN employees e ON e.id=c.employee_id AND e.store_id=c.store_id WHERE c.store_id=$1 AND ($2::uuid IS NULL OR c.id=$2) ORDER BY c.created_at DESC LIMIT 30 OFFSET $3`,
         receipts: `SELECT r.id,r.number,r.purchase_id,p.number AS purchase_number,r.delivery_reference,r.notes,r.total::text,r.created_at,
-          (SELECT coalesce(jsonb_agg(jsonb_build_object('productId',l.product_id,'product',l.product_name,'quantity',l.quantity,'unitCost',l.unit_cost,'total',l.total)),'[]'::jsonb) FROM goods_receipt_lines l WHERE l.store_id=$1 AND l.receipt_id=r.id) AS lines
+          (SELECT coalesce(jsonb_agg(jsonb_build_object('productId',l.product_id,'product',l.product_name,'quantity',l.quantity,'unitCost',l.unit_cost,'total',l.total,'expiryDate',l.expiry_date::text)),'[]'::jsonb) FROM goods_receipt_lines l WHERE l.store_id=$1 AND l.receipt_id=r.id) AS lines
           FROM goods_receipts r JOIN purchases p ON p.id=r.purchase_id AND p.store_id=r.store_id WHERE r.store_id=$1 AND ($2::uuid IS NULL OR r.id=$2) ORDER BY r.created_at DESC LIMIT 30 OFFSET $3`,
         refunds: `SELECT r.id,r.number,r.sale_id,r.method,r.total::text,r.reason,r.created_at FROM refunds r WHERE r.store_id=$1 AND ($2::uuid IS NULL OR r.id=$2) ORDER BY r.created_at DESC LIMIT 30 OFFSET $3`,
         store_profile: `SELECT id,name,currency,timezone,address,phone,business_number,receipt_footer,default_tax_rate::text,default_markup_percent::text,scale_barcode FROM stores WHERE id=$1 AND ($2::uuid IS NULL OR id=$2) LIMIT 1 OFFSET $3`,
@@ -436,7 +468,11 @@ export async function executeAiTool(
         devices: `SELECT id,name,type,active,created_at FROM devices WHERE store_id=$1 AND ($2::uuid IS NULL OR id=$2) ORDER BY created_at DESC LIMIT 30 OFFSET $3`,
         audit: `SELECT id,employee_id,device_id,action,entity_id,details,created_at FROM audits WHERE store_id=$1 AND ($2::uuid IS NULL OR id=$2) ORDER BY created_at DESC LIMIT 30 OFFSET $3`,
       };
-      return { area, offset: offset ?? 0, rows: await query(statements[area], [store.id, id ?? null, offset ?? 0]) };
+      return {
+        area,
+        offset: offset ?? 0,
+        rows: await query(statements[area], [store.id, id ?? null, offset ?? 0]),
+      };
     }
 
     case 'propose_change':
@@ -475,6 +511,34 @@ export async function executeAiTool(
         `SELECT id,name,sku,unit,stock::text,min_stock::text,active FROM products WHERE store_id=$1 AND ($2='low' AND stock<=min_stock OR $2<>'low' AND (name ILIKE $3 OR sku ILIKE $3)) ORDER BY stock<=min_stock DESC,name LIMIT 30`,
         [store.id, a.query, pattern],
       );
+    case 'inventory_batches': {
+      const batch = parsed.data as z.infer<typeof inventoryBatches>;
+      const rows = await query(
+        `SELECT b.id AS "batchId",p.id AS "productId",p.name AS product,p.sku,p.unit,
+          p.stock::text AS "totalStock",b.quantity::text AS quantity,
+          b.expiry_date::text AS "expiryDate",
+          CASE WHEN b.expiry_date IS NULL THEN 'unknown'
+            WHEN b.expiry_date<=d.today THEN 'expired'
+            WHEN b.expiry_date<=d.today+$4::integer THEN 'expiring'
+            ELSE 'fresh' END AS "expiryStatus",
+          CASE WHEN b.expiry_date IS NULL THEN NULL ELSE b.expiry_date-d.today END AS "daysUntilExpiry",
+          d.today::text AS "storeDate"
+         FROM stock_batches b
+         JOIN products p ON p.id=b.product_id AND p.store_id=b.store_id
+         JOIN stores s ON s.id=b.store_id
+         CROSS JOIN LATERAL (SELECT (now() AT TIME ZONE s.timezone)::date AS today) d
+         WHERE b.store_id=$1 AND b.quantity>0
+           AND ($2::uuid IS NULL OR b.product_id=$2)
+           AND ($3='all'
+             OR ($3='unknown' AND b.expiry_date IS NULL)
+             OR ($3='expired' AND b.expiry_date IS NOT NULL AND b.expiry_date<=d.today)
+             OR ($3='expiring' AND b.expiry_date>d.today AND b.expiry_date<=d.today+$4::integer))
+         ORDER BY b.expiry_date ASC NULLS LAST,p.name,b.created_at,b.id
+         LIMIT 50 OFFSET $5`,
+        [store.id, batch.productId, batch.status, batch.daysAhead, batch.offset],
+      );
+      return { status: batch.status, daysAhead: batch.daysAhead, offset: batch.offset, rows };
+    }
     case 'search_suppliers':
       return query(
         `SELECT id,code,name,phone,contact_name,contact_phone,company_number,email,address,payment_terms,active,version FROM suppliers WHERE store_id=$1 AND (name ILIKE $2 OR code ILIKE $2 OR phone ILIKE $2 OR contact_name ILIKE $2 OR contact_phone ILIKE $2 OR company_number ILIKE $2) ORDER BY name LIMIT 20`,

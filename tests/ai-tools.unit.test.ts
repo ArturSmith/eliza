@@ -38,6 +38,12 @@ describe('AI read tool boundaries', () => {
     expect(
       availableAiTools(['costs.read', 'sales.read']).some((t) => t.name === 'gross_profit'),
     ).toBe(true);
+    expect(availableAiTools(['inventory.read']).some((t) => t.name === 'inventory_batches')).toBe(
+      true,
+    );
+    expect(availableAiTools(['catalog.read']).some((t) => t.name === 'inventory_batches')).toBe(
+      false,
+    );
   });
   it('defines every strict browse argument as required, with null for unused filters', () => {
     const browse = aiToolDefinitions.find((tool) => tool.name === 'browse_store_data');
@@ -80,6 +86,43 @@ describe('AI read tool boundaries', () => {
       executeAiTool(database, req, 'search_purchases', { query: 'ABC' }),
     ).rejects.toMatchObject({ status: 403 });
     expect(query).not.toHaveBeenCalled();
+  });
+  it('restricts expiry-batch reads to inventory permission and the current store', async () => {
+    const denied = fixture(['catalog.read']);
+    await expect(
+      executeAiTool(denied.database, denied.req, 'inventory_batches', {
+        productId: null,
+        status: 'expiring',
+        daysAhead: 30,
+        offset: 0,
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(denied.query).not.toHaveBeenCalled();
+    const allowed = fixture(['inventory.read']);
+    expect(
+      await executeAiTool(allowed.database, allowed.req, 'inventory_batches', {
+        productId: null,
+        status: 'expiring',
+        daysAhead: 30,
+        offset: 0,
+      }),
+    ).toMatchObject({ status: 'expiring', rows: [] });
+    expect(allowed.query).toHaveBeenCalledWith(expect.stringContaining('b.store_id=$1'), [
+      allowed.req.context.store.id,
+      null,
+      'expiring',
+      30,
+      0,
+    ]);
+    expect(
+      await executeAiTool(allowed.database, allowed.req, 'inventory_batches', {
+        productId: null,
+        status: 'all',
+        daysAhead: 30,
+        offset: 0,
+        storeId: 'other',
+      }),
+    ).toEqual({ error: 'Invalid tool arguments.' });
   });
   it('validates arguments and never accepts a model-supplied store ID', async () => {
     const { database, req, query } = fixture();
