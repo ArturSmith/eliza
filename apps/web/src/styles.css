@@ -3129,6 +3129,21 @@ input.shopping-section-title {
 .purchase-draft-source small {
   color: #798374;
 }
+.purchase-supplier-hint {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e3e8df;
+  border-radius: 8px;
+  background: #f8faf6;
+  color: #5f6f56;
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.purchase-supplier-hint p {
+  margin: 0;
+}
 .purchase-draft-amount {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;

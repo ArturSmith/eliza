@@ -80,6 +80,80 @@ type Line = {
   tax_rate: string;
   total: string;
 };
+type SupplierOffer = {
+  productId: string;
+  supplierId: string;
+  supplierName: string;
+  unit: string;
+  unitCost: string | null;
+  cheapest: boolean;
+  premiumPercent: number | null;
+};
+
+function SupplierOfferHint({
+  supplierId,
+  offers,
+  currency,
+}: {
+  supplierId: string;
+  offers: SupplierOffer[];
+  currency: string;
+}) {
+  useLanguage();
+  if (!supplierId || offers.length < 2) return null;
+  const selected = offers.find((offer) => offer.supplierId === supplierId);
+  const cheapest = offers.find((offer) => offer.cheapest && offer.unitCost);
+  const unit = t((selected ?? cheapest)?.unit ?? 'piece');
+  return (
+    <div className="purchase-supplier-hint" role="status" aria-live="polite">
+      <p>
+        {t('This product has purchase history with {count} suppliers.', {
+          count: String(offers.length),
+        })}
+      </p>
+      {!selected ? (
+        <p>
+          {t('Selected supplier has no recorded quote for this product.')}
+          {cheapest?.unitCost &&
+            ' ' +
+              t('Cheapest known supplier is {name} at {price} per {unit}.', {
+                name: cheapest.supplierName,
+                price: formatMoney(cheapest.unitCost, currency),
+                unit,
+              })}
+        </p>
+      ) : (
+        <>
+          {selected.unitCost && (
+            <p>
+              {t('Selected supplier quote: {price} per {unit}.', {
+                price: formatMoney(selected.unitCost, currency),
+                unit,
+              })}
+            </p>
+          )}
+          {selected.cheapest ? (
+            <p>{t('Selected supplier is currently the cheapest for this product.')}</p>
+          ) : (
+            <p>
+              {selected.premiumPercent !== null &&
+                t('Selected supplier is {percent}% above the cheapest quote.', {
+                  percent: selected.premiumPercent.toFixed(1),
+                }) + ' '}
+              {cheapest?.unitCost &&
+                t('Cheapest known supplier is {name} at {price} per {unit}.', {
+                  name: cheapest.supplierName,
+                  price: formatMoney(cheapest.unitCost, currency),
+                  unit,
+                })}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function CostComparison({
   cost,
   previous,
@@ -642,6 +716,11 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
   const currency = useSession().data?.store.currency ?? 'NOK';
   const [handoff] = useState(() => (order ? null : readDocumentHandoff()));
   const [supplierId, setSupplier] = useState(order?.supplier_id ?? handoff?.supplierId ?? '');
+  const supplierOffers = useQuery({
+    queryKey: ['supplier-products'],
+    queryFn: () => api<SupplierOffer[]>('/supplier-products'),
+    enabled: !!supplierId,
+  });
   const [addingSupplier, setAddingSupplier] = useState(false);
   const [supplierPrefill, setSupplierPrefill] = useState<
     | Partial<
@@ -726,6 +805,12 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
     setLineError('');
   }, [lines, supplierId]);
   const [lineError, setLineError] = useState('');
+  const offersByProduct = new Map<string, SupplierOffer[]>();
+  for (const offer of supplierOffers.data ?? []) {
+    const grouped = offersByProduct.get(offer.productId);
+    if (grouped) grouped.push(offer);
+    else offersByProduct.set(offer.productId, [offer]);
+  }
   function nextProduct() {
     setLineError('');
     setLines((current) => [
@@ -950,6 +1035,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
             )}
           </p>
         )}
+        <ErrorMessage error={supplierOffers.error} />
         <div
           className="purchase-draft-scroll"
           tabIndex={0}
@@ -974,6 +1060,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
             <tbody>
               {lines.map((line, index) => {
                 const product = availableProducts.find((p) => p.id === line.productId);
+                const productOffers = product ? (offersByProduct.get(product.id) ?? []) : [];
                 return (
                   <tr
                     key={index}
@@ -1043,6 +1130,13 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
                       >
                         {t('Scan barcode')}
                       </Button>
+                      {product && (
+                        <SupplierOfferHint
+                          supplierId={supplierId}
+                          offers={productOffers}
+                          currency={currency}
+                        />
+                      )}
                     </td>
                     <td>{product ? t(product.unit) : '—'}</td>
                     <td>
