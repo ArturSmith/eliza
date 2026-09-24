@@ -1128,7 +1128,7 @@ tr:last-child td {
   min-width: 0;
 }
 .field > span,
-.barcode-lookup legend {
+.barcode-lookup-title {
   font-size: 11px;
   font-weight: 550;
   color: #637359;
@@ -2349,6 +2349,10 @@ select {
   background: white;
 }
 
+.barcode-lookup-title {
+  margin: 0 0 8px;
+}
+
 .barcode-lookup {
   border: 1px solid #dfe5da;
   border-radius: 12px;
@@ -2953,6 +2957,18 @@ input.shopping-section-title {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
+}
+.purchase-document-result,
+.purchase-document-suppliers {
+  display: grid;
+  gap: 12px;
+}
+.purchase-document-result p,
+.purchase-document-suppliers p {
+  margin: 0;
+}
+.purchase-document-suppliers > .button {
+  justify-self: start;
 }
 .purchase-assistant {
   display: grid;
@@ -5007,6 +5023,17 @@ input.shopping-section-title {
   pointer-events: none;
 }
 
-.adjustment-product-picker { display: flex; align-items: flex-end; gap: 8px; margin-bottom: 16px; }
-.adjustment-product-picker > .search-select { flex: 1; min-width: 0; margin-bottom: 0; }
-.adjustment-product-picker > .camera-scan-button { min-height: 40px; }
+.adjustment-product-picker {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.adjustment-product-picker > .search-select {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+.adjustment-product-picker > .camera-scan-button {
+  min-height: 40px;
+}
