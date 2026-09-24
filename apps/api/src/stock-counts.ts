@@ -20,6 +20,7 @@ import { toScaled, fromScaled } from '@eliza/contracts';
 import { Database } from './database.js';
 import { AuthModule } from './auth.js';
 import { Operations, audit } from './operations.js';
+import { addUnknownStock, consumeBatches } from './stock-batches.js';
 import { AccessGuard, Require, parse, hash, cookie, type AuthRequest } from './security.js';
 const versionSchema = z.object({ requestId: z.uuid(), version: z.number().int().positive() });
 @Controller('stock-counts')
@@ -325,6 +326,10 @@ WHERE c.store_id=$1 ORDER BY c.created_at DESC LIMIT 100`,
           );
         const difference = toScaled(l.counted_quantity, 3) - toScaled(l.system_quantity, 3);
         if (!difference) continue;
+        if (difference > 0n)
+          await addUnknownStock(c, req.context.store.id, l.product_id, fromScaled(difference, 3));
+        else
+          await consumeBatches(c, req.context.store.id, l.product_id, fromScaled(-difference, 3));
         await c.query('UPDATE products SET stock=$2 WHERE id=$1', [
           l.product_id,
           l.counted_quantity,

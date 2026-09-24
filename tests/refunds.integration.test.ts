@@ -186,6 +186,18 @@ describe.sequential('receipt search and refunds', () => {
     expect(
       (
         await db.pool.query(
+          'SELECT sum(quantity)::text AS quantity FROM stock_batches WHERE product_id=$1',
+          [productId],
+        )
+      ).rows[0].quantity,
+    ).toBe('1.000');
+    expect(
+      (await db.pool.query('SELECT sum(quantity)::text AS quantity FROM refund_batch_allocations'))
+        .rows[0].quantity,
+    ).toBe('1.000');
+    expect(
+      (
+        await db.pool.query(
           'SELECT sum(amount)::text AS total FROM cash_movements WHERE shift_id=$1',
           [shiftId],
         )

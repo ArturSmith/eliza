@@ -25,6 +25,7 @@ import { Database } from './database.js';
 import { AccessGuard, Require, parse, hash, type AuthRequest } from './security.js';
 import { RegisterModule, RegisterService } from './register.js';
 import { Operations, audit } from './operations.js';
+import { restockSaleBatches } from './stock-batches.js';
 const calendar = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -308,9 +309,20 @@ class RefundController {
         ],
       );
       for (const l of lines) {
-        await c.query(
-          'INSERT INTO refund_lines(store_id,refund_id,sale_id,product_id,quantity,restock,total,tax) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
-          [a.storeId, id, b.saleId, l.productId, l.quantity, l.restock, l.total, l.tax],
+        const refundLine = (
+          await c.query(
+            'INSERT INTO refund_lines(store_id,refund_id,sale_id,product_id,quantity,restock,total,tax) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
+            [a.storeId, id, b.saleId, l.productId, l.quantity, l.restock, l.total, l.tax],
+          )
+        ).rows[0];
+        await restockSaleBatches(
+          c,
+          a.storeId,
+          b.saleId,
+          l.productId,
+          refundLine.id,
+          l.quantity,
+          l.restock,
         );
         if (l.restock) {
           await c.query('UPDATE products SET stock=$2 WHERE id=$1', [l.productId, l.balance]);

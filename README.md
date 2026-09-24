@@ -91,6 +91,8 @@ Owner and Manager roles have purchasing access. Deliveries cannot exceed outstan
 
 Supplier payments, invoice matching, purchase returns, barcode receiving, and offline delivery synchronization are not implemented. Orders list the latest 200 records.
 
+Receiving now creates a stock batch for each delivered product, carrying its expiry date when provided. Checkout allocates stock from the earliest unexpired batch first and refuses a sale when the remaining quantity is expired. The POS catalogue shows saleable stock; Inventory shows each batch and its expiry. Existing stock at migration time, opening balances, and positive manual adjustments are placed in an unknown-expiry batch. Those quantities remain saleable until staff physically verify and reconcile them. FEFO allocation is an accounting assumption; a barcode without a batch identifier cannot prove which physical batch the customer selected.
+
 ## Next milestones
 
 1. Stock counts, expenses, and supplier invoice/payment tracking.

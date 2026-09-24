@@ -6,6 +6,8 @@ import {
   Get,
   Module,
   NotFoundException,
+  Param,
+  ParseUUIDPipe,
   Post,
   Req,
   UseGuards,
@@ -20,6 +22,27 @@ import { audits, devices, employees, movements, products } from './schema.js';
 @UseGuards(AccessGuard)
 export class InventoryController {
   constructor(private database: Database) {}
+  @Get('products/:id/batches') @Require('inventory.read') async batches(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    const product = await this.database.pool.query(
+      'SELECT id,name,stock FROM products WHERE id=$1 AND store_id=$2',
+      [id, req.context.store.id],
+    );
+    if (!product.rows[0]) throw new NotFoundException('Product not found.');
+    const batches = await this.database.pool.query(
+      `SELECT b.id,b.receipt_line_id AS "receiptLineId",b.expiry_date::text AS "expiryDate",
+       b.quantity::text,b.created_at AS "createdAt",
+       CASE WHEN b.expiry_date IS NOT NULL AND b.expiry_date<=(now() AT TIME ZONE s.timezone)::date
+       THEN true ELSE false END AS expired
+       FROM stock_batches b JOIN stores s ON s.id=b.store_id
+       WHERE b.store_id=$1 AND b.product_id=$2 AND b.quantity>0
+       ORDER BY b.expiry_date ASC NULLS LAST,b.created_at,b.id`,
+      [req.context.store.id, id],
+    );
+    return { product: product.rows[0], batches: batches.rows };
+  }
   @Get('movements') @Require('inventory.read') async list(@Req() req: AuthRequest) {
     return this.database.db
       .select({
@@ -97,6 +120,9 @@ export class InventoryController {
           'This adjustment would make stock negative. Check the quantity.',
         );
       const balance = fromScaled(next, 3);
+      await tx.execute(
+        sql`SELECT adjust_stock_batches(${store.id}::uuid,${product.id}::uuid,${body.quantity}::numeric)`,
+      );
       await tx.update(products).set({ stock: balance }).where(eq(products.id, product.id));
       const [movement] = await tx
         .insert(movements)

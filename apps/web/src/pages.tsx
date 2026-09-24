@@ -956,6 +956,16 @@ export function InventoryPage() {
   const products = useProducts();
   const movements = useMovements();
   const [open, setOpen] = useState(false);
+  const [batchProductId, setBatchProductId] = useState('');
+  const selectedBatchProductId = batchProductId || products.data?.[0]?.id || '';
+  const batches = useQuery<{
+    product: { id: string; name: string; stock: string };
+    batches: { id: string; quantity: string; expiryDate: string | null; expired: boolean }[];
+  }>({
+    queryKey: ['inventory-batches', selectedBatchProductId],
+    queryFn: () => api('/inventory/products/' + selectedBatchProductId + '/batches'),
+    enabled: !!selectedBatchProductId,
+  });
   return (
     <>
       <PageHeading
@@ -980,6 +990,65 @@ export function InventoryPage() {
           </span>
         </div>
       </div>
+      <section className="panel">
+        <div className="panel-heading">
+          <div>
+            <h2>{t('Stock batches')}</h2>
+            <p className="muted">{t('Check remaining quantity and expiry for each delivery.')}</p>
+          </div>
+        </div>
+        <div className="panel-body">
+          <Field label="Product">
+            <select
+              value={selectedBatchProductId}
+              onChange={(event) => setBatchProductId(event.target.value)}
+            >
+              {(products.data ?? []).map((product) => (
+                <option key={product.id} value={product.id}>
+                  {product.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <ErrorMessage error={batches.error} />
+        {batches.isPending && selectedBatchProductId ? (
+          <Loading />
+        ) : batches.data?.batches.length ? (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>{t('Expiry date')}</th>
+                  <th>{t('Quantity')}</th>
+                  <th>{t('Status')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {batches.data.batches.map((batch) => (
+                  <tr key={batch.id}>
+                    <td>{batch.expiryDate ?? t('Unknown expiry')}</td>
+                    <td>{Number(batch.quantity)}</td>
+                    <td>
+                      <Badge tone={batch.expired || !batch.expiryDate ? 'amber' : 'gray'}>
+                        {!batch.expiryDate
+                          ? t('Unknown expiry')
+                          : batch.expired
+                            ? t('Expired')
+                            : t('Available')}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          !batches.error && (
+            <p className="muted panel-body">{t('No stock batches for this product.')}</p>
+          )
+        )}
+      </section>
       <section className="panel">
         <div className="panel-heading">
           <div>

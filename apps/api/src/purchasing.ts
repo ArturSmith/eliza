@@ -1217,24 +1217,30 @@ export class PurchasingController {
         )
       ).rows[0];
       for (const { line, entry, cost, totals, product } of received) {
+        const receiptLine = (
+          await c.query(
+            'INSERT INTO goods_receipt_lines(store_id,receipt_id,purchase_line_id,product_id,product_name,sku,unit,quantity,unit_cost,tax_rate,subtotal,tax,total,expiry_date) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id',
+            [
+              store,
+              receipt.id,
+              line.id,
+              product.id,
+              line.product_name,
+              line.sku,
+              line.unit,
+              entry.quantity,
+              cost,
+              line.tax_rate,
+              totals.subtotal,
+              totals.tax,
+              totals.total,
+              entry.expiryDate ?? null,
+            ],
+          )
+        ).rows[0];
         await c.query(
-          'INSERT INTO goods_receipt_lines(store_id,receipt_id,purchase_line_id,product_id,product_name,sku,unit,quantity,unit_cost,tax_rate,subtotal,tax,total,expiry_date) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)',
-          [
-            store,
-            receipt.id,
-            line.id,
-            product.id,
-            line.product_name,
-            line.sku,
-            line.unit,
-            entry.quantity,
-            cost,
-            line.tax_rate,
-            totals.subtotal,
-            totals.tax,
-            totals.total,
-            entry.expiryDate ?? null,
-          ],
+          'INSERT INTO stock_batches(store_id,product_id,receipt_line_id,expiry_date,quantity) VALUES($1,$2,$3,$4,$5)',
+          [store, product.id, receiptLine.id, entry.expiryDate ?? null, entry.quantity],
         );
         const balance = fromScaled(toScaled(product.stock, 3) + toScaled(entry.quantity, 3), 3);
         await c.query('UPDATE products SET stock=$2,cost=$3,price=COALESCE($4,price) WHERE id=$1', [

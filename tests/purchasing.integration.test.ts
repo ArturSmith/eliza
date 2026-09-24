@@ -174,6 +174,7 @@ describe.sequential('purchasing and receiving', () => {
         {
           purchaseLineId: order.lines[0].id,
           quantity: '18',
+          expiryDate: '2035-01-01',
           unitCost: '9',
           sellingPrice: '19',
           expectedSellingPrice: '15',
@@ -191,6 +192,11 @@ describe.sequential('purchasing and receiving', () => {
     expect(order.receipts).toHaveLength(1);
     expect(order.lines[0].unit_cost).toBe('8.00');
     expect(order.receipts[0].lines[0].unit_cost).toBe('9.00');
+    const batches = await manager.request('/inventory/products/' + productId + '/batches');
+    expect(batches.status).toBe(200);
+    expect(batches.body.batches).toMatchObject([
+      { quantity: '18.000', expiryDate: '2035-01-01', expired: false },
+    ]);
     expect(
       (await db.pool.query('SELECT stock,cost,price FROM products WHERE id=$1', [productId]))
         .rows[0],

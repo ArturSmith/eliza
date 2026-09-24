@@ -32,6 +32,7 @@ import { Operations, audit } from './operations.js';
 import { AccessGuard, type AuthRequest, Require, parse, hash } from './security.js';
 import { AuthModule } from './auth.js';
 import { Database } from './database.js';
+import { consumeBatches } from './stock-batches.js';
 async function requestLock(client: PoolClient, storeId: string, id: string) {
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [storeId + id]);
 }
@@ -74,7 +75,12 @@ export class CheckoutController {
       const actor = await this.registers.operator(client, req);
       return (
         await client.query(
-          `SELECT p.id,p.image,p.source,p.name,p.sku,p.category,p.unit,p.price,p.tax_rate AS "taxRate",p.stock,COALESCE(p.plu,'') AS plu,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id),'[]'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active ORDER BY p.name`,
+          `SELECT p.id,p.image,p.source,p.name,p.sku,p.category,p.unit,p.price,p.tax_rate AS "taxRate",
+          COALESCE((SELECT sum(sb.quantity) FROM stock_batches sb
+            WHERE sb.store_id=p.store_id AND sb.product_id=p.id
+              AND (sb.expiry_date IS NULL OR sb.expiry_date>(now() AT TIME ZONE
+                (SELECT timezone FROM stores WHERE id=p.store_id))::date)),0)::numeric(15,3) AS stock,
+          COALESCE(p.plu,'') AS plu,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id),'[]'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active ORDER BY p.name`,
           [actor.storeId],
         )
       ).rows;
@@ -402,20 +408,25 @@ export class CheckoutController {
       for (const line of lines) {
         const product = products.find((p) => p.id === line.productId)!;
         const balance = fromScaled(toScaled(product.stock, 3) - toScaled(line.quantity, 3), 3);
+        const saleItem = (
+          await client.query(
+            'INSERT INTO sale_items(store_id,sale_id,product_id,quantity,price,cost,tax_rate,total) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
+            [
+              actor.storeId,
+              receiptId,
+              product.id,
+              line.quantity,
+              line.price,
+              product.cost,
+              line.taxRate,
+              line.total,
+            ],
+          )
+        ).rows[0];
+        await consumeBatches(client, actor.storeId, product.id, line.quantity, {
+          saleItemId: saleItem.id,
+        });
         await client.query('UPDATE products SET stock=$1 WHERE id=$2', [balance, product.id]);
-        await client.query(
-          'INSERT INTO sale_items(store_id,sale_id,product_id,quantity,price,cost,tax_rate,total) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
-          [
-            actor.storeId,
-            receiptId,
-            product.id,
-            line.quantity,
-            line.price,
-            product.cost,
-            line.taxRate,
-            line.total,
-          ],
-        );
         await client.query(
           "INSERT INTO movements(store_id,product_id,employee_id,device_id,quantity,balance,reason,notes,request_id,request_hash,sale_id,shift_id) VALUES($1,$2,$3,$4,$5,$6,'sale',$7,$8,$9,$10,$11)",
           [

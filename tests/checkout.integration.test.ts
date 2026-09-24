@@ -183,6 +183,53 @@ describe.sequential('register, shifts and checkout', () => {
       ).status,
     ).toBe(409);
   });
+  it('rejects a sale when only expired batch stock can satisfy it', async () => {
+    const perishableId = (
+      await manager.request('/products', {
+        ...product,
+        name: 'Fresh yogurt',
+        sku: 'YOGURT-BATCH',
+        plu: '202',
+        barcodes: [],
+      })
+    ).body.id;
+    const storeId = (
+      await db.pool.query('SELECT store_id FROM products WHERE id=$1', [perishableId])
+    ).rows[0].store_id;
+    await db.pool.query(
+      `INSERT INTO stock_batches(store_id,product_id,expiry_date,quantity) VALUES
+       ($1,$2,CURRENT_DATE-10,2),($1,$2,CURRENT_DATE+10,1)`,
+      [storeId, perishableId],
+    );
+    await db.pool.query('UPDATE products SET stock=3 WHERE id=$1', [perishableId]);
+    const line = (quantity: string) => ({
+      productId: perishableId,
+      quantity,
+      expectedPrice: product.price,
+      expectedTaxRate: product.taxRate,
+    });
+    expect(
+      (
+        await register.request(
+          '/pos/sales',
+          sale({
+            lines: [line('2')],
+            payment: { method: 'cash', tendered: '230.00' },
+          }),
+        )
+      ).status,
+    ).toBe(409);
+    const batches = await manager.request('/inventory/products/' + perishableId + '/batches');
+    expect(batches.status).toBe(200);
+    expect(batches.body.product.stock).toBe('3.000');
+    const cashierProduct = (await register.request('/pos/products')).body.find(
+      (item: { id: string }) => item.id === perishableId,
+    );
+    expect(cashierProduct.stock).toBe('1.000');
+    expect(batches.body.batches).toHaveLength(2);
+    expect(batches.body.batches[0]).toMatchObject({ quantity: '2.000', expired: true });
+    expect(batches.body.batches[1]).toMatchObject({ quantity: '1.000', expired: false });
+  });
   it('completes a sale exactly once and links all stock, payment, and cash records', async () => {
     const payload = sale();
     const results = await Promise.all([
@@ -200,6 +247,15 @@ describe.sequential('register, shifts and checkout', () => {
     const stock = (await db.pool.query('SELECT stock FROM products WHERE id=$1', [productId]))
       .rows[0].stock;
     expect(stock).toBe('19.000');
+    expect(
+      (
+        await db.pool.query(
+          `SELECT sum(a.quantity)::text AS quantity FROM sale_batch_allocations a
+       JOIN sale_items i ON i.id=a.sale_item_id WHERE i.sale_id=$1`,
+          [receiptId],
+        )
+      ).rows[0].quantity,
+    ).toBe('1.000');
     expect(
       (await db.pool.query('SELECT id FROM payments WHERE sale_id=$1', [receiptId])).rowCount,
     ).toBe(1);
