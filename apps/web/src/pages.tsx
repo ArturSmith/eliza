@@ -990,14 +990,14 @@ export function InventoryPage() {
           </span>
         </div>
       </div>
-      <section className="panel">
+      <section className="panel stock-batches-panel">
         <div className="panel-heading">
           <div>
             <h2>{t('Stock batches')}</h2>
             <p className="muted">{t('Check remaining quantity and expiry for each delivery.')}</p>
           </div>
         </div>
-        <div className="panel-body">
+        <div className="stock-batches-controls">
           <Field label="Product">
             <select
               value={selectedBatchProductId}
@@ -1045,7 +1045,7 @@ export function InventoryPage() {
           </div>
         ) : (
           !batches.error && (
-            <p className="muted panel-body">{t('No stock batches for this product.')}</p>
+            <p className="muted stock-batches-empty">{t('No stock batches for this product.')}</p>
           )
         )}
       </section>

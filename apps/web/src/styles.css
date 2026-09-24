@@ -959,6 +959,25 @@ tr:last-child td {
   display: block;
   margin-top: 3px;
 }
+.stock-batches-panel {
+  margin-bottom: 22px;
+}
+.stock-batches-panel .panel-heading h2 {
+  margin-bottom: 10px;
+}
+.stock-batches-controls {
+  padding: 24px 24px 0;
+}
+.stock-batches-controls .field {
+  margin-bottom: 0;
+}
+.stock-batches-empty {
+  margin: 20px 0 0;
+  padding: 0 24px 24px;
+}
+.stock-batches-panel > .table-scroll {
+  margin-top: 20px;
+}
 .quantity-change {
   display: inline-flex;
   align-items: center;
