@@ -129,7 +129,7 @@ export function PurchaseDocument({
   supplierId: string;
   products: Product[];
   suppliers: Supplier[];
-  onApply: (lines: DocumentDraftLine[], reference: string, date: string) => void;
+  onApply: (lines: DocumentDraftLine[], document: Extraction) => void;
   onAddSupplier: (prefill: SupplierPrefill) => void;
   onSelectSupplier: (id: string) => void;
 }) {
@@ -141,18 +141,12 @@ export function PurchaseDocument({
   const [result, setResult] = useState<Extraction | null>(null);
   const [candidates, setCandidates] = useState<ReturnType<typeof matchingSuppliers>>([]);
   const [referenceMatches, setReferenceMatches] = useState<PurchaseReference[]>([]);
-  const [question, setQuestion] = useState('');
-  const [messages, setMessages] = useState<{ role: 'user' | 'assistant'; content: string }[]>([]);
-  const [chatBusy, setChatBusy] = useState(false);
-  const [chatError, setChatError] = useState<unknown>(null);
   const activeProducts = products.filter((p) => p.active);
   async function upload(file?: File) {
     setError(null);
     setResult(null);
     setCandidates([]);
     setReferenceMatches([]);
-    setMessages([]);
-    setChatError(null);
     setImage('');
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
@@ -251,56 +245,12 @@ export function PurchaseDocument({
         }),
       );
       setResult({ ...document, lines: enriched.map((line) => line.source) });
-      setMessages([]);
-      setChatError(null);
-      onApply(enriched, document.supplierReference, document.documentDate);
+      onApply(enriched, document);
       setOpen(false);
     } catch (e) {
       setError(e);
     } finally {
       setBusy(false);
-    }
-  }
-  async function ask() {
-    if (!result || !question.trim() || chatBusy) return;
-    const asked = question.trim();
-    setChatBusy(true);
-    setChatError(null);
-    try {
-      const response = await api<{ answer: string }>('/purchases/document-chat', {
-        document: {
-          supplierName: result.supplierName,
-          supplierCode: result.supplierCode,
-          supplierCompanyNumber: result.supplierCompanyNumber,
-          supplierPhone: result.supplierPhone,
-          contactName: result.contactName,
-          contactPhone: result.contactPhone,
-          supplierReference: result.supplierReference,
-          documentDate: result.documentDate,
-          lines: result.lines.map((line) => ({
-            description: line.description,
-            supplierSku: line.supplierSku,
-            barcode: line.barcode,
-            quantity: line.quantity,
-            unitCost: line.unitCost,
-          })),
-        },
-        question: asked,
-        history: messages.slice(-6).map((message) => ({
-          role: message.role,
-          content: message.content.slice(0, 1000),
-        })),
-      });
-      setMessages((current) => [
-        ...current,
-        { role: 'user', content: asked },
-        { role: 'assistant', content: response.answer },
-      ]);
-      setQuestion('');
-    } catch (error) {
-      setChatError(error);
-    } finally {
-      setChatBusy(false);
     }
   }
   return (
@@ -317,31 +267,25 @@ export function PurchaseDocument({
             : t('You can read the document first. Add or select a supplier before saving.')}
         </small>
         {result && (
-          <div className="purchase-assistant" role="log" aria-label={t('Document assistant')}>
-            <p className="purchase-assistant-message">
+          <div className="purchase-document-result">
+            <small className="muted">
               {t('I read document {reference} dated {date} and found {count} product rows.', {
                 reference: result.supplierReference || '—',
                 date: result.documentDate || '—',
                 count: result.lines.length,
               })}
-            </p>
+            </small>
             {referenceMatches.length > 0 && (
               <p className="notice">
                 {t(
                   'A purchase with reference {reference} already exists. Check it before saving another.',
-                  {
-                    reference: result.supplierReference,
-                  },
+                  { reference: result.supplierReference },
                 )}
               </p>
             )}
-            {supplierId ? (
-              <p className="purchase-assistant-message">
-                {t('Supplier confirmed. Review the product rows and save the draft when ready.')}
-              </p>
-            ) : (
-              <>
-                <p className="purchase-assistant-message">
+            {!supplierId && (
+              <div className="purchase-document-suppliers">
+                <p>
                   {candidates.length
                     ? t('I found supplier {name}. Is one of these your supplier?', {
                         name: result.supplierName || '—',
@@ -389,54 +333,14 @@ export function PurchaseDocument({
                 >
                   {t('Create new supplier')}
                 </Button>
-                <small className="muted">
-                  {t('Review these details before approving a new supplier.')}
-                </small>
-              </>
+              </div>
             )}
-            <p className="purchase-assistant-message">
+            <small className="muted">
               {t('I matched {matched} products; {unmatched} need your review.', {
                 matched: result.lines.filter((line) => line.productId).length,
                 unmatched: result.lines.filter((line) => !line.productId).length,
               })}
-            </p>
-            <small className="muted">
-              {t(
-                'Choose or create unmatched products in the table below. Check quantities, units, costs and tax before saving the purchase draft.',
-              )}
             </small>
-            {messages.map((message, index) => (
-              <p
-                className={'purchase-assistant-message purchase-assistant-' + message.role}
-                key={index}
-              >
-                <strong>{message.role === 'user' ? t('You') : t('Eliza')}:</strong>{' '}
-                {message.content}
-              </p>
-            ))}
-            <div className="purchase-assistant-question">
-              <input
-                aria-label={t('Ask about this document')}
-                placeholder={t('Ask about this document')}
-                maxLength={500}
-                value={question}
-                onChange={(event) => setQuestion(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    void ask();
-                  }
-                }}
-              />
-              <Button
-                type="button"
-                disabled={chatBusy || !question.trim()}
-                onClick={() => void ask()}
-              >
-                {chatBusy ? t('Thinking…') : t('Ask')}
-              </Button>
-            </div>
-            <ErrorMessage error={chatError} />
           </div>
         )}
         {result && image && (

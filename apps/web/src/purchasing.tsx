@@ -922,10 +922,22 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
             supplierId={supplierId}
             products={availableProducts}
             suppliers={availableSuppliers}
-            onApply={(scannedLines, scannedReference, scannedDate) => {
+            onApply={(scannedLines, scannedDocument) => {
               setLines(scannedLines);
-              setReference(scannedReference);
-              setDocumentDate(scannedDate);
+              setReference(scannedDocument.supplierReference);
+              setDocumentDate(scannedDocument.documentDate);
+              setDocumentDetails({
+                buyerName: scannedDocument.buyerName,
+                buyerDetails: scannedDocument.buyerDetails,
+                driverName: scannedDocument.driverName,
+                driverPhone: scannedDocument.driverPhone,
+                goodsNumber: scannedDocument.goodsNumber,
+                buyerTaxNumber: scannedDocument.buyerTaxNumber,
+                grossWeight: scannedDocument.grossWeight,
+                documentVat: scannedDocument.documentVat,
+                returnAmount: scannedDocument.returnAmount,
+                documentComment: scannedDocument.documentComment,
+              });
               setScanned(true);
               setReviewed(false);
             }}

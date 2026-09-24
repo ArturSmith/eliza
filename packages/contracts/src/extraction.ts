@@ -62,6 +62,16 @@ export type Extraction = {
   contactPhone: string;
   supplierReference: string;
   documentDate: string;
+  buyerName: string;
+  buyerDetails: string;
+  driverName: string;
+  driverPhone: string;
+  goodsNumber: string;
+  buyerTaxNumber: string;
+  grossWeight: string;
+  documentVat: string;
+  returnAmount: string;
+  documentComment: string;
   lines: ExtractedLine[];
   /** Lines a person must still resolve before the draft can be saved. */
   unmatched: number;

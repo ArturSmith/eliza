@@ -31,6 +31,16 @@ const payload = (lines = [sourceLine]) => ({
   contactPhone: '89292088095',
   supplierReference: 'INV-42',
   documentDate: '2026-09-16',
+  buyerName: 'Test buyerName',
+  buyerDetails: 'Test buyerDetails',
+  driverName: 'Test driverName',
+  driverPhone: 'Test driverPhone',
+  goodsNumber: 'Test goodsNumber',
+  buyerTaxNumber: 'Test buyerTaxNumber',
+  grossWeight: 'Test grossWeight',
+  documentVat: 'Test documentVat',
+  returnAmount: 'Test returnAmount',
+  documentComment: 'Test documentComment',
   lines,
 });
 let provider: () => Response;
@@ -143,6 +153,8 @@ describe.sequential('purchase document extraction', () => {
       quantity: '2',
       unitCost: '3.50',
     });
+    expect(result.body.buyerName).toBe('Test buyerName');
+    expect(result.body.documentVat).toBe('Test documentVat');
     expect(providerCalls).toBe(1);
     expect(providerRequest.max_completion_tokens).toBe(16000);
     expect(providerRequest).not.toHaveProperty('temperature');

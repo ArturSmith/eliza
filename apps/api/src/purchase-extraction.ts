@@ -39,6 +39,16 @@ const responseSchema = {
     'contactPhone',
     'supplierReference',
     'documentDate',
+    'buyerName',
+    'buyerDetails',
+    'driverName',
+    'driverPhone',
+    'goodsNumber',
+    'buyerTaxNumber',
+    'grossWeight',
+    'documentVat',
+    'returnAmount',
+    'documentComment',
     'lines',
   ],
   properties: {
@@ -78,6 +88,52 @@ const responseSchema = {
     documentDate: {
       type: 'string',
       description: 'Document date as YYYY-MM-DD. Empty string if absent or unreadable.',
+    },
+    buyerName: {
+      type: 'string',
+      description: 'Buyer/customer name, not supplier name. Empty string if absent or unreadable.',
+    },
+    buyerDetails: {
+      type: 'string',
+      description:
+        'Buyer address, shop details or phone, excluding tax number. Empty string if absent or unreadable.',
+    },
+    driverName: {
+      type: 'string',
+      description: 'Driver name, not sales representative. Empty string if absent or unreadable.',
+    },
+    driverPhone: {
+      type: 'string',
+      description: 'Driver phone number. Empty string if absent or unreadable.',
+    },
+    goodsNumber: {
+      type: 'string',
+      description:
+        'Explicit goods or shipment number, not invoice reference. Empty string if absent or unreadable.',
+    },
+    buyerTaxNumber: {
+      type: 'string',
+      description:
+        'Buyer tax or registration number, such as INN/KPP. Empty string if absent or unreadable.',
+    },
+    grossWeight: {
+      type: 'string',
+      description: 'Gross weight with unit as printed. Empty string if absent or unreadable.',
+    },
+    documentVat: {
+      type: 'string',
+      description:
+        'Total VAT amount as printed, with currency if present. Empty string if absent or unreadable.',
+    },
+    returnAmount: {
+      type: 'string',
+      description:
+        'Return amount as printed, with currency if present. Empty string if absent or unreadable.',
+    },
+    documentComment: {
+      type: 'string',
+      description:
+        'Printed document comment; omit signatures. Empty string if absent or unreadable.',
     },
     lines: {
       type: 'array',
@@ -120,6 +176,7 @@ const instructions = [
   'Supplier identity is the seller, not the buyer or driver. A phone number is never a company registration number.',
   'The sales representative is a supplier contact; keep their phone distinct from the supplier business phone.',
   'Copy the document reference and date from the heading when printed. Copy every product line separately.',
+  'Keep buyer, driver, tax, weight, returns and comments separate from supplier identity. Copy only printed values.',
 ].join(' ');
 
 async function bounded(response: Response, limit: number) {
@@ -291,6 +348,16 @@ export async function extractPurchaseDocument(
       contactPhone: z.string(),
       supplierReference: z.string(),
       documentDate: z.string(),
+      buyerName: z.string(),
+      buyerDetails: z.string(),
+      driverName: z.string(),
+      driverPhone: z.string(),
+      goodsNumber: z.string(),
+      buyerTaxNumber: z.string(),
+      grossWeight: z.string(),
+      documentVat: z.string(),
+      returnAmount: z.string(),
+      documentComment: z.string(),
       lines: z.array(
         z
           .object({
@@ -416,6 +483,16 @@ export async function extractPurchaseDocument(
     contactPhone: cleanText(payload.contactPhone, 60),
     supplierReference: cleanText(payload.supplierReference, 60),
     documentDate: /^\d{4}-\d{2}-\d{2}$/.test(documentDate) ? documentDate : '',
+    buyerName: cleanText(payload.buyerName, 200),
+    buyerDetails: cleanText(payload.buyerDetails, 500),
+    driverName: cleanText(payload.driverName, 120),
+    driverPhone: cleanText(payload.driverPhone, 40),
+    goodsNumber: cleanText(payload.goodsNumber, 120),
+    buyerTaxNumber: cleanText(payload.buyerTaxNumber, 120),
+    grossWeight: cleanText(payload.grossWeight, 80),
+    documentVat: cleanText(payload.documentVat, 80),
+    returnAmount: cleanText(payload.returnAmount, 80),
+    documentComment: cleanText(payload.documentComment, 1000),
     lines,
     unmatched: countUnmatched(lines),
     mergedCount,

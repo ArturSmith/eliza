@@ -2970,6 +2970,14 @@ input.shopping-section-title {
 .purchase-document-suppliers > .button {
   justify-self: start;
 }
+.purchase-document-result,
+.purchase-document-suppliers {
+  display: grid;
+  gap: 12px;
+}
+.purchase-document-suppliers > .button {
+  justify-self: start;
+}
 .purchase-assistant {
   display: grid;
   gap: 12px;
