@@ -29,12 +29,12 @@ export function BarcodeLookup({
   const [result, setResult] = useState<Result>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
-  async function lookup() {
-    if (busy || !barcode.trim()) return;
+  async function lookup(value = barcode) {
+    if (busy || !value.trim()) return;
     setBusy(true);
     setResult(undefined);
     setError(undefined);
-    const code = barcode.trim();
+    const code = value.trim();
     try {
       const next = await api<Result>('/products/lookup/' + encodeURIComponent(code));
       setResult(next);
@@ -78,8 +78,7 @@ export function BarcodeLookup({
               disabled={busy}
               onScan={(code) => {
                 setBarcode(code);
-                setResult(undefined);
-                setError(undefined);
+                void lookup(code);
               }}
             />
           </div>

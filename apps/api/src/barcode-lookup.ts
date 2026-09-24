@@ -68,7 +68,7 @@ export async function lookupBarcode(
         (staging ? 'net' : 'org') +
         '/api/v3/product/' +
         barcode +
-        '?fields=product_name,product_name_en,generic_name,generic_name_en,brands,quantity,categories,image_front_small_url',
+        '?fields=product_name,product_name_en,generic_name,generic_name_en,brands,quantity,categories,image_front_small_url,image_front_url,image_url',
       { headers, signal: AbortSignal.timeout(7000), redirect: 'error' },
     );
     const data =
@@ -91,7 +91,11 @@ export async function lookupBarcode(
         image: '',
       };
       try {
-        const url = new URL(p.image_front_small_url);
+        const photoUrl = [p.image_front_small_url, p.image_front_url, p.image_url].find(
+          (value) => typeof value === 'string' && value.trim(),
+        );
+        if (!photoUrl) throw new Error('No product photo');
+        const url = new URL(photoUrl);
         if (
           url.protocol === 'https:' &&
           url.hostname === 'images.openfoodfacts.org' &&
@@ -100,7 +104,7 @@ export async function lookupBarcode(
           !url.password &&
           url.pathname.startsWith('/images/products/')
         ) {
-          const photo = await fetch(url, { signal: AbortSignal.timeout(4000), redirect: 'error' });
+          const photo = await fetch(url, { headers, signal: AbortSignal.timeout(4000), redirect: 'error' });
           if (photo.headers.get('content-type')?.split(';')[0] === 'image/jpeg') {
             const bytes = await bounded(photo, 350000);
             if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255)
