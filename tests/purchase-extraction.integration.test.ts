@@ -14,6 +14,7 @@ let cookies = '',
   productId = '',
   storeId = '';
 let providerCalls = 0;
+let providerRequest: Record<string, unknown> = {};
 const sourceLine = {
   description: 'Test milk',
   supplierSku: 'SUP-1',
@@ -108,6 +109,7 @@ beforeAll(async () => {
   vi.stubGlobal('fetch', async (input: any, init: any) => {
     if (String(input) === 'https://api.openai.com/v1/chat/completions') {
       providerCalls++;
+      providerRequest = JSON.parse(String(init.body));
       return provider();
     }
     return realFetch(input, init);
@@ -116,6 +118,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   process.env.OPENAI_API_KEY = 'test-only-key';
   providerCalls = 0;
+  providerRequest = {};
   provider = () => response(payload());
   await db.pool.query("DELETE FROM auth_attempts WHERE key LIKE 'ai-extract:%'");
 });
@@ -141,6 +144,9 @@ describe.sequential('purchase document extraction', () => {
       unitCost: '3.50',
     });
     expect(providerCalls).toBe(1);
+    expect(providerRequest.max_completion_tokens).toBe(16000);
+    expect(providerRequest).not.toHaveProperty('temperature');
+    expect(providerRequest).not.toHaveProperty('max_tokens');
     expect((await db.pool.query('SELECT count(*) FROM purchases')).rows[0].count).toBe('0');
     expect(
       (await db.pool.query('SELECT stock,price FROM products WHERE id=$1', [productId])).rows[0],
