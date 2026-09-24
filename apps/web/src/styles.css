@@ -2031,6 +2031,7 @@ tr:last-child td {
   margin-left: -3px;
 }
 .order-detail {
+  scroll-margin-top: 90px;
   margin-top: 24px;
   overflow: hidden;
 }

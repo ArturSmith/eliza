@@ -521,6 +521,17 @@ export function PurchasesPage() {
   const [create, setCreate] = useState(() =>
     new URLSearchParams(window.location.search).has('document'),
   );
+  const [viewRequest, setViewRequest] = useState(0);
+  useEffect(() => {
+    if (!viewRequest || !selected) return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById('selected-purchase-detail')?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [viewRequest, selected]);
   const [deletingPurchase, setDeletingPurchase] = useState<Order | undefined>();
   const deletePurchase = useMutation({
     mutationFn: (id: string) => api<{ deleted: true }>(`/purchases/${id}`, undefined, 'DELETE'),
@@ -641,7 +652,13 @@ export function PurchasesPage() {
                     </td>
                     <td className="table-number-column">{formatMoney(p.total, currency)}</td>
                     <td className="table-actions-column">
-                      <Button variant="ghost" onClick={() => setSelected(p.id)}>
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          setSelected(p.id);
+                          setViewRequest((current) => current + 1);
+                        }}
+                      >
                         {t('View ')}
                       </Button>
                       {p.status === 'draft' && (
@@ -1555,7 +1572,7 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
   });
   const p = q.data;
   return (
-    <section className="panel order-detail">
+    <section id="selected-purchase-detail" className="panel order-detail">
       <div className="order-detail-head">
         <div className="order-detail-title">
           <div className="order-detail-number">
