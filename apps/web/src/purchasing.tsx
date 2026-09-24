@@ -1895,17 +1895,18 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
         {order.lines
           .filter((l) => toScaled(l.ordered_quantity, 3) > toScaled(l.received_quantity, 3))
           .map((l) => (
-            <div key={l.id}>
-              <Field
-                label={t('{value0} — {value1} {value2} remaining', {
-                  value0: l.product_name,
-                  value1: fromScaled(
+            <section key={l.id} className="delivery-product-card" aria-label={l.product_name}>
+              <header className="delivery-product-header">
+                <h3>{l.product_name}</h3>
+                <span className="muted">
+                  {fromScaled(
                     toScaled(l.ordered_quantity, 3) - toScaled(l.received_quantity, 3),
                     3,
-                  ),
-                  value2: t(l.unit ?? ''),
-                })}
-              >
+                  )}{' '}
+                  {t(l.unit ?? '')} {t('remaining')}
+                </span>
+              </header>
+              <Field label={t('Quantity')}>
                 <input
                   inputMode="decimal"
                   value={quantities[l.id] ?? '0'}
@@ -1919,7 +1920,7 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
                   onChange={(e) => setExpiryDates({ ...expiryDates, [l.id]: e.target.value })}
                 />
               </Field>
-              <Field label={t('Unit cost excl. tax for ') + l.product_name}>
+              <Field label={t('Unit cost excl. tax')}>
                 <input
                   inputMode="decimal"
                   required
@@ -1934,9 +1935,7 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
                 price={products.data?.find((p) => p.id === l.product_id)?.price}
               />
               {canPrice && (
-                <Field
-                  label={t('New selling price incl. tax for ') + l.product_name + t(' (optional)')}
-                >
+                <Field label={t('New selling price incl. tax (optional)')}>
                   <input
                     inputMode="decimal"
                     value={prices[l.id] ?? ''}
@@ -1960,7 +1959,7 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
                   </span>
                 </label>
               )}
-            </div>
+            </section>
           ))}
       </fieldset>
       <ErrorMessage error={error} />

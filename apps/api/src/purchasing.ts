@@ -1011,6 +1011,31 @@ export class PurchasingController {
           line.sellingPrice ?? null,
         ],
       );
+    // A purchase establishes that this supplier carries each selected product.
+    // Preserve manually configured pack sizes, supplier SKUs and quoted prices.
+    for (const { p: product, line } of lines) {
+      const linked = (
+        await c.query(
+          `INSERT INTO supplier_products(store_id,supplier_id,product_id,pack_size,pack_cost)
+           VALUES($1,$2,$3,1,$4)
+           ON CONFLICT(supplier_id,product_id) DO NOTHING
+           RETURNING id`,
+          [store, b.supplierId, product.id, line.unitCost],
+        )
+      ).rows[0];
+      if (linked) {
+        await c.query(
+          'INSERT INTO supplier_price_history(store_id,supplier_product_id,pack_size,pack_cost,employee_id) VALUES($1,$2,1,$3,$4)',
+          [store, linked.id, line.unitCost, req.context.user.id],
+        );
+      } else {
+        await c.query(
+          `UPDATE supplier_products SET active=true,version=version+1,updated_at=now()
+           WHERE store_id=$1 AND supplier_id=$2 AND product_id=$3 AND NOT active`,
+          [store, b.supplierId, product.id],
+        );
+      }
+    }
     await audit(
       c,
       { storeId: store, employeeId: req.context.user.id, deviceId: req.context.device.id },

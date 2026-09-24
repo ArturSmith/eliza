@@ -234,6 +234,45 @@ describe.sequential('supplier product catalogue', () => {
     expect(res.body.every((o: any) => o.productId === productId)).toBe(true);
   });
 
+  it('links purchase products automatically without overwriting a manual supplier offer', async () => {
+    const freshProductId = (
+      await owner.request('/products', {
+        name: 'Tea',
+        sku: 'TEA',
+        category: 'Grocery',
+        unit: 'piece',
+        price: '9.00',
+        cost: '4.00',
+        taxRate: '0',
+        minStock: '1',
+        plu: '302',
+        barcodes: [],
+      })
+    ).body.id;
+    const draft = await owner.request('/purchases', {
+      requestId: uuid(),
+      supplierId: caseSupplier,
+      supplierReference: 'TEST-AUTO-LINK',
+      lines: [
+        { productId: freshProductId, quantity: '2', unitCost: '4.50', taxRate: '0' },
+        { productId, quantity: '1', unitCost: '99.00', taxRate: '0' },
+      ],
+    });
+    expect(draft.status).toBe(201);
+    const offers = (await owner.request(`/suppliers/${caseSupplier}/products`)).body;
+    const added = offers.find((offer: any) => offer.productId === freshProductId);
+    expect(added).toMatchObject({ packSize: '1.000', packCost: '4.50' });
+    const manual = offers.find((offer: any) => offer.productId === productId);
+    expect(manual).toMatchObject({
+      supplierSku: 'W-NUT-12',
+      packSize: '12.000',
+      packCost: '268.00',
+    });
+    const history = (await owner.request(`/supplier-products/${added.id}/history`)).body;
+    expect(history).toHaveLength(1);
+    expect(history[0].packCost).toBe('4.50');
+  });
+
   it('refuses callers without supplier permission', async () => {
     const anonymous = new Client();
     expect((await anonymous.request(`/products/${productId}/suppliers`)).status).toBe(401);

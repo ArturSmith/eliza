@@ -2370,6 +2370,33 @@ select {
   margin-bottom: 12px;
 }
 
+.delivery-product-card {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  margin-top: 20px;
+  border: 1px solid #dce7d8;
+  border-radius: 16px;
+  background: #f8fbf6;
+}
+.delivery-product-header {
+  padding-bottom: 14px;
+  border-bottom: 1px solid #dce7d8;
+}
+.delivery-product-header h3 {
+  margin: 0 0 5px;
+  font-size: 1.05rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.delivery-product-header .muted {
+  display: block;
+}
+.delivery-product-card .field,
+.delivery-product-card .purchase-cost-change {
+  margin: 0;
+}
+
 .delivery-price-confirmation {
   display: flex;
   align-items: flex-start;
