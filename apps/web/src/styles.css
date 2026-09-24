@@ -975,8 +975,19 @@ tr:last-child td {
   margin: 20px 0 0;
   padding: 0 24px 24px;
 }
-.stock-batches-panel > .table-scroll {
+.stock-batch-list {
   margin-top: 20px;
+}
+.stock-batch-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 16px 24px;
+  border-top: 1px solid #f0f2eb;
+}
+.stock-batch-row strong {
+  min-width: 2ch;
 }
 .quantity-change {
   display: inline-flex;

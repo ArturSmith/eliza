@@ -7,6 +7,8 @@
   "Stock batches": "Партии товара",
   "Check remaining quantity and expiry for each delivery.": "Проверьте остаток и срок годности каждой поставки.",
   "Unknown expiry": "Срок годности неизвестен",
+  "Expires on {value0}": "Срок годности до {value0}",
+  "Expiry date not recorded": "Срок годности не указан",
   "Expired": "Срок годности истёк",
   "Available": "Доступно",
   "No stock batches for this product.": "Для этого товара нет партий с остатком.",

@@ -123,6 +123,14 @@ function date(
     timeZone: zone,
   }).format(new Date(value));
 }
+function calendarDate(value: string) {
+  return new Intl.DateTimeFormat(getLocale(), {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(value + 'T12:00:00Z'));
+}
 function useCan(permission: Permission) {
   return useSession().data?.user.permissions.includes(permission) ?? false;
 }
@@ -1015,33 +1023,23 @@ export function InventoryPage() {
         {batches.isPending && selectedBatchProductId ? (
           <Loading />
         ) : batches.data?.batches.length ? (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('Expiry date')}</th>
-                  <th>{t('Quantity')}</th>
-                  <th>{t('Status')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {batches.data.batches.map((batch) => (
-                  <tr key={batch.id}>
-                    <td>{batch.expiryDate ?? t('Unknown expiry')}</td>
-                    <td>{Number(batch.quantity)}</td>
-                    <td>
-                      <Badge tone={batch.expired || !batch.expiryDate ? 'amber' : 'gray'}>
-                        {!batch.expiryDate
-                          ? t('Unknown expiry')
-                          : batch.expired
-                            ? t('Expired')
-                            : t('Available')}
-                      </Badge>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="stock-batch-list">
+            {batches.data.batches.map((batch) => (
+              <div className="stock-batch-row" key={batch.id}>
+                <strong>
+                  {new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 3 }).format(
+                    Number(batch.quantity),
+                  )}
+                </strong>
+                <span>
+                  {'— '}
+                  {batch.expiryDate
+                    ? t('Expires on {value0}', { value0: calendarDate(batch.expiryDate) })
+                    : t('Expiry date not recorded')}
+                </span>
+                {batch.expired && <Badge tone="amber">{t('Expired')}</Badge>}
+              </div>
+            ))}
           </div>
         ) : (
           !batches.error && (
