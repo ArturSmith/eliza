@@ -117,7 +117,7 @@ SELECT
  FROM products WHERE store_id=$1 AND (created_at<(SELECT finish FROM bounds) OR id::text=$5)) AS products,
  (SELECT COALESCE(jsonb_agg(jsonb_build_object('id',h.id,'cashier',e.name,'register',d.name,'openedAt',h.opened_at) ORDER BY h.opened_at DESC),'[]')
  FROM shifts h JOIN employees e ON e.id=h.employee_id AND e.store_id=h.store_id
- JOIN devices d ON d.id=h.device_id AND d.store_id=h.store_id CROSS JOIN bounds b
+ JOIN device_records d ON d.id=h.device_id AND d.store_id=h.store_id CROSS JOIN bounds b
  WHERE h.store_id=$1 AND ((h.opened_at<b.finish AND COALESCE(h.closed_at,now())>=b.start) OR h.id::text=$6)) AS shifts
 `,
       args,

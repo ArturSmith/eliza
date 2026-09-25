@@ -65,7 +65,38 @@ describe('device removal', () => {
     ).toBe(201);
     expect((await browser.request('/auth/login', credentials)).status).toBe(200);
     const oldId = (await browser.request('/auth/session')).body.device.id;
+    expect(
+      (
+        await manager.request(
+          `/devices/${oldId}`,
+          { name: 'Second browser', type: 'management', active: true },
+          'PATCH',
+        )
+      ).status,
+    ).toBe(200);
+    const product = await manager.request('/products', {
+      name: 'Test milk',
+      sku: 'MILK-DEVICE',
+      category: 'Dairy',
+      unit: 'piece',
+      price: '29.90',
+      cost: '16.50',
+      minStock: '5',
+      barcodes: [],
+    });
+    expect(product.status).toBe(201);
+    const movement = await browser.request('/inventory/adjustments', {
+      productId: product.body.id,
+      quantity: '2',
+      reason: 'opening_balance',
+      requestId: crypto.randomUUID(),
+    });
+    expect(movement.status).toBe(201);
     expect((await manager.request(`/devices/${oldId}`, undefined, 'DELETE')).status).toBe(200);
+    expect((await db.pool.query('SELECT id FROM devices WHERE id=$1', [oldId])).rowCount).toBe(0);
+    expect(
+      (await db.pool.query('SELECT id FROM device_records WHERE id=$1', [oldId])).rowCount,
+    ).toBe(1);
     expect((await browser.request('/auth/session')).status).toBe(401);
     expect(
       (await manager.request('/devices')).body.some(
@@ -77,6 +108,13 @@ describe('device removal', () => {
     ).toBe(404);
     expect((await browser.request('/auth/login', credentials)).status).toBe(200);
     expect((await browser.request('/auth/session')).body.device.id).not.toBe(oldId);
+    const movements = (await manager.request('/inventory/movements')).body;
+    expect(
+      movements.some(
+        (entry: { device: string; productId: string }) =>
+          entry.device === 'Second browser' && entry.productId === product.body.id,
+      ),
+    ).toBe(true);
     const audit = (await manager.request('/audit')).body;
     expect(
       audit.some(

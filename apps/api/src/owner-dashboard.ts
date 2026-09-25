@@ -893,7 +893,7 @@ SELECT COALESCE(s.phase,f.phase) AS phase,
  COALESCE(f.count,0)::text AS count
  FROM sales_by s FULL JOIN refunds_by f
  ON f.phase=s.phase AND f.device_id=s.device_id AND f.employee_id=s.employee_id
- LEFT JOIN devices d ON d.id=COALESCE(s.device_id,f.device_id) AND d.store_id=$1
+ LEFT JOIN device_records d ON d.id=COALESCE(s.device_id,f.device_id) AND d.store_id=$1
  LEFT JOIN employees e ON e.id=COALESCE(s.employee_id,f.employee_id) AND e.store_id=$1`,
         [
           store.id,
@@ -954,7 +954,7 @@ SELECT COALESCE(s.phase,f.phase) AS phase,
  EXTRACT(epoch FROM (COALESCE(h.closed_at,now())-h.opened_at))/3600 AS hours
  FROM shifts h
  JOIN employees e ON e.id=h.employee_id AND e.store_id=$1
- JOIN devices d ON d.id=h.device_id AND d.store_id=$1
+ JOIN device_records d ON d.id=h.device_id AND d.store_id=$1
  WHERE h.store_id=$1
  AND ((h.opened_at<(($3::date+1)::timestamp AT TIME ZONE $4) AND COALESCE(h.closed_at,now())>=($2::date::timestamp AT TIME ZONE $4)))
  ORDER BY h.opened_at DESC LIMIT 50`,

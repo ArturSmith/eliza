@@ -19,7 +19,7 @@ import { z } from 'zod';
 import { Database } from './database.js';
 import { AccessGuard, type AuthRequest, parse, Require } from './security.js';
 import { AuthModule } from './auth.js';
-import { audits, devices, employees, roles } from './schema.js';
+import { audits, deviceRecords, devices, employees, roles } from './schema.js';
 @Controller()
 @UseGuards(AccessGuard)
 export class ManagementController {
@@ -31,13 +31,13 @@ export class ManagementController {
         action: audits.action,
         entityId: audits.entityId,
         actor: employees.name,
-        device: devices.name,
+        device: deviceRecords.name,
         details: audits.details,
         createdAt: audits.createdAt,
       })
       .from(audits)
       .innerJoin(employees, eq(audits.employeeId, employees.id))
-      .innerJoin(devices, eq(audits.deviceId, devices.id))
+      .innerJoin(deviceRecords, eq(audits.deviceId, deviceRecords.id))
       .where(eq(audits.storeId, req.context.store.id))
       .orderBy(desc(audits.createdAt))
       .limit(100);
@@ -104,6 +104,7 @@ export class ManagementController {
       await tx.execute(sql`DELETE FROM sessions WHERE device_id=${id}`);
       await tx.execute(sql`DELETE FROM pos_sessions WHERE device_id=${id}`);
       await tx.execute(sql`DELETE FROM price_tag_sessions WHERE device_id=${id}`);
+      await tx.execute(sql`DELETE FROM pin_attempts WHERE device_id=${id}`);
       await tx.insert(audits).values({
         storeId: store.id,
         employeeId: user.id,
@@ -112,6 +113,7 @@ export class ManagementController {
         entityId: id,
         details: { name: target.name, type: target.type },
       });
+      await tx.delete(devices).where(eq(devices.id, id));
     });
     if (id === device.id) {
       for (const name of [

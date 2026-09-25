@@ -59,6 +59,15 @@ export const devices = pgTable('devices', {
   removedAt: timestamp('removed_at', { withTimezone: true }),
   createdAt: created(),
 });
+export const deviceRecords = pgTable('device_records', {
+  id: uuid('id').primaryKey(),
+  storeId: uuid('store_id')
+    .notNull()
+    .references(() => stores.id),
+  name: text('name').notNull(),
+  type: text('type').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull(),
+});
 export const sessions = pgTable('sessions', {
   id: id(),
   tokenHash: text('token_hash').notNull().unique(),
@@ -132,7 +141,7 @@ export const movements = pgTable(
       .references(() => employees.id),
     deviceId: uuid('device_id')
       .notNull()
-      .references(() => devices.id),
+      .references(() => deviceRecords.id),
     quantity: numeric('quantity', { precision: 15, scale: 3 }).notNull(),
     balance: numeric('balance', { precision: 15, scale: 3 }).notNull(),
     reason: text('reason').notNull(),
@@ -153,7 +162,7 @@ export const audits = pgTable('audits', {
     .references(() => employees.id),
   deviceId: uuid('device_id')
     .notNull()
-    .references(() => devices.id),
+    .references(() => deviceRecords.id),
   action: text('action').notNull(),
   entityId: uuid('entity_id').notNull(),
   details: jsonb('details').notNull(),

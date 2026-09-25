@@ -766,7 +766,7 @@ export class PurchasingController {
     ).rows;
     const receipts = (
       await c.query(
-        `SELECT g.*,e.name AS actor,d.name AS device FROM goods_receipts g JOIN employees e ON e.id=g.employee_id JOIN devices d ON d.id=g.device_id WHERE g.purchase_id=$1 ORDER BY g.created_at DESC`,
+        `SELECT g.*,e.name AS actor,d.name AS device FROM goods_receipts g JOIN employees e ON e.id=g.employee_id JOIN device_records d ON d.id=g.device_id WHERE g.purchase_id=$1 ORDER BY g.created_at DESC`,
         [id],
       )
     ).rows;

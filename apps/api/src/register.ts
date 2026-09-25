@@ -49,7 +49,7 @@ export const cookieOptions = {
 export async function shiftRow(client: PoolClient, id: string) {
   return (
     await client.query(
-      `SELECT s.id,s.status,e.name AS "employeeName",e.id AS "cashierId",d.name AS "deviceName",s.opening_cash AS "openingCash",COALESCE(s.expected_cash,(SELECT COALESCE(sum(amount),0) FROM cash_movements WHERE shift_id=s.id))::numeric(14,2)::text AS "expectedCash",s.counted_cash AS "countedCash",s.difference,s.opened_at AS "openedAt",s.closed_at AS "closedAt",s.notes FROM shifts s JOIN employees e ON s.employee_id=e.id JOIN devices d ON s.device_id=d.id WHERE s.id=$1`,
+      `SELECT s.id,s.status,e.name AS "employeeName",e.id AS "cashierId",d.name AS "deviceName",s.opening_cash AS "openingCash",COALESCE(s.expected_cash,(SELECT COALESCE(sum(amount),0) FROM cash_movements WHERE shift_id=s.id))::numeric(14,2)::text AS "expectedCash",s.counted_cash AS "countedCash",s.difference,s.opened_at AS "openedAt",s.closed_at AS "closedAt",s.notes FROM shifts s JOIN employees e ON s.employee_id=e.id JOIN device_records d ON s.device_id=d.id WHERE s.id=$1`,
       [id],
     )
   ).rows[0];

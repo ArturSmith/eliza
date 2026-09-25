@@ -17,7 +17,7 @@ import { adjustmentSchema, fromScaled, toScaled } from '@eliza/contracts';
 import { Database } from './database.js';
 import { AccessGuard, type AuthRequest, hash, parse, Require } from './security.js';
 import { AuthModule } from './auth.js';
-import { audits, devices, employees, movements, products } from './schema.js';
+import { audits, deviceRecords, employees, movements, products } from './schema.js';
 @Controller('inventory')
 @UseGuards(AccessGuard)
 export class InventoryController {
@@ -55,13 +55,13 @@ export class InventoryController {
         reason: movements.reason,
         notes: movements.notes,
         actor: employees.name,
-        device: devices.name,
+        device: deviceRecords.name,
         createdAt: movements.createdAt,
       })
       .from(movements)
       .innerJoin(products, eq(movements.productId, products.id))
       .innerJoin(employees, eq(movements.employeeId, employees.id))
-      .innerJoin(devices, eq(movements.deviceId, devices.id))
+      .innerJoin(deviceRecords, eq(movements.deviceId, deviceRecords.id))
       .where(eq(movements.storeId, req.context.store.id))
       .orderBy(desc(movements.createdAt))
       .limit(100);
