@@ -1,6 +1,7 @@
 import { it, expect } from 'vitest';
 import {
   decodeScaleBarcode,
+  encodeScaleBarcode,
   scalePriceQuantity,
   scaleBarcodeSchema,
 } from '../packages/contracts/src/index';
@@ -32,4 +33,17 @@ it('supports price labels with integer arithmetic and rejects unrepresentable pr
   expect(scalePriceQuantity('37.50', '30.00')).toBe('1.250');
   expect(() => scalePriceQuantity('0.01', '100.00')).toThrow();
   expect(scaleBarcodeSchema.safeParse({ ...config, mode: 'price' }).success).toBe(false);
+});
+
+it('generates labels that the checkout decoder reads at the exact packaged weight', () => {
+  const barcode = encodeScaleBarcode('42', '0.532', config);
+  expect(barcode).toMatch(/^20\d{11}$/);
+  expect(decodeScaleBarcode(barcode, config)).toEqual({
+    productCode: '00042',
+    quantity: '0.532',
+  });
+  expect(() => encodeScaleBarcode('42', '0', config)).toThrow();
+  expect(() => encodeScaleBarcode('123456', '0.532', config)).toThrow();
+  expect(() => encodeScaleBarcode('42', '0.532', { ...config, decimals: 2 })).toThrow();
+  expect(() => encodeScaleBarcode('42', '0.532', { ...config, enabled: false })).toThrow();
 });

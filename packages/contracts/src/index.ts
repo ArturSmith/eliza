@@ -807,6 +807,39 @@ export function decodeScaleBarcode(
   if (settings.mode === 'price') return { productCode, price: fromScaled(raw, 2) };
   return { productCode, quantity: fromScaled(raw * 10n ** BigInt(3 - settings.decimals), 3) };
 }
+/** Build an in-store weight label using the same format the register decodes. */
+export function encodeScaleBarcode(
+  productCode: string,
+  quantity: string,
+  settings: ScaleBarcodeSettings,
+): string {
+  const profile = scaleBarcodeSchema.parse(settings);
+  if (!profile.enabled || profile.mode !== 'weight')
+    throw new Error('Enable weight barcodes in store settings first.');
+  if (!/^\d+$/.test(productCode)) throw new Error('Product PLU must contain only digits.');
+  const normalizedCode = BigInt(productCode).toString();
+  if (normalizedCode.length > profile.productDigits)
+    throw new Error('Product PLU does not fit the configured barcode length.');
+  const grams = toScaled(quantity, 3);
+  if (grams <= 0n) throw new Error('Weight must be greater than zero.');
+  const unit = 10n ** BigInt(3 - profile.decimals);
+  if (grams % unit !== 0n)
+    throw new Error('Weight has more decimal places than the barcode settings allow.');
+  const valueDigits = 10 - profile.productDigits;
+  const encodedWeight = grams / unit;
+  if (encodedWeight >= 10n ** BigInt(valueDigits))
+    throw new Error('Weight does not fit the configured barcode length.');
+  const body =
+    profile.prefix +
+    normalizedCode.padStart(profile.productDigits, '0') +
+    encodedWeight.toString().padStart(valueDigits, '0');
+  const sum = [...body].reduce(
+    (total, digit, index) => total + Number(digit) * (index % 2 ? 3 : 1),
+    0,
+  );
+  return body + ((10 - (sum % 10)) % 10);
+}
+
 export function scalePriceQuantity(price: string, unitPrice: string): string {
   const cents = toScaled(price, 2),
     perKg = toScaled(unitPrice, 2);

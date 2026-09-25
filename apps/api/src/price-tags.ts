@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -12,7 +13,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { pinLoginSchema } from '@eliza/contracts';
+import { encodeScaleBarcode, pinLoginSchema, scaleBarcodeSchema } from '@eliza/contracts';
 import { Database } from './database.js';
 import { cookie, hash, parse, token, verifyPassword } from './security.js';
 import { cookieOptions } from './register.js';
@@ -22,7 +23,7 @@ export class PriceTagsController {
   constructor(private database: Database) {}
   private async station(req: Request) {
     const result = await this.database.pool.query(
-      'SELECT d.id,d.store_id,d.name,d.type,d.active,s.name AS store_name,s.currency FROM devices d JOIN stores s ON s.id=d.store_id WHERE d.token_hash=$1 OR d.token_hash=$2 ORDER BY CASE WHEN d.token_hash=$1 THEN 0 ELSE 1 END LIMIT 1',
+      'SELECT d.id,d.store_id,d.name,d.type,d.active,s.name AS store_name,s.currency,s.scale_barcode FROM devices d JOIN stores s ON s.id=d.store_id WHERE d.token_hash=$1 OR d.token_hash=$2 ORDER BY CASE WHEN d.token_hash=$1 THEN 0 ELSE 1 END LIMIT 1',
       [hash(cookie(req, 'eliza_register')), hash(cookie(req, 'eliza_device'))],
     );
     const device = result.rows[0];
@@ -59,7 +60,11 @@ export class PriceTagsController {
     }
     return {
       device: { id: device.id, name: device.name },
-      store: { name: device.store_name, currency: device.currency },
+      store: {
+        name: device.store_name,
+        currency: device.currency,
+        scaleBarcode: device.scale_barcode,
+      },
       employees: employees.rows,
       operator,
     };
@@ -147,6 +152,37 @@ export class PriceTagsController {
         [device.store_id],
       )
     ).rows;
+  }
+  @Post('weight-barcode') async weightBarcode(@Req() req: Request, @Body() input: unknown) {
+    const body = parse(
+      z.object({
+        productId: z.uuid(),
+        weight: z.string().regex(/^\d+(?:\.\d{1,3})?$/),
+      }),
+      input,
+    );
+    const { device } = await this.operator(req);
+    const product = (
+      await this.database.pool.query(
+        'SELECT id,name,unit,plu FROM products WHERE store_id=$1 AND id=$2 AND active',
+        [device.store_id, body.productId],
+      )
+    ).rows[0];
+    if (!product || product.unit !== 'kilogram')
+      throw new BadRequestException('Choose an active product sold by kilogram.');
+    const profile = scaleBarcodeSchema.parse(device.scale_barcode);
+    try {
+      return {
+        barcode: encodeScaleBarcode(product.plu ?? '', body.weight, profile),
+        productId: product.id,
+        name: product.name,
+        weight: body.weight,
+      };
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error ? error.message : 'Invalid weight barcode.',
+      );
+    }
   }
   @Post('prints') async print(@Req() req: Request, @Body() input: unknown) {
     const body = parse(z.object({ productIds: z.array(z.uuid()).min(1).max(100) }), input);
