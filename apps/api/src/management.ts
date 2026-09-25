@@ -50,7 +50,12 @@ export class ManagementController {
         roleId: employees.roleId,
         employeeCode: employees.employeeCode,
         hasPin: sql<boolean>`${employees.pinHash} IS NOT NULL`,
-        priceTagsAccess: employees.priceTagsAccess,
+        roleIds: sql<
+          string[]
+        >`ARRAY(SELECT er.role_id::text FROM employee_roles er WHERE er.employee_id=${employees.id} ORDER BY CASE WHEN er.role_id=${employees.roleId} THEN 0 ELSE 1 END,er.role_id)`,
+        roles: sql<
+          string[]
+        >`ARRAY(SELECT r2.name FROM employee_roles er JOIN roles r2 ON r2.id=er.role_id WHERE er.employee_id=${employees.id} ORDER BY CASE WHEN er.role_id=${employees.roleId} THEN 0 ELSE 1 END,r2.name)`,
         role: roles.name,
         active: employees.active,
         createdAt: employees.createdAt,

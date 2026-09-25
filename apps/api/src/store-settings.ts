@@ -51,7 +51,7 @@ class StoreSettingsController {
     return this.operations.transaction(async (c) => {
       const role = (
         await c.query(
-          'SELECT r.permissions FROM sessions s JOIN employees e ON e.id=s.employee_id JOIN roles r ON r.id=e.role_id JOIN devices d ON d.id=s.device_id WHERE s.token_hash=$1 AND s.expires_at>now() AND e.active AND d.active AND e.store_id=$2 AND r.store_id=$2 AND d.store_id=$2 FOR SHARE OF s,e,r,d',
+          "SELECT (SELECT COALESCE(jsonb_agg(DISTINCT p.value),'[]'::jsonb) FROM employee_roles er JOIN roles rr ON rr.id=er.role_id AND rr.store_id=er.store_id CROSS JOIN LATERAL jsonb_array_elements_text(rr.permissions) p(value) WHERE er.employee_id=e.id AND er.store_id=e.store_id) AS permissions FROM sessions s JOIN employees e ON e.id=s.employee_id JOIN roles r ON r.id=e.role_id JOIN devices d ON d.id=s.device_id WHERE s.token_hash=$1 AND s.expires_at>now() AND e.active AND d.active AND e.store_id=$2 AND r.store_id=$2 AND d.store_id=$2 FOR SHARE OF s,e,r,d",
           [hash(cookie(req, 'eliza_session')), req.context.store.id],
         )
       ).rows[0];

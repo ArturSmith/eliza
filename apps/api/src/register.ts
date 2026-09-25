@@ -77,7 +77,7 @@ export class RegisterService {
     const device = await this.device(client, req);
     const row = (
       await client.query(
-        `SELECT e.id,e.name,e.employee_code,r.permissions,s.name AS store_name,s.currency,s.timezone FROM pos_sessions ps JOIN employees e ON e.id=ps.employee_id JOIN roles r ON r.id=e.role_id AND r.store_id=e.store_id JOIN stores s ON s.id=e.store_id WHERE ps.token_hash=$1 AND ps.device_id=$2 AND ps.expires_at>now() AND e.active AND e.store_id=$3 FOR SHARE OF e,r`,
+        `SELECT e.id,e.name,e.employee_code,(SELECT COALESCE(jsonb_agg(DISTINCT p.value),\'[]\'::jsonb) FROM employee_roles er JOIN roles rr ON rr.id=er.role_id AND rr.store_id=er.store_id CROSS JOIN LATERAL jsonb_array_elements_text(rr.permissions) p(value) WHERE er.employee_id=e.id AND er.store_id=e.store_id) AS permissions,s.name AS store_name,s.currency,s.timezone FROM pos_sessions ps JOIN employees e ON e.id=ps.employee_id JOIN roles r ON r.id=e.role_id AND r.store_id=e.store_id JOIN stores s ON s.id=e.store_id WHERE ps.token_hash=$1 AND ps.device_id=$2 AND ps.expires_at>now() AND e.active AND e.store_id=$3 FOR SHARE OF e,r`,
         [hash(cookie(req, 'eliza_pos_session')), device.id, device.store_id],
       )
     ).rows[0];
@@ -113,7 +113,7 @@ export class RegisterService {
       return new HttpException('Too many incorrect PINs. Try again in five minutes.', 429);
     const employee = (
       await client.query(
-        'SELECT e.*,r.permissions FROM employees e JOIN roles r ON e.role_id=r.id AND e.store_id=r.store_id WHERE e.store_id=$1 AND e.employee_code=$2 FOR SHARE OF e,r',
+        "SELECT e.*,(SELECT COALESCE(jsonb_agg(DISTINCT p.value),'[]'::jsonb) FROM employee_roles er JOIN roles rr ON rr.id=er.role_id AND rr.store_id=er.store_id CROSS JOIN LATERAL jsonb_array_elements_text(rr.permissions) p(value) WHERE er.employee_id=e.id AND er.store_id=e.store_id) AS permissions FROM employees e JOIN roles r ON e.role_id=r.id AND e.store_id=r.store_id WHERE e.store_id=$1 AND e.employee_code=$2 FOR SHARE OF e,r",
         [storeId, credentials.employeeCode],
       )
     ).rows[0];
@@ -159,7 +159,7 @@ export class RegisterService {
         },
         employees: (
           await client.query(
-            'SELECT e.name,e.employee_code AS "employeeCode" FROM employees e JOIN roles r ON r.id=e.role_id WHERE e.store_id=$1 AND e.active AND e.pin_hash IS NOT NULL AND r.permissions ? \'pos.access\' ORDER BY e.name',
+            'SELECT e.name,e.employee_code AS "employeeCode" FROM employees e WHERE e.store_id=$1 AND e.active AND e.pin_hash IS NOT NULL AND EXISTS (SELECT 1 FROM employee_roles er JOIN roles r ON r.id=er.role_id AND r.store_id=er.store_id WHERE er.employee_id=e.id AND er.store_id=e.store_id AND r.permissions ? \'pos.access\') ORDER BY e.name',
             [device.store_id],
           )
         ).rows,

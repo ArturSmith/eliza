@@ -74,7 +74,14 @@ export class AccessGuard implements CanActivate {
       context.getHandler(),
       context.getClass(),
     ]);
-    if (permission && !row.role.permissions.includes(permission))
+    const assigned = await this.database.pool.query(
+      'SELECT r.permissions FROM employee_roles er JOIN roles r ON r.id=er.role_id AND r.store_id=er.store_id WHERE er.employee_id=$1 AND er.store_id=$2',
+      [row.user.id, row.store.id],
+    );
+    const permissions = [
+      ...new Set(assigned.rows.flatMap((entry) => entry.permissions as Permission[])),
+    ];
+    if (permission && !permissions.includes(permission))
       throw new ForbiddenException("You don't have permission to perform this action.");
     req.context = {
       user: {
@@ -82,7 +89,7 @@ export class AccessGuard implements CanActivate {
         name: row.user.name,
         email: row.user.email ?? '',
         role: row.role.name,
-        permissions: row.role.permissions as Permission[],
+        permissions,
       },
       store: {
         id: row.store.id,

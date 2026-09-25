@@ -112,7 +112,7 @@ export function PriceTagsPage() {
           </Button>
         </form>
         {!value.employees.length && (
-          <p>{t('No employees have Price Tags access. Ask a manager to enable it in Team.')}</p>
+          <p>{t('No General employees are assigned. Ask a manager to assign the role in Team.')}</p>
         )}
         <a href="/management-access?from=price-tags">{t('Management sign in')}</a>
       </div>

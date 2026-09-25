@@ -43,16 +43,28 @@ export class TeamController {
       password = await passwordHash(body.password || token());
     const { user, store, device } = req.context;
     return this.operations.transaction(async (client) => {
+      const roleIds = [...new Set(body.roleIds?.length ? body.roleIds : [body.roleId])];
+      if (!roleIds.includes(body.roleId))
+        throw new BadRequestException('Primary role must be assigned.');
       const role = (
         await client.query('SELECT id FROM roles WHERE id=$1 AND store_id=$2', [
           body.roleId,
           store.id,
         ])
       ).rows[0];
-      if (!role) throw new BadRequestException('Choose a role from this store.');
+      if (
+        !role ||
+        (
+          await client.query('SELECT id FROM roles WHERE id=ANY($1::uuid[]) AND store_id=$2', [
+            roleIds,
+            store.id,
+          ])
+        ).rowCount !== roleIds.length
+      )
+        throw new BadRequestException('Choose roles from this store.');
       const employee = (
         await client.query(
-          'INSERT INTO employees(store_id,role_id,name,email,password_hash,employee_code,pin_hash,price_tags_access) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
+          'INSERT INTO employees(store_id,role_id,name,email,password_hash,employee_code,pin_hash) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id',
           [
             store.id,
             body.roleId,
@@ -61,10 +73,13 @@ export class TeamController {
             password,
             body.employeeCode,
             pin,
-            body.priceTagsAccess,
           ],
         )
       ).rows[0];
+      await client.query(
+        'INSERT INTO employee_roles(employee_id,role_id,store_id) SELECT $1,unnest($2::uuid[]),$3',
+        [employee.id, roleIds, store.id],
+      );
       await audit(
         client,
         { storeId: store.id, employeeId: user.id, deviceId: device.id },
@@ -90,7 +105,7 @@ export class TeamController {
           .transform((v) => v.toUpperCase()),
         roleId: z.uuid(),
         active: z.boolean(),
-        priceTagsAccess: z.boolean().optional(),
+        roleIds: z.array(z.uuid()).min(1).optional(),
         pin: z.union([pinSchema, z.literal('')]).default(''),
       }),
       input,
@@ -105,17 +120,35 @@ export class TeamController {
         ])
       ).rows[0];
       if (!old) throw new NotFoundException('Employee not found.');
-      if (id === user.id && (!body.active || body.roleId !== old.role_id))
+      const oldRoles = (
+        await client.query('SELECT role_id FROM employee_roles WHERE employee_id=$1', [id])
+      ).rows.map((r) => r.role_id as string);
+      const roleIds = [
+        ...new Set(
+          body.roleIds?.length
+            ? body.roleIds
+            : [body.roleId, ...oldRoles.filter((roleId) => roleId !== old.role_id)],
+        ),
+      ];
+      if (!roleIds.includes(body.roleId))
+        throw new BadRequestException('Primary role must be assigned.');
+      if (
+        id === user.id &&
+        (!body.active ||
+          body.roleId !== old.role_id ||
+          roleIds.length !== oldRoles.length ||
+          roleIds.some((roleId) => !oldRoles.includes(roleId)))
+      )
         throw new BadRequestException(
           'You cannot disable your own account or change your own role.',
         );
       if (
-        !(
-          await client.query('SELECT id FROM roles WHERE id=$1 AND store_id=$2', [
-            body.roleId,
+        (
+          await client.query('SELECT id FROM roles WHERE id=ANY($1::uuid[]) AND store_id=$2', [
+            roleIds,
             store.id,
           ])
-        ).rowCount
+        ).rowCount !== roleIds.length
       )
         throw new BadRequestException('Choose a role from this store.');
       if (
@@ -127,20 +160,21 @@ export class TeamController {
           'Close this employee’s open shift before disabling their account.',
         );
       await client.query(
-        'UPDATE employees SET name=$1,employee_code=$2,role_id=$3,active=$4,pin_hash=COALESCE($5,pin_hash),price_tags_access=$7 WHERE id=$6',
-        [
-          body.name,
-          body.employeeCode,
-          body.roleId,
-          body.active,
-          pin,
-          id,
-          body.priceTagsAccess ?? old.price_tags_access,
-        ],
+        'UPDATE employees SET name=$1,employee_code=$2,role_id=$3,active=$4,pin_hash=COALESCE($5,pin_hash) WHERE id=$6',
+        [body.name, body.employeeCode, body.roleId, body.active, pin, id],
       );
-      if (pin || !body.active || old.role_id !== body.roleId)
+      await client.query('DELETE FROM employee_roles WHERE employee_id=$1', [id]);
+      await client.query(
+        'INSERT INTO employee_roles(employee_id,role_id,store_id) SELECT $1,unnest($2::uuid[]),$3',
+        [id, roleIds, store.id],
+      );
+      const rolesChanged =
+        old.role_id !== body.roleId ||
+        roleIds.length !== oldRoles.length ||
+        roleIds.some((roleId) => !oldRoles.includes(roleId));
+      if (pin || !body.active || rolesChanged)
         await client.query('DELETE FROM pos_sessions WHERE employee_id=$1', [id]);
-      if (pin || !body.active || body.priceTagsAccess === false)
+      if (pin || !body.active || rolesChanged)
         await client.query('DELETE FROM price_tag_sessions WHERE employee_id=$1', [id]);
       await audit(
         client,

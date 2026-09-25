@@ -188,7 +188,8 @@ export type Employee = {
   roleId: string;
   employeeCode: string;
   hasPin: boolean;
-  priceTagsAccess: boolean;
+  roleIds: string[];
+  roles: string[];
   active: boolean;
   createdAt: string;
 };
@@ -222,7 +223,7 @@ export const employeeSchema = z.object({
   email: z.union([z.email().max(254), z.literal('')]).default(''),
   password: z.union([z.string().min(12).max(128), z.literal('')]).default(''),
   pin: pinSchema,
-  priceTagsAccess: z.boolean().default(false),
+  roleIds: z.array(z.uuid()).min(1).optional(),
 });
 export const pinLoginSchema = z.object({
   employeeCode: z

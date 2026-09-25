@@ -1,3 +1,4 @@
+import './team-roles.css';
 import { t, useLanguage } from './i18n';
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -29,15 +30,25 @@ export function TeamManagementPage() {
   });
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const body = Object.fromEntries(new FormData(e.currentTarget));
+    const formData = new FormData(e.currentTarget);
+    const body = Object.fromEntries(formData);
+    const roleIds = formData.getAll('roleIds').map(String);
+    const roleId =
+      roleIds.find((id) => id === employee?.roleId) ??
+      roleIds.find(
+        (id) => roles.data?.find((role) => role.id === id)?.name !== 'General employee',
+      ) ??
+      roleIds[0];
+    if (!roleIds.length) return;
     mutation.mutate(
       employee
         ? {
             ...body,
             active: body.active === 'true',
-            priceTagsAccess: body.priceTagsAccess === 'on',
+            roleId,
+            roleIds,
           }
-        : { ...body, priceTagsAccess: body.priceTagsAccess === 'on' },
+        : { ...body, roleId, roleIds },
     );
   }
   return (
@@ -80,7 +91,7 @@ export function TeamManagementPage() {
               <tr>
                 <th>{t('Employee')}</th>
                 <th>{t('Employee code')}</th>
-                <th>{t('Role')}</th>
+                <th>{t('Roles')}</th>
                 <th>{t('Register PIN')}</th>
                 <th>{t('Status')}</th>
                 {canManage && <th>{t('Actions')}</th>}
@@ -95,7 +106,11 @@ export function TeamManagementPage() {
                   </td>
                   <td>{e.employeeCode}</td>
                   <td>
-                    <span className="badge badge-gray">{t(e.role)}</span>
+                    {(e.roles?.length ? e.roles : [e.role]).map((role) => (
+                      <span className="badge badge-gray" key={role}>
+                        {t(role)}
+                      </span>
+                    ))}
                   </td>
                   <td>{e.hasPin ? t('Set') : t('Not set')}</td>
                   <td>
@@ -148,29 +163,30 @@ export function TeamManagementPage() {
                 placeholder={t('e.g. ANNA')}
               />
             </Field>
-            <Field label={t('Role')}>
-              <select
-                name="roleId"
-                defaultValue={employee?.roleId ?? roles.data?.find((r) => r.name === 'Cashier')?.id}
-                required
-              >
-                {roles.data?.map((r) => (
-                  <option value={r.id} key={r.id}>
-                    {t(r.name)}
-                  </option>
-                ))}
-              </select>
-            </Field>
           </div>
-          <label className="field">
-            <span>{t('Price Tags access')}</span>
-            <input
-              name="priceTagsAccess"
-              type="checkbox"
-              defaultChecked={employee?.priceTagsAccess ?? false}
-            />
-            <small>{t('Allow this employee to sign in on a Price Tags device.')}</small>
-          </label>
+          <fieldset className="field">
+            <legend>{t('Roles')}</legend>
+            <div className="role-options">
+              {roles.data?.map((role) => (
+                <label key={role.id} className="role-option">
+                  <input
+                    type="checkbox"
+                    name="roleIds"
+                    value={role.id}
+                    defaultChecked={
+                      employee
+                        ? (employee.roleIds ?? [employee.roleId]).includes(role.id)
+                        : role.name === 'Cashier'
+                    }
+                  />
+                  <span>{t(role.name)}</span>
+                </label>
+              ))}
+            </div>
+            <small>
+              {t('Employees can have several roles. General employee can use Price Tags devices.')}
+            </small>
+          </fieldset>
           <Field
             label={employee ? t('New PIN (optional)') : t('Register PIN')}
             hint={

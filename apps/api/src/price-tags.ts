@@ -38,7 +38,7 @@ export class PriceTagsController {
   private async operator(req: Request) {
     const device = await this.station(req);
     const result = await this.database.pool.query(
-      'SELECT e.id,e.name FROM price_tag_sessions ps JOIN employees e ON e.id=ps.employee_id AND e.store_id=$2 WHERE ps.token_hash=$1 AND ps.device_id=$3 AND ps.expires_at>now() AND e.active AND e.price_tags_access',
+      "SELECT e.id,e.name FROM price_tag_sessions ps JOIN employees e ON e.id=ps.employee_id AND e.store_id=$2 WHERE ps.token_hash=$1 AND ps.device_id=$3 AND ps.expires_at>now() AND e.active AND EXISTS (SELECT 1 FROM employee_roles er JOIN roles r ON r.id=er.role_id AND r.store_id=er.store_id WHERE er.employee_id=e.id AND er.store_id=e.store_id AND r.name='General employee')",
       [hash(cookie(req, 'eliza_price_tags_session')), device.store_id, device.id],
     );
     if (!result.rows[0])
@@ -48,7 +48,7 @@ export class PriceTagsController {
   @Get('context') async context(@Req() req: Request) {
     const device = await this.station(req);
     const employees = await this.database.pool.query(
-      'SELECT name,employee_code AS "employeeCode" FROM employees WHERE store_id=$1 AND active AND price_tags_access AND pin_hash IS NOT NULL ORDER BY name',
+      'SELECT name,employee_code AS "employeeCode" FROM employees e WHERE e.store_id=$1 AND e.active AND EXISTS (SELECT 1 FROM employee_roles er JOIN roles r ON r.id=er.role_id AND r.store_id=er.store_id WHERE er.employee_id=e.id AND er.store_id=e.store_id AND r.name=\'General employee\') AND e.pin_hash IS NOT NULL ORDER BY name',
       [device.store_id],
     );
     let operator: { id: string; name: string } | null = null;
@@ -84,7 +84,7 @@ export class PriceTagsController {
         throw new ForbiddenException('Too many incorrect PINs. Try again in five minutes.');
       const employee = (
         await client.query(
-          'SELECT id,name,pin_hash,active,price_tags_access FROM employees WHERE store_id=$1 AND employee_code=$2',
+          "SELECT e.id,e.name,e.pin_hash,e.active,EXISTS (SELECT 1 FROM employee_roles er JOIN roles r ON r.id=er.role_id AND r.store_id=er.store_id WHERE er.employee_id=e.id AND er.store_id=e.store_id AND r.name='General employee') AS general_employee FROM employees e WHERE e.store_id=$1 AND e.employee_code=$2",
           [device.store_id, body.employeeCode],
         )
       ).rows[0];
@@ -92,7 +92,7 @@ export class PriceTagsController {
         body.pin,
         employee?.pin_hash ?? `${'0'.repeat(32)}:${'0'.repeat(128)}`,
       );
-      if (!employee?.active || !employee.price_tags_access || !valid) {
+      if (!employee?.active || !employee.general_employee || !valid) {
         const failures = attempt.locked_until ? 1 : attempt.failures + 1;
         await client.query(
           "UPDATE pin_attempts SET failures=$2,locked_until=CASE WHEN $2>=5 THEN now()+interval '5 minutes' ELSE NULL END WHERE device_id=$1",
@@ -100,7 +100,7 @@ export class PriceTagsController {
         );
         await client.query('COMMIT');
         throw new UnauthorizedException(
-          'Employee or PIN is incorrect, or Price Tags access is not granted.',
+          'Employee or PIN is incorrect, or General employee role is not assigned.',
         );
       }
       await client.query(

@@ -72,7 +72,10 @@ describe.sequential('Price Tags station', () => {
           employeeCode: 'ALEX',
           roleId: cashierRole.id,
           pin: '123456',
-          priceTagsAccess: true,
+          roleIds: [
+            cashierRole.id,
+            roles.find((role: { name: string }) => role.name === 'General employee').id,
+          ],
         })
       ).status,
     ).toBe(201);
@@ -83,7 +86,6 @@ describe.sequential('Price Tags station', () => {
           employeeCode: 'SAM',
           roleId: cashierRole.id,
           pin: '654321',
-          priceTagsAccess: false,
         })
       ).status,
     ).toBe(201);

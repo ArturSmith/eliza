@@ -67,6 +67,10 @@ export class AuthService {
         .insert(roles)
         .values({ storeId: store.id, name: 'Owner', permissions: [...permissions] })
         .returning();
+      const [generalRole] = await tx
+        .insert(roles)
+        .values({ storeId: store.id, name: 'General employee', permissions: [] })
+        .returning();
       await tx.insert(roles).values([
         {
           storeId: store.id,
@@ -86,6 +90,9 @@ export class AuthService {
           passwordHash: encoded,
         })
         .returning();
+      await tx.execute(
+        sql`INSERT INTO employee_roles(employee_id,role_id,store_id) VALUES(${owner.id},${ownerRole.id},${store.id}),(${owner.id},${generalRole.id},${store.id})`,
+      );
       return { id: owner.id, storeId: store.id };
     });
   }
@@ -250,7 +257,7 @@ export class AuthController {
         throw new UnauthorizedException('This device cannot be switched to Management.');
       const role = (
         await client.query(
-          'SELECT r.permissions FROM employees e JOIN roles r ON r.id=e.role_id AND r.store_id=e.store_id WHERE e.id=$1 AND e.store_id=$2 AND e.active',
+          "SELECT (SELECT COALESCE(jsonb_agg(DISTINCT p.value),'[]'::jsonb) FROM employee_roles er JOIN roles rr ON rr.id=er.role_id AND rr.store_id=er.store_id CROSS JOIN LATERAL jsonb_array_elements_text(rr.permissions) p(value) WHERE er.employee_id=e.id AND er.store_id=e.store_id) AS permissions FROM employees e JOIN roles r ON r.id=e.role_id AND r.store_id=e.store_id WHERE e.id=$1 AND e.store_id=$2 AND e.active",
           [user.id, user.storeId],
         )
       ).rows[0];
