@@ -5,6 +5,7 @@ import { api, queryClient } from './api';
 import { t, useLanguage } from './i18n';
 import { Button } from './components/ui/button';
 import { ErrorMessage } from './forms';
+import { CameraBarcodeScanner } from './camera-barcode-scanner';
 import './price-tags.css';
 
 type Context = {
@@ -147,18 +148,15 @@ export function PriceTagsPage() {
       <div className="price-tags-controls">
         <label>
           {t('Find products')}
-          <input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder={t('Name, SKU, PLU or barcode')}
-          />
+          <span className="price-tags-search-row">
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={t('Name, SKU, PLU or barcode')}
+            />
+            <CameraBarcodeScanner onScan={setSearch} />
+          </span>
         </label>
-        <Button
-          onClick={() => print.mutate(chosen.map((product) => product.id))}
-          disabled={!chosen.length || print.isPending}
-        >
-          <Printer size={17} /> {t('Print selected tags')} ({chosen.length})
-        </Button>
       </div>
       <ErrorMessage error={products.error ?? print.error} />
       <div className="price-tags-product-list">
@@ -184,6 +182,14 @@ export function PriceTagsPage() {
             <b>{price(product.price)}</b>
           </label>
         ))}
+      </div>
+      <div className="price-tags-print-action">
+        <Button
+          onClick={() => print.mutate(chosen.map((product) => product.id))}
+          disabled={!chosen.length || print.isPending}
+        >
+          <Printer size={17} /> {t('Print selected tags')} ({chosen.length})
+        </Button>
       </div>
       <div className="price-tags-print-sheet">
         {printItems.map((product) => (
