@@ -59,7 +59,7 @@ export function ean13Modules(code: string): string {
   return '101' + left + '01010' + right + '101';
 }
 
-export function Ean13Barcode({ code }: { code: string }) {
+export function Ean13Barcode({ code, showDigits = true }: { code: string; showDigits?: boolean }) {
   useLanguage();
   const modules = ean13Modules(code);
   return (
@@ -83,9 +83,11 @@ export function Ean13Barcode({ code }: { code: string }) {
           />
         ) : null,
       )}
-      <text x="58.5" y="69" textAnchor="middle" fontSize="8" fontFamily="monospace">
-        {code}
-      </text>
+      {showDigits && (
+        <text x="58.5" y="69" textAnchor="middle" fontSize="8" fontFamily="monospace">
+          {code}
+        </text>
+      )}
     </svg>
   );
 }

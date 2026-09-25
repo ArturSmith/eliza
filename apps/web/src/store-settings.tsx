@@ -1,4 +1,6 @@
-import { type ScaleBarcodeSettings } from '@eliza/contracts';
+import { type ScaleBarcodeSettings, type TagDesign } from '@eliza/contracts';
+import { Ean13Barcode } from './ean13-barcode';
+import './store-settings.css';
 import { t, useLanguage } from './i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -7,6 +9,7 @@ import { Field, ErrorMessage } from './forms';
 import { Button } from './components/ui/button';
 type Profile = {
   scaleBarcode: ScaleBarcodeSettings;
+  tagDesign: TagDesign;
   name: string;
   currency: string;
   timezone: string;
@@ -45,6 +48,9 @@ function Editor({ profile }: { profile: Profile }) {
   const [value, setValue] = useState(profile),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>();
+  function updateTagDesign(patch: Partial<TagDesign>) {
+    setValue((current) => ({ ...current, tagDesign: { ...current.tagDesign, ...patch } }));
+  }
   async function save() {
     setBusy(true);
     try {
@@ -181,6 +187,121 @@ function Editor({ profile }: { profile: Profile }) {
               'Price-only labels infer weight from the current price per kilogram. Keep scale prices synchronized; weight labels preserve the measured weight.',
             )}
           </p>
+          <h3>{t('Price tag design')}</h3>
+          <p className="muted">
+            {t(
+              'Set label sizes in millimeters for A4 paper. Product name and price stay visible; weight labels always show the measured weight and scannable barcode.',
+            )}
+          </p>
+          <div className="form-grid">
+            {(
+              [
+                ['regularWidthMm', 'Price tag width (mm)'],
+                ['regularHeightMm', 'Price tag height (mm)'],
+                ['weightWidthMm', 'Weight label width (mm)'],
+                ['weightHeightMm', 'Weight label height (mm)'],
+                ['gapMm', 'Gap between labels (mm)'],
+                ['nameFontPt', 'Product name font (pt)'],
+                ['priceFontPt', 'Price font (pt)'],
+              ] as const
+            ).map(([key, label]) => (
+              <Field key={key} label={t(label)}>
+                <input
+                  type="number"
+                  required
+                  min={
+                    key === 'gapMm'
+                      ? 0
+                      : key === 'nameFontPt'
+                        ? 9
+                        : key === 'priceFontPt'
+                          ? 14
+                          : key === 'weightWidthMm'
+                            ? 70
+                            : key === 'weightHeightMm'
+                              ? 45
+                              : key === 'regularWidthMm'
+                                ? 45
+                                : 35
+                  }
+                  max={
+                    key === 'gapMm'
+                      ? 12
+                      : key === 'nameFontPt'
+                        ? 18
+                        : key === 'priceFontPt'
+                          ? 32
+                          : key === 'weightHeightMm'
+                            ? 100
+                            : key === 'regularHeightMm'
+                              ? 90
+                              : 120
+                  }
+                  value={value.tagDesign[key]}
+                  onChange={(event) => updateTagDesign({ [key]: Number(event.target.value) })}
+                />
+              </Field>
+            ))}
+          </div>
+          <div className="tag-design-options">
+            {(
+              [
+                ['showStoreName', 'Show store name'],
+                ['showSku', 'Show SKU'],
+                ['showUnit', 'Show selling unit'],
+                ['showBarcodeNumber', 'Show barcode digits'],
+                ['showWeightUnitPrice', 'Show price per kilogram on weight labels'],
+                ['showPackagePrice', 'Show package price on weight labels'],
+              ] as const
+            ).map(([key, label]) => (
+              <label key={key}>
+                <input
+                  type="checkbox"
+                  checked={value.tagDesign[key]}
+                  onChange={(event) => updateTagDesign({ [key]: event.target.checked })}
+                />
+                {t(label)}
+              </label>
+            ))}
+          </div>
+          <h4>{t('Tag preview')}</h4>
+          <div className="tag-design-preview">
+            <article
+              style={{
+                width: `${value.tagDesign.regularWidthMm}mm`,
+                height: `${value.tagDesign.regularHeightMm}mm`,
+              }}
+            >
+              {value.tagDesign.showStoreName && <small>{value.name}</small>}
+              <strong style={{ fontSize: `${value.tagDesign.nameFontPt}pt` }}>
+                {t('Sample product')}
+              </strong>
+              <b style={{ fontSize: `${value.tagDesign.priceFontPt}pt` }}>99.00 {value.currency}</b>
+              {value.tagDesign.showSku && <small>SKU-001</small>}
+              {value.tagDesign.showUnit && <small>{t('piece')}</small>}
+              {value.tagDesign.showBarcodeNumber && <small>4601234567893</small>}
+            </article>
+            <article
+              style={{
+                width: `${value.tagDesign.weightWidthMm}mm`,
+                height: `${value.tagDesign.weightHeightMm}mm`,
+              }}
+            >
+              {value.tagDesign.showStoreName && <small>{value.name}</small>}
+              <strong style={{ fontSize: `${value.tagDesign.nameFontPt}pt` }}>
+                {t('Sample weight product')}
+              </strong>
+              {value.tagDesign.showSku && <small>SKU-002</small>}
+              <span>0.500 {t('kg')}</span>
+              {value.tagDesign.showWeightUnitPrice && (
+                <small>
+                  99.00 {value.currency}/{t('kg')}
+                </small>
+              )}
+              {value.tagDesign.showPackagePrice && <b>49.50 {value.currency}</b>}
+              <Ean13Barcode code="2000042005009" showDigits={value.tagDesign.showBarcodeNumber} />
+            </article>
+          </div>
           <Field label={t('Receipt footer')}>
             <textarea
               rows={3}

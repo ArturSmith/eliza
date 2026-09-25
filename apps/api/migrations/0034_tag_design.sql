@@ -1,0 +1,1 @@
+ALTER TABLE stores ADD COLUMN tag_design jsonb NOT NULL DEFAULT '{"regularWidthMm":60,"regularHeightMm":48,"weightWidthMm":95,"weightHeightMm":48,"gapMm":4,"nameFontPt":12,"priceFontPt":22,"showStoreName":false,"showSku":false,"showUnit":true,"showBarcodeNumber":true,"showWeightUnitPrice":true,"showPackagePrice":true}';

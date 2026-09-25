@@ -119,6 +119,12 @@ describe.sequential('Price Tags station', () => {
       (
         await manager.request('/store-profile', {
           ...profile,
+          tagDesign: {
+            ...profile.tagDesign,
+            regularWidthMm: 72,
+            weightWidthMm: 80,
+            showStoreName: true,
+          },
           scaleBarcode: {
             enabled: true,
             prefix: '20',
@@ -142,6 +148,11 @@ describe.sequential('Price Tags station', () => {
     expect((await manager.request('/products')).status).toBe(401);
     const context = await manager.request('/price-tags/context');
     expect(context.status).toBe(200);
+    expect(context.body.store.tagDesign).toMatchObject({
+      regularWidthMm: 72,
+      weightWidthMm: 80,
+      showStoreName: true,
+    });
     expect(context.body.employees.map((employee: { name: string }) => employee.name)).toEqual([
       'Alex',
     ]);

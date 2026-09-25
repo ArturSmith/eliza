@@ -776,6 +776,23 @@ export type ShoppingListSummary = Omit<ShoppingList, 'lines'> & {
   convertedCount: number;
 };
 
+export const tagDesignSchema = z.object({
+  regularWidthMm: z.number().int().min(45).max(120),
+  regularHeightMm: z.number().int().min(35).max(90),
+  weightWidthMm: z.number().int().min(70).max(120),
+  weightHeightMm: z.number().int().min(45).max(100),
+  gapMm: z.number().int().min(0).max(12),
+  nameFontPt: z.number().int().min(9).max(18),
+  priceFontPt: z.number().int().min(14).max(32),
+  showStoreName: z.boolean(),
+  showSku: z.boolean(),
+  showUnit: z.boolean(),
+  showBarcodeNumber: z.boolean(),
+  showWeightUnitPrice: z.boolean(),
+  showPackagePrice: z.boolean(),
+});
+export type TagDesign = z.infer<typeof tagDesignSchema>;
+
 export const scaleBarcodeSchema = z
   .object({
     enabled: z.boolean(),

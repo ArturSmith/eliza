@@ -23,7 +23,7 @@ export class PriceTagsController {
   constructor(private database: Database) {}
   private async station(req: Request) {
     const result = await this.database.pool.query(
-      'SELECT d.id,d.store_id,d.name,d.type,d.active,s.name AS store_name,s.currency,s.scale_barcode FROM devices d JOIN stores s ON s.id=d.store_id WHERE d.token_hash=$1 OR d.token_hash=$2 ORDER BY CASE WHEN d.token_hash=$1 THEN 0 ELSE 1 END LIMIT 1',
+      'SELECT d.id,d.store_id,d.name,d.type,d.active,s.name AS store_name,s.currency,s.scale_barcode,s.tag_design FROM devices d JOIN stores s ON s.id=d.store_id WHERE d.token_hash=$1 OR d.token_hash=$2 ORDER BY CASE WHEN d.token_hash=$1 THEN 0 ELSE 1 END LIMIT 1',
       [hash(cookie(req, 'eliza_register')), hash(cookie(req, 'eliza_device'))],
     );
     const device = result.rows[0];
@@ -64,6 +64,7 @@ export class PriceTagsController {
         name: device.store_name,
         currency: device.currency,
         scaleBarcode: device.scale_barcode,
+        tagDesign: device.tag_design,
       },
       employees: employees.rows,
       operator,
@@ -164,7 +165,7 @@ export class PriceTagsController {
     const { device } = await this.operator(req);
     const product = (
       await this.database.pool.query(
-        'SELECT id,name,unit,plu FROM products WHERE store_id=$1 AND id=$2 AND active',
+        'SELECT id,name,sku,price::text,unit,plu FROM products WHERE store_id=$1 AND id=$2 AND active',
         [device.store_id, body.productId],
       )
     ).rows[0];
@@ -176,6 +177,8 @@ export class PriceTagsController {
         barcode: encodeScaleBarcode(product.plu ?? '', body.weight, profile),
         productId: product.id,
         name: product.name,
+        sku: product.sku,
+        price: product.price,
         weight: body.weight,
       };
     } catch (error) {
