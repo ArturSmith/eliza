@@ -33,6 +33,7 @@ import { DigitalPurchasesPage } from './digital-purchases';
 import { TeamManagementPage } from './team';
 import { OwnerDashboardPage } from './owner-dashboard';
 import { PriceTagsPage } from './price-tags';
+import { ManagementAccessPage } from './management-access';
 import { SalesPage, ShiftsPage } from './reports';
 function LegacyDocumentsRedirect() {
   React.useEffect(() => {
@@ -47,15 +48,20 @@ function Root() {
   const environment = useQuery({
     queryKey: ['device-environment'],
     queryFn: () => api<{ type: string }>('/auth/device-environment'),
-    enabled: location.pathname !== '/pos' && location.pathname !== '/price-tags',
+    enabled:
+      location.pathname !== '/pos' &&
+      location.pathname !== '/price-tags' &&
+      location.pathname !== '/management-access',
   });
   React.useEffect(() => {
+    if (location.pathname === '/management-access') return;
     if (environment.data?.type === 'pos') window.location.replace('/pos');
     if (environment.data?.type === 'price_tags') window.location.replace('/price-tags');
-  }, [environment.data?.type]);
+  }, [environment.data?.type, location.pathname]);
   if (
     location.pathname !== '/pos' &&
     location.pathname !== '/price-tags' &&
+    location.pathname !== '/management-access' &&
     (environment.isPending ||
       environment.data?.type === 'pos' ||
       environment.data?.type === 'price_tags')
@@ -64,7 +70,13 @@ function Root() {
   return (
     <>
       <LanguageSwitcher />
-      {location.pathname === '/pos' || location.pathname === '/price-tags' ? <Outlet /> : <Shell />}
+      {location.pathname === '/pos' ||
+      location.pathname === '/price-tags' ||
+      location.pathname === '/management-access' ? (
+        <Outlet />
+      ) : (
+        <Shell />
+      )}
     </>
   );
 }
@@ -99,6 +111,11 @@ const routes = [
   }),
   createRoute({ getParentRoute: () => root, path: '/pos', component: CheckoutRoute }),
   createRoute({ getParentRoute: () => root, path: '/price-tags', component: PriceTagsPage }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/management-access',
+    component: ManagementAccessPage,
+  }),
   createRoute({ getParentRoute: () => root, path: '/analytics', component: OwnerDashboardPage }),
   createRoute({ getParentRoute: () => root, path: '/sales', component: SalesPage }),
   createRoute({ getParentRoute: () => root, path: '/shifts', component: ShiftsPage }),

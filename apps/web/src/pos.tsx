@@ -242,7 +242,7 @@ export function PosPage() {
               {t('No employees have a PIN yet. Set one in Team using management login. ')}
             </p>
           )}
-          <a href="/" className="text-link">
+          <a href="/management-access" className="text-link">
             {t('Management sign in ')}
           </a>
         </div>

@@ -114,6 +114,7 @@ export function PriceTagsPage() {
         {!value.employees.length && (
           <p>{t('No employees have Price Tags access. Ask a manager to enable it in Team.')}</p>
         )}
+        <a href="/management-access?from=price-tags">{t('Management sign in')}</a>
       </div>
     );
   const all = products.data ?? [];
@@ -141,6 +142,7 @@ export function PriceTagsPage() {
         <Button variant="outline" onClick={() => lock.mutate()} disabled={lock.isPending}>
           {t('Lock')}
         </Button>
+        <a href="/management-access?from=price-tags">{t('Management sign in')}</a>
       </header>
       <div className="price-tags-controls">
         <label>

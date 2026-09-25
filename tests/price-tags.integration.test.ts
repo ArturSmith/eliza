@@ -131,5 +131,49 @@ describe.sequential('Price Tags station', () => {
     expect(printed.body.products[0].price).toBe('12.00');
     expect((await manager.request('/price-tags/lock', {})).status).toBe(200);
     expect((await manager.request('/price-tags/products')).status).toBe(401);
+    expect(
+      (
+        await manager.request('/auth/reclaim-device', {
+          email: 'tags@test.example',
+          password: 'wrong-password',
+        })
+      ).status,
+    ).toBe(401);
+    expect(
+      (
+        await manager.request('/auth/reclaim-device', {
+          email: 'tags@test.example',
+          password: 'owner-password-12345',
+        })
+      ).status,
+    ).toBe(200);
+    expect((await manager.request('/auth/device-environment')).body.type).toBe('management');
+    expect((await manager.request('/auth/session')).status).toBe(200);
+    expect((await manager.request('/price-tags/context')).status).toBe(403);
+    expect(
+      (
+        await manager.request(
+          `/devices/${session.device.id}`,
+          { name: 'Checkout station', active: true, type: 'pos' },
+          'PATCH',
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (await manager.request('/pos/login', { employeeCode: 'ALEX', pin: '123456' })).status,
+    ).toBe(200);
+    expect(
+      (await manager.request('/pos/shifts', { requestId: crypto.randomUUID(), openingCash: '0' }))
+        .status,
+    ).toBe(201);
+    expect(
+      (
+        await manager.request('/auth/reclaim-device', {
+          email: 'tags@test.example',
+          password: 'owner-password-12345',
+        })
+      ).status,
+    ).toBe(409);
+    expect((await manager.request('/auth/device-environment')).body.type).toBe('pos');
   });
 });

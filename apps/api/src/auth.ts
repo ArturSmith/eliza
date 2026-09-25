@@ -225,6 +225,75 @@ export class AuthController {
     await this.auth.limit(req.ip ?? 'local');
     return this.auth.issue(await this.auth.login(body), req, res);
   }
+  @Post('reclaim-device') @HttpCode(200) async reclaimDevice(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.auth.limit(req.ip ?? 'local');
+    const user = await this.auth.login(body);
+    const registerToken = cookie(req, 'eliza_register');
+    const managementToken = cookie(req, 'eliza_device');
+    let deviceToken = registerToken || managementToken;
+    if (!deviceToken) throw new UnauthorizedException('This browser is not an enrolled device.');
+    const client = await this.database.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const device = (
+        await client.query(
+          'SELECT id,store_id,type,active,token_hash FROM devices WHERE token_hash=$1 OR token_hash=$2 ORDER BY CASE WHEN token_hash=$1 THEN 0 ELSE 1 END LIMIT 1 FOR UPDATE',
+          [hash(registerToken), hash(managementToken)],
+        )
+      ).rows[0];
+      if (device?.token_hash === hash(managementToken)) deviceToken = managementToken;
+      if (!device || device.store_id !== user.storeId || !device.active)
+        throw new UnauthorizedException('This device cannot be switched to Management.');
+      const role = (
+        await client.query(
+          'SELECT r.permissions FROM employees e JOIN roles r ON r.id=e.role_id AND r.store_id=e.store_id WHERE e.id=$1 AND e.store_id=$2 AND e.active',
+          [user.id, user.storeId],
+        )
+      ).rows[0];
+      if (!role?.permissions.includes('devices.manage'))
+        throw new ForbiddenException('Only a manager can change this device environment.');
+      if (
+        (
+          await client.query("SELECT id FROM shifts WHERE device_id=$1 AND status='open' LIMIT 1", [
+            device.id,
+          ])
+        ).rowCount
+      )
+        throw new ConflictException(
+          'Close the open cashier shift before switching this device to Management.',
+        );
+      await client.query("UPDATE devices SET type='management' WHERE id=$1", [device.id]);
+      await client.query('DELETE FROM sessions WHERE device_id=$1', [device.id]);
+      await client.query('DELETE FROM pos_sessions WHERE device_id=$1', [device.id]);
+      await client.query('DELETE FROM price_tag_sessions WHERE device_id=$1', [device.id]);
+      await client.query(
+        "INSERT INTO audits(store_id,employee_id,device_id,action,entity_id,details) VALUES($1,$2,$3,'Device environment changed',$3,$4)",
+        [user.storeId, user.id, device.id, JSON.stringify({ from: device.type, to: 'management' })],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+    const result = await this.auth.issue(user, req, res);
+    res.cookie('eliza_device', deviceToken, {
+      httpOnly: true,
+      sameSite: 'strict',
+      secure: process.env.NODE_ENV === 'production',
+      path: '/api',
+      maxAge: 365 * 86400_000,
+    });
+    res.clearCookie('eliza_register', { path: '/api' });
+    res.clearCookie('eliza_pos_session', { path: '/api' });
+    res.clearCookie('eliza_price_tags_session', { path: '/api' });
+    return result;
+  }
   @Get('session') @UseGuards(AccessGuard) session(@Req() req: AuthRequest) {
     return req.context;
   }
