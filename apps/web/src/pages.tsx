@@ -1184,9 +1184,19 @@ export function DevicesPage() {
   const session = useSession().data!;
   const [edit, setEdit] = useState<Device | null>(null);
   const mutation = useMutation({
-    mutationFn: (body: { id: string; name: string; active: boolean }) =>
-      api(`/devices/${body.id}`, { name: body.name, active: body.active }, 'PATCH'),
+    mutationFn: (body: Device) =>
+      api(
+        `/devices/${body.id}`,
+        { name: body.name, active: body.active, type: body.type },
+        'PATCH',
+      ),
     onSuccess: () => {
+      if (edit?.id === session.device.id && edit.type !== session.device.type) {
+        window.location.assign(
+          edit.type === 'price_tags' ? '/price-tags' : edit.type === 'pos' ? '/pos' : '/',
+        );
+        return;
+      }
       void refresh();
       setEdit(null);
     },
@@ -1212,7 +1222,11 @@ export function DevicesPage() {
             </div>
             <h2>{d.name}</h2>
             <p className="muted">
-              {d.type === 'management' ? t('Management browser') : t(d.type)}
+              {d.type === 'management'
+                ? t('Management browser')
+                : d.type === 'price_tags'
+                  ? t('Price Tags')
+                  : t('Checkout')}
               {d.id === session.device.id ? t(' · This device') : ''}
             </p>
             <small>
@@ -1261,6 +1275,16 @@ export function DevicesPage() {
               >
                 <option value="true">{t('Registered')}</option>
                 <option value="false">{t('Blocked')}</option>
+              </select>
+            </Field>
+            <Field label={t('Device environment')}>
+              <select
+                value={edit.type}
+                onChange={(e) => setEdit({ ...edit, type: e.target.value as Device['type'] })}
+              >
+                <option value="management">{t('Management')}</option>
+                <option value="pos">{t('Checkout')}</option>
+                <option value="price_tags">{t('Price Tags')}</option>
               </select>
             </Field>
             <ErrorMessage error={mutation.error} />

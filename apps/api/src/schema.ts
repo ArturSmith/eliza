@@ -43,6 +43,7 @@ export const employees = pgTable('employees', {
     .notNull()
     .default(sql`('E-' || substring(replace(gen_random_uuid()::text,'-','') from 1 for 12))`),
   pinHash: text('pin_hash'),
+  priceTagsAccess: boolean('price_tags_access').notNull().default(false),
   passwordHash: text('password_hash').notNull(),
   active: boolean('active').notNull().default(true),
   createdAt: created(),

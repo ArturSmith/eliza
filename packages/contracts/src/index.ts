@@ -149,7 +149,7 @@ export type Product = Omit<ProductInput, 'cost'> & {
 export type Session = {
   user: { id: string; name: string; email: string; role: string; permissions: Permission[] };
   store: { id: string; name: string; currency: string; timezone: string };
-  device: { id: string; name: string };
+  device: { id: string; name: string; type: 'management' | 'pos' | 'price_tags' };
 };
 export type Movement = {
   id: string;
@@ -173,7 +173,13 @@ export type AuditEvent = {
   details: unknown;
   createdAt: string;
 };
-export type Device = { id: string; name: string; type: string; active: boolean; createdAt: string };
+export type Device = {
+  id: string;
+  name: string;
+  type: 'management' | 'pos' | 'price_tags';
+  active: boolean;
+  createdAt: string;
+};
 export type Employee = {
   id: string;
   name: string;
@@ -182,6 +188,7 @@ export type Employee = {
   roleId: string;
   employeeCode: string;
   hasPin: boolean;
+  priceTagsAccess: boolean;
   active: boolean;
   createdAt: string;
 };
@@ -215,6 +222,7 @@ export const employeeSchema = z.object({
   email: z.union([z.email().max(254), z.literal('')]).default(''),
   password: z.union([z.string().min(12).max(128), z.literal('')]).default(''),
   pin: pinSchema,
+  priceTagsAccess: z.boolean().default(false),
 });
 export const pinLoginSchema = z.object({
   employeeCode: z

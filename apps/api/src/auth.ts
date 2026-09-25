@@ -107,17 +107,32 @@ export class AuthService {
     const secret = token();
     const newDeviceToken = token();
     const device = await this.database.db.transaction(async (tx) => {
-      const [existing] = await tx
-        .select()
-        .from(devices)
-        .where(
-          and(
-            eq(devices.tokenHash, hash(cookie(req, 'eliza_device'))),
-            eq(devices.storeId, user.storeId),
-          ),
-        );
+      const registerToken = cookie(req, 'eliza_register');
+      const registerDevice = registerToken
+        ? await tx
+            .select()
+            .from(devices)
+            .where(
+              and(eq(devices.tokenHash, hash(registerToken)), eq(devices.storeId, user.storeId)),
+            )
+        : [];
+      const [existing] = registerDevice.length
+        ? registerDevice
+        : await tx
+            .select()
+            .from(devices)
+            .where(
+              and(
+                eq(devices.tokenHash, hash(cookie(req, 'eliza_device'))),
+                eq(devices.storeId, user.storeId),
+              ),
+            );
       if (existing && !existing.active)
         throw new UnauthorizedException('This device has been blocked. Contact the store owner.');
+      if (existing && existing.type !== 'management')
+        throw new UnauthorizedException(
+          'This device is assigned to another workspace. Ask a manager to change it in Devices.',
+        );
       const device =
         existing ??
         (
@@ -157,6 +172,11 @@ export class AuthService {
     res.cookie('eliza_session', secret, { ...options, maxAge: 12 * 3600_000 });
     if (device.isNew)
       res.cookie('eliza_device', newDeviceToken, { ...options, maxAge: 365 * 86400_000 });
+    else if (!cookie(req, 'eliza_device') && cookie(req, 'eliza_register'))
+      res.cookie('eliza_device', cookie(req, 'eliza_register'), {
+        ...options,
+        maxAge: 365 * 86400_000,
+      });
     return { ok: true };
   }
 }
@@ -166,6 +186,17 @@ export class AuthController {
     private database: Database,
     private auth: AuthService,
   ) {}
+  @Get('device-environment') async environment(@Req() req: Request) {
+    const registerToken = cookie(req, 'eliza_register');
+    const managementToken = cookie(req, 'eliza_device');
+    const hashes = [registerToken, managementToken].filter(Boolean).map(hash);
+    if (!hashes.length) return { type: 'management' };
+    const result = await this.database.pool.query(
+      'SELECT type FROM devices WHERE token_hash=ANY($1::text[]) ORDER BY CASE WHEN token_hash=$2 THEN 0 ELSE 1 END LIMIT 1',
+      [hashes, hash(registerToken)],
+    );
+    return { type: result.rows[0]?.type ?? 'management' };
+  }
   @Get('status') async status() {
     return {
       needsSetup:

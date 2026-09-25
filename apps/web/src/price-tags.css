@@ -1,0 +1,121 @@
+.price-tags-shell {
+  min-height: 100vh;
+  padding: 2rem;
+  max-width: 1100px;
+  margin: auto;
+  color: #243b2f;
+}
+.price-tags-header,
+.price-tags-controls,
+.price-tags-product {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.price-tags-header {
+  margin-bottom: 2rem;
+}
+.price-tags-header h1 {
+  margin: 0;
+}
+.price-tags-controls {
+  margin-bottom: 1.5rem;
+}
+.price-tags-controls label {
+  flex: 1;
+}
+.price-tags-shell label {
+  display: grid;
+  gap: 0.45rem;
+}
+.price-tags-shell input:not([type='checkbox']),
+.price-tags-shell select {
+  padding: 0.75rem;
+  border: 1px solid #cad9ca;
+  border-radius: 0.5rem;
+  width: 100%;
+}
+.price-tags-product-list {
+  border: 1px solid #dce5dc;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+.price-tags-product {
+  display: flex !important;
+  padding: 1rem;
+  border-bottom: 1px solid #dce5dc;
+  cursor: pointer;
+}
+.price-tags-product:last-child {
+  border-bottom: 0;
+}
+.price-tags-product input {
+  width: 1.2rem;
+  height: 1.2rem;
+}
+.price-tags-product span {
+  flex: 1;
+}
+.price-tags-product small {
+  display: block;
+  color: #66776a;
+}
+.price-tags-login {
+  max-width: 440px;
+  padding-top: 10vh;
+}
+.price-tags-login form {
+  display: grid;
+  gap: 1rem;
+}
+.price-tags-print-sheet {
+  display: none;
+}
+@media print {
+  body {
+    background: #fff !important;
+  }
+  .price-tags-shell {
+    padding: 0;
+    max-width: none;
+  }
+  .price-tags-shell > *:not(.price-tags-print-sheet) {
+    display: none !important;
+  }
+  .price-tags-print-sheet {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4mm;
+  }
+  .price-tag {
+    border: 1px solid #222;
+    min-height: 48mm;
+    padding: 5mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    break-inside: avoid;
+    color: #000;
+  }
+  .price-tag strong {
+    font-size: 12pt;
+  }
+  .price-tag-price {
+    font-size: 22pt;
+    font-weight: 800;
+  }
+  .price-tag small {
+    font-size: 9pt;
+  }
+  @page {
+    size: A4;
+    margin: 10mm;
+  }
+}
+@media print {
+  body:has(.price-tags-print-sheet) .price-tags-print-sheet,
+  body:has(.price-tags-print-sheet) .price-tags-print-sheet * {
+    visibility: visible !important;
+  }
+}

@@ -65,6 +65,7 @@ export class AccessGuard implements CanActivate {
           gt(sessions.expiresAt, new Date()),
           eq(employees.active, true),
           eq(devices.active, true),
+          eq(devices.type, 'management'),
         ),
       );
     if (!row || row.device.storeId !== row.store.id || row.role.storeId !== row.store.id)
@@ -89,7 +90,7 @@ export class AccessGuard implements CanActivate {
         currency: row.store.currency,
         timezone: row.store.timezone,
       },
-      device: { id: row.device.id, name: row.device.name },
+      device: { id: row.device.id, name: row.device.name, type: row.device.type as 'management' },
     };
     return true;
   }

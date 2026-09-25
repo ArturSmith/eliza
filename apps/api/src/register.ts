@@ -62,11 +62,14 @@ export class RegisterService {
   ) {}
   async device(client: PoolClient, req: Request) {
     const row = (
-      await client.query("SELECT * FROM devices WHERE token_hash=$1 AND type='pos' FOR UPDATE", [
-        hash(cookie(req, 'eliza_register')),
-      ])
+      await client.query(
+        'SELECT * FROM devices WHERE token_hash=$1 OR token_hash=$2 ORDER BY CASE WHEN token_hash=$1 THEN 0 ELSE 1 END LIMIT 1 FOR UPDATE',
+        [hash(cookie(req, 'eliza_register')), hash(cookie(req, 'eliza_device'))],
+      )
     ).rows[0];
     if (!row) throw new UnauthorizedException('This browser needs register enrollment.');
+    if (row.type !== 'pos')
+      throw new ForbiddenException('This device is assigned to another workspace.');
     if (!row.active) throw new ForbiddenException('This register is blocked. Contact the owner.');
     return row;
   }
@@ -137,11 +140,13 @@ export class RegisterService {
     return this.operations.transaction(async (client) => {
       const device = (
         await client.query(
-          "SELECT d.*,s.name AS store_name,s.currency,s.timezone FROM devices d JOIN stores s ON s.id=d.store_id WHERE d.token_hash=$1 AND d.type='pos'",
-          [hash(cookie(req, 'eliza_register'))],
+          'SELECT d.*,s.name AS store_name,s.currency,s.timezone FROM devices d JOIN stores s ON s.id=d.store_id WHERE d.token_hash=$1 OR d.token_hash=$2 ORDER BY CASE WHEN d.token_hash=$1 THEN 0 ELSE 1 END LIMIT 1',
+          [hash(cookie(req, 'eliza_register')), hash(cookie(req, 'eliza_device'))],
         )
       ).rows[0];
       if (!device) return { registered: false };
+      if (device.type !== 'pos')
+        throw new ForbiddenException('This device is assigned to another workspace.');
       if (!device.active) return { registered: true, blocked: true };
       const base: PosContext = {
         registered: true,

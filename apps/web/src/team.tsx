@@ -30,7 +30,15 @@ export function TeamManagementPage() {
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const body = Object.fromEntries(new FormData(e.currentTarget));
-    mutation.mutate(employee ? { ...body, active: body.active === 'true' } : body);
+    mutation.mutate(
+      employee
+        ? {
+            ...body,
+            active: body.active === 'true',
+            priceTagsAccess: body.priceTagsAccess === 'on',
+          }
+        : { ...body, priceTagsAccess: body.priceTagsAccess === 'on' },
+    );
   }
   return (
     <>
@@ -154,6 +162,15 @@ export function TeamManagementPage() {
               </select>
             </Field>
           </div>
+          <label className="field">
+            <span>{t('Price Tags access')}</span>
+            <input
+              name="priceTagsAccess"
+              type="checkbox"
+              defaultChecked={employee?.priceTagsAccess ?? false}
+            />
+            <small>{t('Allow this employee to sign in on a Price Tags device.')}</small>
+          </label>
           <Field
             label={employee ? t('New PIN (optional)') : t('Register PIN')}
             hint={

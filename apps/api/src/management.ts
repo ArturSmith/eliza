@@ -1,5 +1,6 @@
 import {
   Body,
+  BadRequestException,
   Controller,
   Get,
   Module,
@@ -8,8 +9,10 @@ import {
   ParseUUIDPipe,
   Patch,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { Database } from './database.js';
@@ -47,6 +50,7 @@ export class ManagementController {
         roleId: employees.roleId,
         employeeCode: employees.employeeCode,
         hasPin: sql<boolean>`${employees.pinHash} IS NOT NULL`,
+        priceTagsAccess: employees.priceTagsAccess,
         role: roles.name,
         active: employees.active,
         createdAt: employees.createdAt,
@@ -71,30 +75,59 @@ export class ManagementController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() input: unknown,
     @Req() req: AuthRequest,
+    @Res({ passthrough: true }) res: Response,
   ) {
     const body = parse(
-      z.object({ name: z.string().trim().min(1).max(120), active: z.boolean() }),
+      z.object({
+        name: z.string().trim().min(1).max(120),
+        active: z.boolean(),
+        type: z.enum(['management', 'pos', 'price_tags']).optional(),
+      }),
       input,
     );
     const { store, user, device } = req.context;
-    return this.database.db.transaction(async (tx) => {
+    const result = await this.database.db.transaction(async (tx) => {
       const [old] = await tx
         .select()
         .from(devices)
         .where(and(eq(devices.id, id), eq(devices.storeId, store.id)))
         .for('update');
       if (!old) throw new NotFoundException('Device not found.');
-      await tx.update(devices).set(body).where(eq(devices.id, id));
+      const type = body.type ?? old.type;
+      if (old.type === 'pos' && type !== 'pos') {
+        const open = await tx.execute(
+          sql`SELECT id FROM shifts WHERE device_id=${id} AND status='open' LIMIT 1`,
+        );
+        if (open.rowCount)
+          throw new BadRequestException(
+            'Close the open cashier shift before changing this device.',
+          );
+      }
+      await tx
+        .update(devices)
+        .set({ ...body, type })
+        .where(eq(devices.id, id));
+      if (old.type !== type || !body.active) {
+        await tx.execute(sql`DELETE FROM sessions WHERE device_id=${id}`);
+        await tx.execute(sql`DELETE FROM pos_sessions WHERE device_id=${id}`);
+        await tx.execute(sql`DELETE FROM price_tag_sessions WHERE device_id=${id}`);
+      }
       await tx.insert(audits).values({
         storeId: store.id,
         employeeId: user.id,
         deviceId: device.id,
         action: 'Device updated',
         entityId: id,
-        details: { before: { name: old.name, active: old.active }, after: body },
+        details: {
+          before: { name: old.name, active: old.active, type: old.type },
+          after: { ...body, type },
+        },
       });
       return { ok: true };
     });
+    if (id === device.id && body.type && body.type !== device.type)
+      res.clearCookie('eliza_register', { path: '/api' });
+    return result;
   }
 }
 @Module({ imports: [AuthModule], controllers: [ManagementController] })

@@ -52,7 +52,7 @@ export class TeamController {
       if (!role) throw new BadRequestException('Choose a role from this store.');
       const employee = (
         await client.query(
-          'INSERT INTO employees(store_id,role_id,name,email,password_hash,employee_code,pin_hash) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id',
+          'INSERT INTO employees(store_id,role_id,name,email,password_hash,employee_code,pin_hash,price_tags_access) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
           [
             store.id,
             body.roleId,
@@ -61,6 +61,7 @@ export class TeamController {
             password,
             body.employeeCode,
             pin,
+            body.priceTagsAccess,
           ],
         )
       ).rows[0];
@@ -89,6 +90,7 @@ export class TeamController {
           .transform((v) => v.toUpperCase()),
         roleId: z.uuid(),
         active: z.boolean(),
+        priceTagsAccess: z.boolean().optional(),
         pin: z.union([pinSchema, z.literal('')]).default(''),
       }),
       input,
@@ -125,11 +127,21 @@ export class TeamController {
           'Close this employee’s open shift before disabling their account.',
         );
       await client.query(
-        'UPDATE employees SET name=$1,employee_code=$2,role_id=$3,active=$4,pin_hash=COALESCE($5,pin_hash) WHERE id=$6',
-        [body.name, body.employeeCode, body.roleId, body.active, pin, id],
+        'UPDATE employees SET name=$1,employee_code=$2,role_id=$3,active=$4,pin_hash=COALESCE($5,pin_hash),price_tags_access=$7 WHERE id=$6',
+        [
+          body.name,
+          body.employeeCode,
+          body.roleId,
+          body.active,
+          pin,
+          id,
+          body.priceTagsAccess ?? old.price_tags_access,
+        ],
       );
       if (pin || !body.active || old.role_id !== body.roleId)
         await client.query('DELETE FROM pos_sessions WHERE employee_id=$1', [id]);
+      if (pin || !body.active || body.priceTagsAccess === false)
+        await client.query('DELETE FROM price_tag_sessions WHERE employee_id=$1', [id]);
       await audit(
         client,
         { storeId: store.id, employeeId: user.id, deviceId: device.id },
