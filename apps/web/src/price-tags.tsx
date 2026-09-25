@@ -41,6 +41,7 @@ export function PriceTagsPage() {
   });
   const [selected, setSelected] = useState<string[]>([]);
   const [printItems, setPrintItems] = useState<Product[]>([]);
+  const [printMode, setPrintMode] = useState<'regular' | 'weight'>('regular');
   const [search, setSearch] = useState('');
   const [weightProductId, setWeightProductId] = useState('');
   const [packageWeight, setPackageWeight] = useState('');
@@ -54,6 +55,7 @@ export function PriceTagsPage() {
     text: string;
   } | null>(null);
   const scanSound = useRef<AudioContext | null>(null);
+  const weightInput = useRef<HTMLInputElement | null>(null);
   useEffect(
     () => () => {
       void scanSound.current?.close();
@@ -86,6 +88,14 @@ export function PriceTagsPage() {
       oscillator.stop(from + 0.09);
     }
   }
+  function selectWeightProduct(product: Product) {
+    setWeightProductId(product.id);
+    setPackageWeight('');
+    setWeightLabel(null);
+    createWeightLabel.reset();
+    setSelected((before) => before.filter((id) => id !== product.id));
+    requestAnimationFrame(() => weightInput.current?.focus());
+  }
   function selectScannedProduct(code: string) {
     setSearch(code);
     const matching = (products.data ?? []).filter(
@@ -104,6 +114,15 @@ export function PriceTagsPage() {
       return;
     }
     const product = matching[0];
+    if (product.unit === 'kilogram') {
+      selectWeightProduct(product);
+      setScanFeedback({
+        type: 'success',
+        text: t('Enter package weight for {value0}', { value0: product.name }),
+      });
+      playScanSound(true);
+      return;
+    }
     setSelected((before) => (before.includes(product.id) ? before : [...before, product.id]));
     setScanFeedback({
       type: 'success',
@@ -120,6 +139,7 @@ export function PriceTagsPage() {
       api<{ products: Product[] }>('/price-tags/prints', { productIds }),
     onSuccess: (result) => {
       setPrintItems(result.products);
+      setPrintMode('regular');
       requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
     },
   });
@@ -135,6 +155,7 @@ export function PriceTagsPage() {
       setWeightLabel(null);
       setWeightProductId('');
       setPackageWeight('');
+      setPrintItems([]);
       void queryClient.invalidateQueries({ queryKey: ['price-tags-context'] });
     },
   });
@@ -204,12 +225,9 @@ export function PriceTagsPage() {
       (text) => text?.toLowerCase().includes(search.toLowerCase()),
     ),
   );
-  const weightProducts = all.filter(
-    (product) => product.unit === 'kilogram' && /^\d+$/.test(product.plu),
-  );
   const chosen = selected
     .map((id) => all.find((product) => product.id === id))
-    .filter((product): product is Product => !!product);
+    .filter((product): product is Product => !!product && product.unit !== 'kilogram');
   const price = (amount: string) =>
     new Intl.NumberFormat(undefined, { style: 'currency', currency: value.store.currency }).format(
       Number(amount),
@@ -257,127 +275,161 @@ export function PriceTagsPage() {
         </p>
       )}
       <ErrorMessage error={products.error ?? print.error} />
-      <section className="weight-label-panel" aria-labelledby="weight-label-title">
-        <h2 id="weight-label-title">{t('Weight barcode for a package')}</h2>
-        <p>
-          {t(
-            'Choose the original product and enter the measured net weight. At checkout, scanning the code adds exactly this weight in kilograms.',
-          )}
-        </p>
-        {!value.store.scaleBarcode.enabled || value.store.scaleBarcode.mode !== 'weight' ? (
-          <p className="price-tags-scan-feedback error">
-            {t('Ask a manager to enable weight barcodes in Store settings.')}
-          </p>
-        ) : (
-          <form
-            className="weight-label-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              setWeightLabel(null);
-              createWeightLabel.mutate({
-                productId: weightProductId,
-                weight: packageWeight.trim().replace(',', '.'),
-              });
-            }}
-          >
-            <label>
-              {t('Product sold by kilogram')}
-              <select
-                required
-                disabled={createWeightLabel.isPending}
-                value={weightProductId}
-                onChange={(event) => {
-                  setWeightProductId(event.target.value);
-                  setWeightLabel(null);
-                }}
-              >
-                <option value="">{t('Choose product…')}</option>
-                {weightProducts.map((product) => (
-                  <option key={product.id} value={product.id}>
-                    {product.name} · PLU {product.plu}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {t('Net weight (kg)')}
-              <input
-                required
-                disabled={createWeightLabel.isPending}
-                inputMode="decimal"
-                pattern="[0-9]+([.,][0-9]{1,3})?"
-                placeholder="0.500"
-                value={packageWeight}
-                onChange={(event) => {
-                  setPackageWeight(event.target.value);
-                  setWeightLabel(null);
-                }}
-              />
-            </label>
-            <Button disabled={!weightProducts.length || createWeightLabel.isPending}>
-              {t('Generate weight barcode')}
-            </Button>
-          </form>
-        )}
-        {!products.isPending &&
-          !products.error &&
-          !weightProducts.length &&
-          value.store.scaleBarcode.enabled && (
-            <p className="muted">{t('Add an active kilogram product with a numeric PLU first.')}</p>
-          )}
-        <ErrorMessage error={createWeightLabel.error} />
-        {weightLabel && (
-          <div className="weight-label-result" role="status">
-            <strong>
-              {weightLabel.name} · {weightLabel.weight} {t('kg')}
-            </strong>
-            <Ean13Barcode code={weightLabel.barcode} />
-            <code>{weightLabel.barcode}</code>
-          </div>
-        )}
-      </section>
       <div className="price-tags-product-list">
-        {visible.map((product) => (
-          <label key={product.id} className="price-tags-product">
-            <input
-              type="checkbox"
-              checked={selected.includes(product.id)}
-              onChange={(event) =>
-                setSelected((before) =>
-                  event.target.checked
-                    ? [...before, product.id]
-                    : before.filter((id) => id !== product.id),
-                )
-              }
-            />
-            <span>
-              <strong>{product.name}</strong>
-              <small>
-                {product.sku} · {product.barcode || product.plu}
-              </small>
-            </span>
-            <b>{price(product.price)}</b>
-          </label>
-        ))}
+        {visible.map((product) =>
+          product.unit === 'kilogram' ? (
+            <div key={product.id} className="price-tags-weight-item">
+              <button
+                type="button"
+                className={
+                  'price-tags-product price-tags-weight-select' +
+                  (weightProductId === product.id ? ' is-open' : '')
+                }
+                aria-expanded={weightProductId === product.id}
+                disabled={createWeightLabel.isPending}
+                onClick={() => selectWeightProduct(product)}
+              >
+                <span>
+                  <strong>{product.name}</strong>
+                  <small>
+                    {product.sku} · PLU {product.plu || '—'}
+                  </small>
+                </span>
+                <b>
+                  {price(product.price)}/{t('kg')}
+                </b>
+                <span className="weight-select-action">{t('Enter package weight')}</span>
+              </button>
+              {weightProductId === product.id && (
+                <div className="price-tags-weight-details">
+                  <p>
+                    {t(
+                      'Enter the measured net weight. Checkout will add this exact weight to the cart.',
+                    )}
+                  </p>
+                  {!value.store.scaleBarcode.enabled ||
+                  value.store.scaleBarcode.mode !== 'weight' ? (
+                    <p className="price-tags-scan-feedback error">
+                      {t('Ask a manager to enable weight barcodes in Store settings.')}
+                    </p>
+                  ) : !/^\d+$/.test(product.plu) ? (
+                    <p className="price-tags-scan-feedback error">
+                      {t('Add a numeric PLU to this product before creating a weight barcode.')}
+                    </p>
+                  ) : (
+                    <form
+                      className="weight-label-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        setWeightLabel(null);
+                        createWeightLabel.mutate({
+                          productId: product.id,
+                          weight: packageWeight.trim().replace(',', '.'),
+                        });
+                      }}
+                    >
+                      <label>
+                        {t('Net weight (kg)')}
+                        <input
+                          ref={weightInput}
+                          required
+                          disabled={createWeightLabel.isPending}
+                          inputMode="decimal"
+                          pattern="[0-9]+([.,][0-9]{1,3})?"
+                          placeholder="0.500"
+                          value={packageWeight}
+                          onChange={(event) => {
+                            setPackageWeight(event.target.value);
+                            setWeightLabel(null);
+                            createWeightLabel.reset();
+                          }}
+                        />
+                      </label>
+                      <Button disabled={createWeightLabel.isPending}>
+                        {t('Generate weight barcode')}
+                      </Button>
+                    </form>
+                  )}
+                  <ErrorMessage error={createWeightLabel.error} />
+                  {weightLabel && (
+                    <div className="weight-label-result" role="status">
+                      <strong>
+                        {weightLabel.name} · {weightLabel.weight} {t('kg')}
+                      </strong>
+                      <Ean13Barcode code={weightLabel.barcode} />
+                      <code>{weightLabel.barcode}</code>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setPrintMode('weight');
+                          requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+                        }}
+                      >
+                        <Printer size={17} /> {t('Print weight label')}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <label key={product.id} className="price-tags-product">
+              <input
+                type="checkbox"
+                checked={selected.includes(product.id)}
+                onChange={(event) =>
+                  setSelected((before) =>
+                    event.target.checked
+                      ? [...before, product.id]
+                      : before.filter((id) => id !== product.id),
+                  )
+                }
+              />
+              <span>
+                <strong>{product.name}</strong>
+                <small>
+                  {product.sku} · {product.barcode || product.plu}
+                </small>
+              </span>
+              <b>{price(product.price)}</b>
+            </label>
+          ),
+        )}
       </div>
-      <div className="price-tags-print-action">
-        <Button
-          onClick={() => print.mutate(chosen.map((product) => product.id))}
-          disabled={!chosen.length || print.isPending}
-        >
-          <Printer size={17} /> {t('Print selected tags')} ({chosen.length})
-        </Button>
-      </div>
-      <div className="price-tags-print-sheet">
-        {printItems.map((product) => (
-          <article key={product.id} className="price-tag">
-            <strong>{product.name}</strong>
-            <div className="price-tag-price">{price(product.price)}</div>
-            <small>
-              {product.unit} · {product.barcode || product.plu || product.sku}
-            </small>
+      {(!weightProductId || chosen.length > 0) && (
+        <div className="price-tags-print-action">
+          <Button
+            onClick={() => print.mutate(chosen.map((product) => product.id))}
+            disabled={!chosen.length || print.isPending}
+          >
+            <Printer size={17} /> {t('Print selected tags')} ({chosen.length})
+          </Button>
+        </div>
+      )}
+      <div
+        className={
+          'price-tags-print-sheet' + (printMode === 'weight' ? ' price-tags-weight-print' : '')
+        }
+      >
+        {printMode === 'weight' && weightLabel ? (
+          <article className="price-tag price-tag-weight">
+            <strong>{weightLabel.name}</strong>
+            <div>
+              {t('Net weight (kg)')}: {weightLabel.weight}
+            </div>
+            <Ean13Barcode code={weightLabel.barcode} />
           </article>
-        ))}
+        ) : (
+          printItems.map((product) => (
+            <article key={product.id} className="price-tag">
+              <strong>{product.name}</strong>
+              <div className="price-tag-price">{price(product.price)}</div>
+              <small>
+                {product.unit} · {product.barcode || product.plu || product.sku}
+              </small>
+            </article>
+          ))
+        )}
       </div>
     </div>
   );
