@@ -1,3 +1,101 @@
+.store-settings-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+.store-settings-nav {
+  position: sticky;
+  top: 1.5rem;
+  display: grid;
+  gap: 0.25rem;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: #fff;
+}
+.store-settings-nav strong {
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+  color: #687b6c;
+}
+.store-settings-nav a {
+  padding: 0.7rem 0.8rem;
+  border-radius: 0.5rem;
+  color: #294437;
+  text-decoration: none;
+}
+.store-settings-nav a:hover,
+.store-settings-nav a:focus-visible {
+  background: #edf5ed;
+}
+.store-settings-form,
+.store-settings-form fieldset {
+  min-width: 0;
+}
+.store-settings-form fieldset {
+  display: grid;
+  gap: 1.5rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.store-settings-section {
+  padding: clamp(1.25rem, 3vw, 2rem);
+  scroll-margin-top: 1.5rem;
+}
+.store-settings-section header {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.store-settings-section h2,
+.store-settings-section h3,
+.store-settings-section h4 {
+  margin: 0 0 0.75rem;
+}
+.store-settings-section header p {
+  margin: 0;
+}
+.store-settings-section > .form-grid,
+.store-settings-section > .muted,
+.store-settings-section > .store-settings-fixed,
+.store-settings-section > .tag-design-options {
+  margin-bottom: 1.25rem;
+}
+.store-settings-section > :last-child {
+  margin-bottom: 0;
+}
+.store-settings-fixed {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  padding: 0.8rem 1rem;
+  border-radius: 0.5rem;
+  background: #f5f8f4;
+  color: #52675a;
+}
+.store-settings-save {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0 0 2rem;
+}
+@media (max-width: 800px) {
+  .store-settings-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .store-settings-nav {
+    position: static;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+  .store-settings-nav strong {
+    flex-basis: 100%;
+  }
+}
 .tag-design-options {
   display: flex;
   flex-wrap: wrap;

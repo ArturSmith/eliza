@@ -1635,5 +1635,13 @@
   "Show package price on weight labels": "Показывать цену упаковки на весовой этикетке",
   "Tag preview": "Предпросмотр этикеток",
   "Sample product": "Пример товара",
-  "Sample weight product": "Пример весового товара"
+  "Sample weight product": "Пример весового товара",
+  "Settings sections": "Разделы настроек",
+  "Business details": "Данные магазина",
+  "Product defaults": "Настройки новых товаров",
+  "Receipts": "Чеки",
+  "Name and contact details shown on receipts.": "Название и контактные данные, которые отображаются на чеках.",
+  "Applied when you add new products.": "Применяются при добавлении новых товаров.",
+  "Review the header and footer customers will see.": "Проверьте заголовок и нижний колонтитул чека.",
+  "Manage business details, product defaults, barcodes, labels, and receipts.": "Настройте данные магазина, товары, штрихкоды, этикетки и чеки."
 }
