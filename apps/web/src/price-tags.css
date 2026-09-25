@@ -22,12 +22,15 @@
 .price-tags-controls {
   margin-bottom: 1.5rem;
 }
-.price-tags-controls label {
+.price-tags-search-field {
   flex: 1;
   min-width: 0;
+  display: grid;
+  gap: 0.45rem;
 }
 .price-tags-search-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.65rem;
 }
@@ -38,6 +41,34 @@
 .price-tags-search-row .camera-scan-button {
   width: 46px;
   height: 46px;
+}
+.price-tags-search-row .camera-scan-inline {
+  flex: 0 0 100%;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid #dce5dc;
+  border-radius: 0.75rem;
+  background: #f7faf6;
+}
+.price-tags-search-row .camera-scan-inline p {
+  margin: 0 0 0.75rem;
+  color: #516755;
+}
+.price-tags-search-row .camera-scan-preview video {
+  max-height: 320px;
+}
+.price-tags-scan-feedback {
+  padding: 0.75rem 1rem;
+  border-radius: 0.65rem;
+  margin: 0 0 1rem;
+}
+.price-tags-scan-feedback.success {
+  background: #e9f6ea;
+  color: #245e36;
+}
+.price-tags-scan-feedback.error {
+  background: #fff1ee;
+  color: #a64033;
 }
 .price-tags-shell label {
   display: grid;

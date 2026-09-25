@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { LockKeyhole, Printer } from 'lucide-react';
 import { api, queryClient } from './api';
@@ -22,6 +22,7 @@ type Product = {
   unit: string;
   plu: string;
   barcode: string;
+  barcodes: string[];
 };
 
 export function PriceTagsPage() {
@@ -39,6 +40,68 @@ export function PriceTagsPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [printItems, setPrintItems] = useState<Product[]>([]);
   const [search, setSearch] = useState('');
+  const [scanFeedback, setScanFeedback] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
+  const scanSound = useRef<AudioContext | null>(null);
+  useEffect(
+    () => () => {
+      void scanSound.current?.close();
+    },
+    [],
+  );
+  function prepareScanSound() {
+    try {
+      scanSound.current ??= new AudioContext();
+      void scanSound.current.resume();
+    } catch {
+      // Product selection still works without audio output.
+    }
+  }
+  function playScanSound(success: boolean) {
+    const audio = scanSound.current;
+    if (!audio) return;
+    const start = audio.currentTime;
+    for (const [index, frequency] of (success ? [880, 1320] : [330, 220]).entries()) {
+      const oscillator = audio.createOscillator();
+      const volume = audio.createGain();
+      const from = start + index * 0.09;
+      oscillator.type = 'sine';
+      oscillator.frequency.value = frequency;
+      volume.gain.setValueAtTime(0.0001, from);
+      volume.gain.exponentialRampToValueAtTime(0.12, from + 0.01);
+      volume.gain.exponentialRampToValueAtTime(0.0001, from + 0.08);
+      oscillator.connect(volume).connect(audio.destination);
+      oscillator.start(from);
+      oscillator.stop(from + 0.09);
+    }
+  }
+  function selectScannedProduct(code: string) {
+    setSearch(code);
+    const matching = (products.data ?? []).filter(
+      (product) => (product.barcodes ?? []).includes(code) || product.barcode === code,
+    );
+    if (matching.length !== 1) {
+      setScanFeedback({
+        type: 'error',
+        text: t(
+          matching.length
+            ? 'This code matches multiple products. Select the correct product below.'
+            : 'No active product matches this barcode. Check the code or select a product.',
+        ),
+      });
+      playScanSound(false);
+      return;
+    }
+    const product = matching[0];
+    setSelected((before) => (before.includes(product.id) ? before : [...before, product.id]));
+    setScanFeedback({
+      type: 'success',
+      text: t('Selected for printing: {value0}', { value0: product.name }),
+    });
+    playScanSound(true);
+  }
   const login = useMutation({
     mutationFn: (body: unknown) => api('/price-tags/login', body),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['price-tags-context'] }),
@@ -120,8 +183,8 @@ export function PriceTagsPage() {
     );
   const all = products.data ?? [];
   const visible = all.filter((product) =>
-    [product.name, product.sku, product.barcode, product.plu].some((text) =>
-      text?.toLowerCase().includes(search.toLowerCase()),
+    [product.name, product.sku, product.barcode, product.plu, ...(product.barcodes ?? [])].some(
+      (text) => text?.toLowerCase().includes(search.toLowerCase()),
     ),
   );
   const chosen = selected
@@ -146,18 +209,33 @@ export function PriceTagsPage() {
         <a href="/management-access?from=price-tags">{t('Management sign in')}</a>
       </header>
       <div className="price-tags-controls">
-        <label>
-          {t('Find products')}
-          <span className="price-tags-search-row">
+        <div className="price-tags-search-field">
+          <label htmlFor="price-tags-search">{t('Find products')}</label>
+          <div className="price-tags-search-row">
             <input
+              id="price-tags-search"
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setScanFeedback(null);
+              }}
               placeholder={t('Name, SKU, PLU or barcode')}
             />
-            <CameraBarcodeScanner onScan={setSearch} />
-          </span>
-        </label>
+            <CameraBarcodeScanner
+              inline
+              continuous
+              disabled={products.isPending || !!products.error}
+              onOpen={prepareScanSound}
+              onScan={selectScannedProduct}
+            />
+          </div>
+        </div>
       </div>
+      {scanFeedback && (
+        <p className={`price-tags-scan-feedback ${scanFeedback.type}`} role="status">
+          {scanFeedback.text}
+        </p>
+      )}
       <ErrorMessage error={products.error ?? print.error} />
       <div className="price-tags-product-list">
         {visible.map((product) => (

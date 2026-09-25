@@ -97,7 +97,7 @@ describe.sequential('Price Tags station', () => {
       price: '12',
       cost: '8',
       minStock: '0',
-      barcodes: [],
+      barcodes: ['7090000000015', '7090000000022'],
       plu: '',
     });
     expect(product.status).toBe(201);
@@ -127,7 +127,9 @@ describe.sequential('Price Tags station', () => {
     ).toBe(200);
     const products = await manager.request('/price-tags/products');
     expect(products.status).toBe(200);
-    expect(products.body).toMatchObject([{ id: product.body.id, price: '12.00' }]);
+    expect(products.body).toMatchObject([
+      { id: product.body.id, price: '12.00', barcodes: ['7090000000015', '7090000000022'] },
+    ]);
     const printed = await manager.request('/price-tags/prints', { productIds: [product.body.id] });
     expect(printed.status).toBe(201);
     expect(printed.body.products[0].price).toBe('12.00');

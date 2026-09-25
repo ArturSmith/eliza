@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { IScannerControls } from '@zxing/browser';
-import { ScanLine } from 'lucide-react';
+import { ScanLine, X } from 'lucide-react';
 import { t, useLanguage } from './i18n';
 import { Dialog } from './components/ui/dialog';
 
@@ -8,11 +8,13 @@ export function CameraBarcodeScanner({
   onScan,
   disabled = false,
   continuous = false,
+  inline = false,
   onOpen,
 }: {
   onScan: (barcode: string) => void;
   disabled?: boolean;
   continuous?: boolean;
+  inline?: boolean;
   onOpen?: () => void;
 }) {
   useLanguage();
@@ -76,38 +78,64 @@ export function CameraBarcodeScanner({
     };
   }, [open, continuous]);
 
+  const preview = (
+    <div className="camera-scan-preview">
+      <video ref={videoRef} autoPlay muted playsInline aria-label={t('Camera preview')} />
+      <span className="camera-scan-target" aria-hidden="true" />
+    </div>
+  );
   return (
     <>
       <button
         type="button"
         className="camera-scan-button"
-        aria-label={t('Scan with camera')}
-        title={t('Scan with camera')}
+        aria-label={t(open && inline ? 'Close camera' : 'Scan with camera')}
+        title={t(open && inline ? 'Close camera' : 'Scan with camera')}
+        aria-expanded={open}
         disabled={disabled}
         onClick={() => {
+          if (open) {
+            setOpen(false);
+            return;
+          }
           setError('');
           onOpen?.();
           setOpen(true);
         }}
       >
-        <ScanLine size={18} aria-hidden="true" />
-      </button>
-      <Dialog
-        open={open}
-        onOpenChange={setOpen}
-        title={t('Scan barcode with camera')}
-        description={t(
-          continuous
-            ? 'Point your camera at each barcode. Scanning continues until you close this window.'
-            : 'Point your camera at a barcode. The code will fill this field automatically.',
+        {open && inline ? (
+          <X size={18} aria-hidden="true" />
+        ) : (
+          <ScanLine size={18} aria-hidden="true" />
         )}
-      >
-        <div className="camera-scan-preview">
-          <video ref={videoRef} autoPlay muted playsInline aria-label={t('Camera preview')} />
-          <span className="camera-scan-target" aria-hidden="true" />
-        </div>
-        {error && <p role="alert">{error}</p>}
-      </Dialog>
+      </button>
+      {inline ? (
+        open && (
+          <div className="camera-scan-inline">
+            <p>
+              {t(
+                'Point your camera at each barcode. Scanning continues until you close the camera.',
+              )}
+            </p>
+            {preview}
+            {error && <p role="alert">{error}</p>}
+          </div>
+        )
+      ) : (
+        <Dialog
+          open={open}
+          onOpenChange={setOpen}
+          title={t('Scan barcode with camera')}
+          description={t(
+            continuous
+              ? 'Point your camera at each barcode. Scanning continues until you close this window.'
+              : 'Point your camera at a barcode. The code will fill this field automatically.',
+          )}
+        >
+          {preview}
+          {error && <p role="alert">{error}</p>}
+        </Dialog>
+      )}
     </>
   );
 }
