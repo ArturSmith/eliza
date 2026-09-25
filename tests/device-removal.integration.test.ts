@@ -92,6 +92,15 @@ describe('device removal', () => {
       requestId: crypto.randomUUID(),
     });
     expect(movement.status).toBe(201);
+    expect((await browser.request('/pos/activate', {})).status).toBe(200);
+    expect((await browser.request('/auth/device-environment')).body.type).toBe('pos');
+    expect((await browser.request('/pos/enter', {})).body.registered).toBe(true);
+    expect((await browser.request('/auth/session')).status).toBe(401);
+    expect(
+      (await manager.request('/devices')).body.find(
+        (device: { id: string; type: string }) => device.id === oldId,
+      ).type,
+    ).toBe('pos');
     expect((await manager.request(`/devices/${oldId}`, undefined, 'DELETE')).status).toBe(200);
     expect((await db.pool.query('SELECT id FROM devices WHERE id=$1', [oldId])).rowCount).toBe(0);
     expect(
