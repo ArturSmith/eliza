@@ -185,36 +185,6 @@ export class RegisterService {
       return base;
     });
   }
-  async activate(req: AuthRequest, res: Response) {
-    const { user, store, device } = req.context;
-    await this.operations.transaction(async (client) => {
-      const current = (
-        await client.query(
-          "SELECT id FROM devices WHERE id=$1 AND store_id=$2 AND type='management' AND active AND removed_at IS NULL FOR UPDATE",
-          [device.id, store.id],
-        )
-      ).rows[0];
-      if (!current)
-        throw new ForbiddenException('This device is no longer available for Checkout.');
-      await client.query("UPDATE devices SET type='pos' WHERE id=$1", [device.id]);
-      await client.query('DELETE FROM sessions WHERE device_id=$1', [device.id]);
-      await client.query('DELETE FROM pos_sessions WHERE device_id=$1', [device.id]);
-      await client.query('DELETE FROM price_tag_sessions WHERE device_id=$1', [device.id]);
-      await audit(
-        client,
-        { storeId: store.id, employeeId: user.id, deviceId: device.id },
-        'Device environment changed',
-        device.id,
-        { from: 'management', to: 'pos' },
-      );
-    });
-    res.clearCookie('eliza_session', { path: '/api' });
-    res.cookie('eliza_register', cookie(req, 'eliza_device'), {
-      ...cookieOptions,
-      maxAge: 365 * 86400_000,
-    });
-    return { ok: true };
-  }
   async endManagement(req: Request, res: Response) {
     await this.database.pool.query('DELETE FROM sessions WHERE token_hash=$1', [
       hash(cookie(req, 'eliza_session')),
@@ -306,12 +276,6 @@ export class RegisterService {
 @Controller('pos')
 export class RegisterController {
   constructor(private registers: RegisterService) {}
-  @Post('activate') @HttpCode(200) @UseGuards(AccessGuard) @Require('devices.manage') activate(
-    @Req() req: AuthRequest,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    return this.registers.activate(req, res);
-  }
   @Post('enter') async enter(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const context = await this.registers.context(req);
     if (context.registered) await this.registers.endManagement(req, res);

@@ -2,7 +2,7 @@ import { ShoppingListsPage } from './shopping-lists';
 import { t, useLanguage } from './i18n';
 import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
-import { QueryClientProvider, useQuery, useMutation } from '@tanstack/react-query';
+import { QueryClientProvider, useQuery } from '@tanstack/react-query';
 import {
   createRootRoute,
   createRoute,
@@ -12,8 +12,6 @@ import {
   useLocation,
 } from '@tanstack/react-router';
 import { api, queryClient } from './api';
-import { ErrorMessage } from './forms';
-import { Button } from './components/ui/button';
 import { Shell, Overview, ProductsPage, InventoryPage, AuditPage, DevicesPage } from './pages';
 import { LanguageSwitcher } from './i18n/LanguageSwitcher';
 import './styles.css';
@@ -25,36 +23,12 @@ function CheckoutRoute() {
     queryKey: ['checkout-device-environment'],
     queryFn: () => api<{ type: string }>('/auth/device-environment'),
   });
-  const activate = useMutation({
-    mutationFn: () => api('/pos/activate', {}),
-    onSuccess: () => window.location.replace('/pos'),
-  });
-  const activationStarted = React.useRef(false);
-  React.useEffect(() => {
-    if (environment.data?.type === 'management' && !activationStarted.current) {
-      activationStarted.current = true;
-      activate.mutate();
-    }
-  }, [environment.data?.type]);
-  if (
-    environment.isPending ||
-    activate.isPending ||
-    (environment.data?.type === 'management' && !activate.isError)
-  )
-    return <div className="loading">{t('Opening register…')}</div>;
-  if (environment.error || activate.error)
+  if (environment.isPending) return <div className="loading">{t('Opening register…')}</div>;
+  if (environment.data?.type === 'management')
     return (
       <div className="connection-error">
-        <ErrorMessage error={environment.error ?? activate.error} />
-        <Button
-          onClick={() => {
-            if (environment.data?.type === 'management') activate.mutate();
-            else void environment.refetch();
-          }}
-        >
-          {t('Try again')}
-        </Button>
-        <a href="/">{t('Back to management')}</a>
+        <p>{t('Assign this device to Checkout in Devices before opening the register.')}</p>
+        <a href="/devices">{t('Devices')}</a>
       </div>
     );
   return (

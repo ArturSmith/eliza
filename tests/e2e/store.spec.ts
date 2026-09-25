@@ -81,9 +81,12 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await dialog.getByLabel('Register PIN').fill('123456');
   await dialog.getByRole('button', { name: 'Save employee' }).click();
   await expect(page.getByRole('cell', { name: 'Anna Cashier PIN-only account' })).toBeVisible();
-  await page.getByRole('link', { name: 'Checkout', exact: true }).click();
-  await page.getByLabel('Register name').fill('Checkout 01');
-  await page.getByRole('button', { name: 'Enroll this register' }).click();
+  await expect(page.getByRole('link', { name: 'Checkout', exact: true })).toHaveCount(0);
+  await page.getByRole('link', { name: 'Devices', exact: true }).click();
+  await page.getByRole('button', { name: 'Manage device' }).click();
+  await dialog.getByLabel('Device name').fill('Checkout 01');
+  await dialog.getByLabel('Device environment').selectOption('pos');
+  await dialog.getByRole('button', { name: 'Save device' }).click();
   await expect(page.getByRole('heading', { name: 'Ready for your shift?' })).toBeVisible();
   await page.getByLabel('Employee code').selectOption('ANNA');
   await page.getByLabel('Register PIN').fill('123456');

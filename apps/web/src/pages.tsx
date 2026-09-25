@@ -22,7 +22,6 @@ import {
   Package,
   Plus,
   Receipt,
-  ScanLine,
   ScrollText,
   Search,
   Settings,
@@ -66,7 +65,6 @@ const navGroups = [
   {
     label: 'Sales',
     items: [
-      { to: '/pos', label: 'Checkout', icon: ScanLine, permission: 'pos.access' },
       { to: '/sales', label: 'Sales', icon: Receipt, permission: 'sales.read' },
       { to: '/analytics', label: 'Analytics', icon: Activity, permission: 'analytics.view' },
       { to: '/shifts', label: 'Shifts', icon: Clock3, permission: 'sales.read' },
@@ -581,7 +579,7 @@ export function Overview() {
             <CircleHelp size={17} />
             <p>
               {t(
-                'Set employee PINs in Team, then open Checkout to enroll a register and start a shift. ',
+                'Set employee PINs in Team, then assign a device to Checkout in Devices and start a shift. ',
               )}
             </p>
           </div>
