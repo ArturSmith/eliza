@@ -1212,6 +1212,9 @@ export function DevicesPage() {
       setEdit(null);
     },
   });
+  const devices = query.data?.slice().sort(
+    (a, b) => Number(b.id === session.device.id) - Number(a.id === session.device.id),
+  );
   return (
     <>
       <PageHeading
@@ -1221,8 +1224,11 @@ export function DevicesPage() {
       />
       <ErrorMessage error={query.error} />
       <div className="device-grid">
-        {query.data?.map((d) => (
-          <section className="panel device-card" key={d.id}>
+        {devices?.map((d) => (
+          <section
+            className={`panel device-card${d.id === session.device.id ? ' device-card-current' : ''}`}
+            key={d.id}
+          >
             <div className="device-card-top">
               <span className="icon-tile">
                 <Monitor size={24} />

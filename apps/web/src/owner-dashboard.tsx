@@ -240,8 +240,15 @@ export function OwnerDashboardPage() {
   const q = useQuery({
     queryKey: ['owner-dashboard', period],
     queryFn: () => api<Dashboard>('/reports/owner-dashboard?period=' + period),
+    refetchInterval: 60_000,
+  });
+  const todayQuery = useQuery({
+    queryKey: ['owner-dashboard', 'today'],
+    queryFn: () => api<Dashboard>('/reports/owner-dashboard?period=today'),
+    refetchInterval: 60_000,
   });
   const data = q.data;
+  const today = todayQuery.data;
   const currency = session.store.currency;
   const money = (value: unknown) => formatMoney(String(value ?? 0), currency);
 
@@ -270,7 +277,37 @@ export function OwnerDashboardPage() {
         </div>
       </div>
 
-      <ErrorMessage error={q.error} />
+      <ErrorMessage error={q.error ?? todayQuery.error} />
+      {today && (
+        <div className="dashboard-today">
+          <section className="today-overview" aria-label={t('Today at a glance')}>
+            <h2>{t('Today at a glance')}</h2>
+            <div className="today-metrics">
+              <article className="kpi">
+                <span className="kpi-label">{t('Open shifts')}</span>
+                <strong className="kpi-value">{today.shifts.open}</strong>
+              </article>
+              <article className="kpi">
+                <span className="kpi-label">{t('Transactions today')}</span>
+                <strong className="kpi-value">{today.kpis.transactions.value ?? 0}</strong>
+              </article>
+              <article className="kpi">
+                <span className="kpi-label">{t('Sales today')}</span>
+                <strong className="kpi-value">{money(today.kpis.revenue.value)}</strong>
+              </article>
+              <article className="kpi">
+                <span className="kpi-label">{t('Sales margin today')}</span>
+                <strong className="kpi-value">
+                  {today.kpis.grossMargin.value === null
+                    ? t(today.kpis.grossMargin.restricted ? 'Restricted' : 'Unavailable')
+                    : today.kpis.grossMargin.value.toFixed(1) + '%'}
+                </strong>
+              </article>
+            </div>
+            <HourlySales rows={today.hourly} currency={currency} />
+          </section>
+        </div>
+      )}
       {q.isPending && <p className="muted">{t('Loading dashboard…')}</p>}
 
       {data && (
@@ -283,24 +320,26 @@ export function OwnerDashboardPage() {
 
           {data.summary && <p className="owner-summary">{dashboardSummary(data.summary)}</p>}
 
-          <div className="kpi-row">
-            <Kpi label="Sales" data={data.kpis.revenue} currency={currency} />
-            <Kpi label="Gross profit" data={data.kpis.grossProfit} currency={currency} />
-            <Kpi
-              label="Gross margin"
-              data={data.kpis.grossMargin}
-              currency={currency}
-              money={false}
-            />
-            <Kpi
-              label="Transactions"
-              data={data.kpis.transactions}
-              currency={currency}
-              money={false}
-            />
-            <Kpi label="Average basket" data={data.kpis.averageBasket} currency={currency} />
-            <Kpi label="Refunds" data={data.kpis.refunds} currency={currency} />
-          </div>
+          {period !== 'today' && (
+            <div className="kpi-row">
+              <Kpi label="Sales" data={data.kpis.revenue} currency={currency} />
+              <Kpi label="Gross profit" data={data.kpis.grossProfit} currency={currency} />
+              <Kpi
+                label="Gross margin"
+                data={data.kpis.grossMargin}
+                currency={currency}
+                money={false}
+              />
+              <Kpi
+                label="Transactions"
+                data={data.kpis.transactions}
+                currency={currency}
+                money={false}
+              />
+              <Kpi label="Average basket" data={data.kpis.averageBasket} currency={currency} />
+              <Kpi label="Refunds" data={data.kpis.refunds} currency={currency} />
+            </div>
+          )}
 
           <p className="muted comparison-note">
             {t('Compared with')}:{' '}
@@ -333,8 +372,6 @@ export function OwnerDashboardPage() {
           )}
 
           <Insights insights={data.insights} currency={currency} />
-
-          {period === 'today' && <HourlySales rows={data.hourly} currency={currency} />}
 
           {!!data.whatChanged.length && period !== 'today' && (
             <section className="panel">

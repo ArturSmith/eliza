@@ -91,6 +91,7 @@ export function OfferDialog({
       : null;
   return (
     <Dialog
+      elevated
       open={open}
       onOpenChange={(v) => !v && onClose()}
       title={offer ? t('Edit supplier price') : t('Add supplier price')}
@@ -120,54 +121,50 @@ export function OfferDialog({
         }}
       >
         {!fixedSupplierId && (
-          <Field label={t('Supplier')}>
-            <SearchSelect
-              label={t('Supplier')}
-              placeholder={t('Choose supplier…')}
-              value={
-                suppliers.data?.find((s) => s.id === supplierId)
-                  ? {
-                      title: suppliers.data.find((s) => s.id === supplierId)!.name,
-                      subtitle: suppliers.data.find((s) => s.id === supplierId)!.code,
-                    }
-                  : undefined
-              }
-              onSelect={setSupplierId}
-              options={(suppliers.data ?? [])
-                .filter((s) => s.active)
-                .map((s) => ({
-                  id: s.id,
-                  title: s.name,
-                  subtitle: s.code,
-                  keywords: [s.name, s.code],
-                }))}
-            />
-          </Field>
+          <SearchSelect
+            label={t('Supplier')}
+            placeholder={t('Choose supplier…')}
+            value={
+              suppliers.data?.find((s) => s.id === supplierId)
+                ? {
+                    title: suppliers.data.find((s) => s.id === supplierId)!.name,
+                    subtitle: suppliers.data.find((s) => s.id === supplierId)!.code,
+                  }
+                : undefined
+            }
+            onSelect={setSupplierId}
+            options={(suppliers.data ?? [])
+              .filter((s) => s.active)
+              .map((s) => ({
+                id: s.id,
+                title: s.name,
+                subtitle: s.code,
+                keywords: [s.name, s.code],
+              }))}
+          />
         )}
         {!fixedProductId && (
-          <Field label={t('Product')}>
-            <SearchSelect
-              label={t('Product')}
-              placeholder={t('Choose product…')}
-              value={
-                products.data?.find((p) => p.id === productId)
-                  ? {
-                      title: products.data.find((p) => p.id === productId)!.name,
-                      subtitle: products.data.find((p) => p.id === productId)!.sku,
-                    }
-                  : undefined
-              }
-              onSelect={setProductId}
-              options={(products.data ?? [])
-                .filter((p) => p.active)
-                .map((p) => ({
-                  id: p.id,
-                  title: p.name,
-                  subtitle: p.sku,
-                  keywords: [p.name, p.sku],
-                }))}
-            />
-          </Field>
+          <SearchSelect
+            label={t('Product')}
+            placeholder={t('Choose product…')}
+            value={
+              products.data?.find((p) => p.id === productId)
+                ? {
+                    title: products.data.find((p) => p.id === productId)!.name,
+                    subtitle: products.data.find((p) => p.id === productId)!.sku,
+                  }
+                : undefined
+            }
+            onSelect={setProductId}
+            options={(products.data ?? [])
+              .filter((p) => p.active)
+              .map((p) => ({
+                id: p.id,
+                title: p.name,
+                subtitle: p.sku,
+                keywords: [p.name, p.sku],
+              }))}
+          />
         )}
         <Field
           label={t('Supplier item code')}

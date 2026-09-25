@@ -961,9 +961,13 @@ SELECT COALESCE(s.phase,f.phase) AS phase,
         [store.id, range.from, range.to, store.timezone],
       )
     ).rows;
+    const open = await this.database.pool.query(
+      "SELECT count(*)::int AS count FROM shifts WHERE store_id=$1 AND status='open'",
+      [store.id],
+    );
     return {
       rows,
-      open: rows.filter((r: any) => r.status === 'open').length,
+      open: open.rows[0].count as number,
       closed: rows.filter((r: any) => r.status === 'closed').length,
       differences: rows.filter((r: any) => r.difference !== null && num(r.difference) !== 0),
       longOpen: rows.filter(

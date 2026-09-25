@@ -106,11 +106,13 @@ export function TeamManagementPage() {
                   </td>
                   <td>{e.employeeCode}</td>
                   <td>
-                    {(e.roles?.length ? e.roles : [e.role]).map((role) => (
-                      <span className="badge badge-gray" key={role}>
-                        {t(role)}
-                      </span>
-                    ))}
+                    <div className="team-role-list">
+                      {(e.roles?.length ? e.roles : [e.role]).map((role) => (
+                        <span className="badge badge-gray" key={role}>
+                          {t(role)}
+                        </span>
+                      ))}
+                    </div>
                   </td>
                   <td>{e.hasPin ? t('Set') : t('Not set')}</td>
                   <td>
