@@ -51,6 +51,7 @@ import {
 } from './api';
 import { AuthForm, AddProduct, ProductForm, AdjustmentForm, ErrorMessage, Field } from './forms';
 import { ProductSuppliers } from './supplier-products';
+import { TodayOperations } from './owner-dashboard';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
@@ -417,6 +418,7 @@ export function Overview() {
           </span>
         }
       />
+      <TodayOperations />
       <section className="welcome-banner">
         <div>
           <Badge>{t('LET’S GET YOU READY')}</Badge>
@@ -1212,9 +1214,9 @@ export function DevicesPage() {
       setEdit(null);
     },
   });
-  const devices = query.data?.slice().sort(
-    (a, b) => Number(b.id === session.device.id) - Number(a.id === session.device.id),
-  );
+  const devices = query.data
+    ?.slice()
+    .sort((a, b) => Number(b.id === session.device.id) - Number(a.id === session.device.id));
   return (
     <>
       <PageHeading
