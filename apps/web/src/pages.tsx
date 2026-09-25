@@ -1183,6 +1183,19 @@ export function DevicesPage() {
   const query = useDevices();
   const session = useSession().data!;
   const [edit, setEdit] = useState<Device | null>(null);
+  const [removeDevice, setRemoveDevice] = useState<Device | null>(null);
+  const removal = useMutation({
+    mutationFn: (id: string) => api(`/devices/${id}`, undefined, 'DELETE'),
+    onSuccess: () => {
+      if (removeDevice?.id === session.device.id) {
+        window.location.assign('/');
+        return;
+      }
+      void refresh();
+      setRemoveDevice(null);
+      setEdit(null);
+    },
+  });
   const mutation = useMutation({
     mutationFn: (body: Device) =>
       api(
@@ -1242,6 +1255,15 @@ export function DevicesPage() {
             >
               {t('Manage device ')}
             </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                removal.reset();
+                setRemoveDevice(d);
+              }}
+            >
+              <Trash2 size={16} /> {t('Remove device')}
+            </Button>
           </section>
         ))}
       </div>
@@ -1296,6 +1318,33 @@ export function DevicesPage() {
             </div>
           </form>
         )}
+      </Dialog>
+      <Dialog
+        open={!!removeDevice}
+        onOpenChange={(open) => {
+          if (!open && !removal.isPending) setRemoveDevice(null);
+        }}
+        title={t('Remove device?')}
+        description={t(
+          'This device will lose access. Its sales and activity history will be kept. A manager can register this browser again by signing in.',
+        )}
+      >
+        <ErrorMessage error={removal.error} />
+        <div className="form-actions">
+          <Button
+            variant="outline"
+            disabled={removal.isPending}
+            onClick={() => setRemoveDevice(null)}
+          >
+            {t('Cancel')}
+          </Button>
+          <Button
+            disabled={removal.isPending}
+            onClick={() => removeDevice && removal.mutate(removeDevice.id)}
+          >
+            {t('Remove device')}
+          </Button>
+        </div>
       </Dialog>
     </>
   );

@@ -56,6 +56,7 @@ export const devices = pgTable('devices', {
   type: text('type').notNull().default('management'),
   tokenHash: text('token_hash').notNull().unique(),
   active: boolean('active').notNull().default(true),
+  removedAt: timestamp('removed_at', { withTimezone: true }),
   createdAt: created(),
 });
 export const sessions = pgTable('sessions', {

@@ -2,6 +2,7 @@ import {
   Body,
   BadRequestException,
   Controller,
+  Delete,
   Get,
   Module,
   NotFoundException,
@@ -74,7 +75,55 @@ export class ManagementController {
         createdAt: devices.createdAt,
       })
       .from(devices)
-      .where(eq(devices.storeId, req.context.store.id));
+      .where(and(eq(devices.storeId, req.context.store.id), sql`${devices.removedAt} IS NULL`));
+  }
+  @Delete('devices/:id') @Require('devices.manage') async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { store, user, device } = req.context;
+    await this.database.db.transaction(async (tx) => {
+      const [target] = await tx
+        .select()
+        .from(devices)
+        .where(
+          and(eq(devices.id, id), eq(devices.storeId, store.id), sql`${devices.removedAt} IS NULL`),
+        )
+        .for('update');
+      if (!target) throw new NotFoundException('Device not found.');
+      const open = await tx.execute(
+        sql`SELECT id FROM shifts WHERE device_id=${id} AND status='open' LIMIT 1`,
+      );
+      if (open.rowCount)
+        throw new BadRequestException('Close the open cashier shift before removing this device.');
+      await tx
+        .update(devices)
+        .set({ active: false, removedAt: new Date() })
+        .where(eq(devices.id, id));
+      await tx.execute(sql`DELETE FROM sessions WHERE device_id=${id}`);
+      await tx.execute(sql`DELETE FROM pos_sessions WHERE device_id=${id}`);
+      await tx.execute(sql`DELETE FROM price_tag_sessions WHERE device_id=${id}`);
+      await tx.insert(audits).values({
+        storeId: store.id,
+        employeeId: user.id,
+        deviceId: device.id,
+        action: 'Device removed',
+        entityId: id,
+        details: { name: target.name, type: target.type },
+      });
+    });
+    if (id === device.id) {
+      for (const name of [
+        'eliza_session',
+        'eliza_device',
+        'eliza_register',
+        'eliza_pos_session',
+        'eliza_price_tags_session',
+      ])
+        res.clearCookie(name, { path: '/api' });
+    }
+    return { ok: true };
   }
   @Patch('devices/:id') @Require('devices.manage') async update(
     @Param('id', ParseUUIDPipe) id: string,
@@ -95,7 +144,9 @@ export class ManagementController {
       const [old] = await tx
         .select()
         .from(devices)
-        .where(and(eq(devices.id, id), eq(devices.storeId, store.id)))
+        .where(
+          and(eq(devices.id, id), eq(devices.storeId, store.id), sql`${devices.removedAt} IS NULL`),
+        )
         .for('update');
       if (!old) throw new NotFoundException('Device not found.');
       const type = body.type ?? old.type;

@@ -120,7 +120,11 @@ export class AuthService {
             .select()
             .from(devices)
             .where(
-              and(eq(devices.tokenHash, hash(registerToken)), eq(devices.storeId, user.storeId)),
+              and(
+                eq(devices.tokenHash, hash(registerToken)),
+                eq(devices.storeId, user.storeId),
+                sql`${devices.removedAt} IS NULL`,
+              ),
             )
         : [];
       const [existing] = registerDevice.length
@@ -132,6 +136,7 @@ export class AuthService {
               and(
                 eq(devices.tokenHash, hash(cookie(req, 'eliza_device'))),
                 eq(devices.storeId, user.storeId),
+                sql`${devices.removedAt} IS NULL`,
               ),
             );
       if (existing && !existing.active)
@@ -199,7 +204,7 @@ export class AuthController {
     const hashes = [registerToken, managementToken].filter(Boolean).map(hash);
     if (!hashes.length) return { type: 'management' };
     const result = await this.database.pool.query(
-      'SELECT type FROM devices WHERE token_hash=ANY($1::text[]) ORDER BY CASE WHEN token_hash=$2 THEN 0 ELSE 1 END LIMIT 1',
+      'SELECT type FROM devices WHERE removed_at IS NULL AND token_hash=ANY($1::text[]) ORDER BY CASE WHEN token_hash=$2 THEN 0 ELSE 1 END LIMIT 1',
       [hashes, hash(registerToken)],
     );
     return { type: result.rows[0]?.type ?? 'management' };
