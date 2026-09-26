@@ -1682,5 +1682,10 @@
   "Price changed": "Цена изменена",
   "Product lists": "Списки товаров",
   "No price changes waiting for tags.": "Нет изменений цен, требующих новых ценников.",
-  "No products found.": "Товары не найдены."
+  "No products found.": "Товары не найдены.",
+  "Add expiry batch": "Добавить партию со сроком годности",
+  "Remove batch": "Удалить партию",
+  "Remove expiry batch {number}": "Удалить партию {number}",
+  "Total received": "Всего получено",
+  "Enter a positive quantity for every expiry batch, or remove unused batches.": "Укажите положительное количество для каждой партии или удалите неиспользуемые партии."
 }

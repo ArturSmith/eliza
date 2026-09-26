@@ -165,6 +165,171 @@ describe.sequential('purchasing and receiving', () => {
       ]);
     }
   });
+
+  it('receives multiple expiry batches atomically without splitting financial rounding', async () => {
+    const product = (
+      await manager.request('/products', {
+        name: 'Mixed expiry milk',
+        sku: 'MIXED-EXPIRY',
+        category: 'Dairy',
+        unit: 'piece',
+        price: '1',
+        cost: '0.01',
+        taxRate: '0',
+        minStock: '0',
+        barcodes: [],
+        plu: '',
+      })
+    ).body;
+    const draft = await manager.request('/purchases', {
+      requestId: requestId(),
+      supplierId: supplier.id,
+      lines: [{ productId: product.id, quantity: '10', unitCost: '0.01', taxRate: '10' }],
+    });
+    expect(draft.status).toBe(201);
+    const placed = (
+      await manager.request('/purchases/' + draft.body.id + '/status', {
+        requestId: requestId(),
+        version: draft.body.version,
+        status: 'ordered',
+      })
+    ).body;
+    const receipt = {
+      requestId: requestId(),
+      version: placed.version,
+      lines: [
+        {
+          purchaseLineId: placed.lines[0].id,
+          quantity: '10',
+          expiryBatches: [
+            { quantity: '5', expiryDate: '2035-01-01' },
+            { quantity: '5', expiryDate: '2036-01-01' },
+          ],
+        },
+      ],
+    };
+    for (const batches of [
+      [
+        { quantity: '5', expiryDate: '2035-01-01' },
+        { quantity: '4', expiryDate: '2036-01-01' },
+      ],
+      [
+        { quantity: '4.5', expiryDate: '2035-01-01' },
+        { quantity: '5.5', expiryDate: '2036-01-01' },
+      ],
+    ]) {
+      expect(
+        (
+          await manager.request('/purchases/' + placed.id + '/receipts', {
+            ...receipt,
+            requestId: requestId(),
+            lines: [{ ...receipt.lines[0], expiryBatches: batches }],
+          })
+        ).status,
+      ).toBe(400);
+      expect(
+        (await db.pool.query('SELECT stock FROM products WHERE id=$1', [product.id])).rows[0].stock,
+      ).toBe('0.000');
+      expect(
+        (
+          await db.pool.query('SELECT count(*) FROM goods_receipts WHERE purchase_id=$1', [
+            placed.id,
+          ])
+        ).rows[0].count,
+      ).toBe('0');
+    }
+    const [first, retry] = await Promise.all([
+      manager.request('/purchases/' + placed.id + '/receipts', receipt),
+      manager.request('/purchases/' + placed.id + '/receipts', receipt),
+    ]);
+    expect(first.status).toBe(201);
+    expect(retry.body).toEqual(first.body);
+    expect(first.body.status).toBe('received');
+    expect(first.body.receipts[0]).toMatchObject({ subtotal: '0.10', tax: '0.01', total: '0.11' });
+    expect(first.body.receipts[0].lines).toHaveLength(1);
+    expect(first.body.receipts[0].lines[0].expiry_batches).toEqual(receipt.lines[0].expiryBatches);
+    const batches = (await manager.request('/inventory/products/' + product.id + '/batches')).body;
+    expect(batches.product.stock).toBe('10.000');
+    expect(batches.batches).toMatchObject([
+      { quantity: '5.000', expiryDate: '2035-01-01' },
+      { quantity: '5.000', expiryDate: '2036-01-01' },
+    ]);
+    expect(batches.batches).toHaveLength(2);
+    const adjusted = await manager.request('/inventory/adjustments', {
+      requestId: requestId(),
+      productId: product.id,
+      quantity: '-3',
+      reason: 'count_correction',
+      notes: 'Check batch depletion',
+    });
+    expect(adjusted.status).toBe(201);
+    const remaining = (await manager.request('/inventory/products/' + product.id + '/batches'))
+      .body;
+    expect(remaining.batches).toMatchObject([
+      { quantity: '2.000', expiryDate: '2035-01-01' },
+      { quantity: '5.000', expiryDate: '2036-01-01' },
+    ]);
+    const history = (await manager.request('/purchases/' + placed.id)).body;
+    expect(history.receipts[0].lines[0].expiry_batches).toEqual(receipt.lines[0].expiryBatches);
+  });
+
+  it('splits weighted deliveries into exact fractional batches with optional dates', async () => {
+    const product = (
+      await manager.request('/products', {
+        name: 'Loose nuts',
+        sku: 'SPLIT-WEIGHT',
+        category: 'Food',
+        unit: 'kilogram',
+        price: '1',
+        cost: '0.01',
+        taxRate: '0',
+        minStock: '0',
+        barcodes: [],
+        plu: '',
+      })
+    ).body;
+    const draft = (
+      await manager.request('/purchases', {
+        requestId: requestId(),
+        supplierId: supplier.id,
+        lines: [{ productId: product.id, quantity: '1', unitCost: '0.01', taxRate: '100' }],
+      })
+    ).body;
+    const placed = (
+      await manager.request('/purchases/' + draft.id + '/status', {
+        requestId: requestId(),
+        version: draft.version,
+        status: 'ordered',
+      })
+    ).body;
+    const response = await manager.request('/purchases/' + placed.id + '/receipts', {
+      requestId: requestId(),
+      version: placed.version,
+      lines: [
+        {
+          purchaseLineId: placed.lines[0].id,
+          quantity: '1',
+          expiryBatches: [
+            { quantity: '0.5', expiryDate: '2035-01-01' },
+            { quantity: '0.5', expiryDate: null },
+          ],
+        },
+      ],
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.receipts[0]).toMatchObject({
+      subtotal: '0.01',
+      tax: '0.01',
+      total: '0.02',
+    });
+    const inventory = (await manager.request('/inventory/products/' + product.id + '/batches'))
+      .body;
+    expect(inventory.product.stock).toBe('1.000');
+    expect(inventory.batches).toMatchObject([
+      { quantity: '0.500', expiryDate: '2035-01-01' },
+      { quantity: '0.500', expiryDate: null },
+    ]);
+  });
   it('receives a partial delivery exactly once and preserves cost snapshots', async () => {
     const body = {
       requestId: requestId(),
@@ -224,7 +389,10 @@ describe.sequential('purchasing and receiving', () => {
     expect(
       (await db.pool.query('SELECT stock FROM products WHERE id=$1', [productId])).rows[0].stock,
     ).toBe('18.000');
-    expect((await db.pool.query('SELECT count(*) FROM goods_receipts')).rows[0].count).toBe('1');
+    expect(
+      (await db.pool.query('SELECT count(*) FROM goods_receipts WHERE purchase_id=$1', [order.id]))
+        .rows[0].count,
+    ).toBe('1');
     expect(
       (
         await manager.request('/purchases/' + order.id + '/status', {

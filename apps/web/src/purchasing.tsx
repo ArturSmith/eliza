@@ -7,6 +7,7 @@ import { Search, X } from 'lucide-react';
 import {
   supplierSchema,
   purchaseDraftSchema,
+  receiptInputSchema,
   calculatePurchaseLine,
   fromScaled,
   toScaled,
@@ -75,6 +76,7 @@ type Line = {
   received_quantity: string;
   quantity: string;
   expiry_date?: string | null;
+  expiry_batches?: { quantity: string; expiryDate: string | null }[];
   unit_cost: string;
   proposed_selling_price?: string | null;
   tax_rate: string;
@@ -1780,9 +1782,22 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
                             <span className="muted">
                               {Number(l.quantity)} {t(l.unit ?? '')} ×{' '}
                               {formatMoney(l.unit_cost, currency)} {t('excl. tax ')}
-                              {l.expiry_date &&
+                              {!l.expiry_batches?.length &&
+                                l.expiry_date &&
                                 `${t('Expiry date')}: ${l.expiry_date.slice(0, 10)}`}
                             </span>
+                            {!!l.expiry_batches?.length && (
+                              <ul className="delivery-expiry-history">
+                                {l.expiry_batches.map((batch, index) => (
+                                  <li key={index}>
+                                    {Number(batch.quantity)} {t(l.unit ?? '')} —{' '}
+                                    {batch.expiryDate
+                                      ? `${t('Expiry date')}: ${batch.expiryDate}`
+                                      : t('Unknown expiry')}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
                           </li>
                         ))}
                       </ul>
@@ -1860,8 +1875,26 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
   const [prices, setPrices] = useState<Record<string, string>>(
     Object.fromEntries(order.lines.map((l) => [l.id, l.proposed_selling_price ?? ''])),
   );
-  const [quantities, setQuantities] = useState<Record<string, string>>({});
-  const [expiryDates, setExpiryDates] = useState<Record<string, string>>({});
+  type ExpiryBatch = { quantity: string; expiryDate: string };
+  const [batches, setBatches] = useState<Record<string, ExpiryBatch[]>>({});
+  const batchRows = (id: string) => batches[id] ?? [{ quantity: '0', expiryDate: '' }];
+  function updateBatch(id: string, index: number, key: keyof ExpiryBatch, value: string) {
+    setError(undefined);
+    setBatches((before) => ({
+      ...before,
+      [id]: batchRows(id).map((batch, i) => (i === index ? { ...batch, [key]: value } : batch)),
+    }));
+  }
+  function receivedQuantity(id: string) {
+    try {
+      return fromScaled(
+        batchRows(id).reduce((sum, b) => sum + toScaled(b.quantity || '0', 3), 0n),
+        3,
+      );
+    } catch {
+      return '';
+    }
+  }
   const [reference, setReference] = useState('');
   const [payload, setPayload] = useState<unknown>();
   const [pending, setPending] = useState(false);
@@ -1872,11 +1905,16 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
       version: order.version,
       deliveryReference: reference,
       lines: order.lines
-        .filter((l) => Number(quantities[l.id] ?? 0) > 0)
+        .filter((l) =>
+          batchRows(l.id).some((b) => b.quantity.trim() !== '' && Number(b.quantity) !== 0),
+        )
         .map((l) => ({
           purchaseLineId: l.id,
-          quantity: quantities[l.id],
-          expiryDate: expiryDates[l.id] || null,
+          quantity: receivedQuantity(l.id),
+          expiryBatches: batchRows(l.id).map((b) => ({
+            quantity: b.quantity,
+            expiryDate: b.expiryDate || null,
+          })),
           unitCost: canCost ? (costs[l.id] ?? l.unit_cost) : undefined,
           sellingPrice: canPrice && prices[l.id] ? prices[l.id] : undefined,
           expectedSellingPrice:
@@ -1885,6 +1923,12 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
               : undefined,
         })),
     };
+    const valid = receiptInputSchema.safeParse(body);
+    if (!valid.success) {
+      setError(t('Enter a positive quantity for every expiry batch, or remove unused batches.'));
+      return;
+    }
+    setError(undefined);
     setPayload(body);
     setPending(true);
     try {
@@ -1923,20 +1967,61 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
                   {t(l.unit ?? '')} {t('remaining')}
                 </span>
               </header>
-              <Field label={t('Quantity')}>
-                <input
-                  inputMode="decimal"
-                  value={quantities[l.id] ?? '0'}
-                  onChange={(e) => setQuantities({ ...quantities, [l.id]: e.target.value })}
-                />
-              </Field>
-              <Field label={t('Expiry date (optional)')}>
-                <input
-                  type="date"
-                  value={expiryDates[l.id] ?? ''}
-                  onChange={(e) => setExpiryDates({ ...expiryDates, [l.id]: e.target.value })}
-                />
-              </Field>
+              <div className="delivery-expiry-batches">
+                {batchRows(l.id).map((batch, index) => (
+                  <div className="delivery-expiry-batch" key={index}>
+                    <Field label={t('Quantity')}>
+                      <input
+                        inputMode="decimal"
+                        value={batch.quantity}
+                        onChange={(e) => updateBatch(l.id, index, 'quantity', e.target.value)}
+                      />
+                    </Field>
+                    <Field label={t('Expiry date (optional)')}>
+                      <input
+                        type="date"
+                        value={batch.expiryDate}
+                        onChange={(e) => updateBatch(l.id, index, 'expiryDate', e.target.value)}
+                      />
+                    </Field>
+                    {batchRows(l.id).length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        aria-label={t('Remove expiry batch {number}', { number: index + 1 })}
+                        onClick={() => {
+                          setError(undefined);
+                          setBatches((before) => ({
+                            ...before,
+                            [l.id]: batchRows(l.id).filter((_, i) => i !== index),
+                          }));
+                        }}
+                      >
+                        {t('Remove batch')}
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={batchRows(l.id).length >= 50}
+                  onClick={() => {
+                    setError(undefined);
+                    setBatches((before) => ({
+                      ...before,
+                      [l.id]: [...batchRows(l.id), { quantity: '0', expiryDate: '' }],
+                    }));
+                  }}
+                >
+                  {t('Add expiry batch')}
+                </Button>
+                {batchRows(l.id).length > 1 && (
+                  <p className="muted">
+                    {t('Total received')}: {receivedQuantity(l.id) || '—'} {t(l.unit ?? '')}
+                  </p>
+                )}
+              </div>
               <Field label={t('Unit cost excl. tax')}>
                 <input
                   inputMode="decimal"
@@ -1960,7 +2045,7 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
                   />
                 </Field>
               )}
-              {canPrice && prices[l.id] && Number(quantities[l.id] ?? 0) > 0 && (
+              {canPrice && prices[l.id] && Number(receivedQuantity(l.id)) > 0 && (
                 <label className="delivery-price-confirmation">
                   <input
                     key={

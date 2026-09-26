@@ -470,14 +470,49 @@ export const receiptInputSchema = z.object({
   notes: z.string().trim().max(1000).default(''),
   lines: z
     .array(
-      z.object({
-        purchaseLineId: z.uuid(),
-        quantity: positiveQuantity,
-        expiryDate: z.iso.date().nullable().optional(),
-        unitCost: money.optional(),
-        sellingPrice: money.optional(),
-        expectedSellingPrice: money.optional(),
-      }),
+      z
+        .object({
+          purchaseLineId: z.uuid(),
+          quantity: positiveQuantity,
+          expiryDate: z.iso.date().nullable().optional(),
+          expiryBatches: z
+            .array(
+              z.object({
+                quantity: positiveQuantity,
+                expiryDate: z.iso.date().nullable().optional(),
+              }),
+            )
+            .min(1)
+            .max(50)
+            .optional(),
+          unitCost: money.optional(),
+          sellingPrice: money.optional(),
+          expectedSellingPrice: money.optional(),
+        })
+        .superRefine((line, ctx) => {
+          if (!line.expiryBatches) return;
+          // Field errors can still reach refinements; leave malformed quantities to their schemas.
+          if (
+            !/^\d{1,9}(?:\.\d{1,3})?$/.test(line.quantity) ||
+            line.expiryBatches.some((batch) => !/^\d{1,9}(?:\.\d{1,3})?$/.test(batch.quantity))
+          )
+            return;
+          if (line.expiryDate != null)
+            ctx.addIssue({
+              code: 'custom',
+              path: ['expiryDate'],
+              message: 'Use expiry batches or a single expiry date, not both',
+            });
+          if (
+            line.expiryBatches.reduce((sum, batch) => sum + toScaled(batch.quantity, 3), 0n) !==
+            toScaled(line.quantity, 3)
+          )
+            ctx.addIssue({
+              code: 'custom',
+              path: ['expiryBatches'],
+              message: 'Expiry batch quantities must equal the received quantity',
+            });
+        }),
     )
     .min(1)
     .max(100)
@@ -649,6 +684,7 @@ export type GoodsReceipt = {
     unit: string;
     quantity: string;
     expiryDate?: string | null;
+    expiryBatches?: { quantity: string; expiryDate: string | null }[];
     unitCost: string;
     taxRate: string;
     subtotal: string;

@@ -5151,3 +5151,40 @@ input.shopping-section-title {
 .adjustment-product-picker > .camera-scan-button {
   min-height: 40px;
 }
+
+.delivery-expiry-batches {
+  display: grid;
+  gap: 12px;
+}
+.delivery-expiry-batches > button {
+  justify-self: start;
+}
+.delivery-expiry-batch {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 14px;
+  background: white;
+  border: 1px solid #dce7d8;
+  border-radius: 10px;
+}
+.delivery-expiry-history {
+  flex-basis: 100%;
+  margin-top: 8px;
+}
+@media (max-width: 600px) {
+  .delivery-expiry-batch {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.delivery-entry-body > ul > li:has(.delivery-expiry-history) {
+  flex-wrap: wrap;
+}
+.delivery-entry-body .delivery-expiry-history {
+  margin-top: 6px;
+}
+.delivery-entry-body .delivery-expiry-history li {
+  justify-content: flex-start;
+}

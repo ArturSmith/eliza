@@ -41,4 +41,38 @@ describe('purchase arithmetic and validation', () => {
         }).success,
       ).toBe(false);
   });
+  it('validates expiry splits with exact quantities and keeps single-date payloads compatible', () => {
+    const line = { purchaseLineId: crypto.randomUUID(), quantity: '1' };
+    const request = (data: unknown) =>
+      receiptInputSchema.safeParse({ requestId: crypto.randomUUID(), version: 1, lines: [data] });
+    expect(request({ ...line, expiryDate: '2035-01-01' }).success).toBe(true);
+    expect(
+      request({
+        ...line,
+        expiryBatches: [
+          { quantity: '0.333', expiryDate: '2035-01-01' },
+          { quantity: '0.667', expiryDate: null },
+        ],
+      }).success,
+    ).toBe(true);
+    for (const expiryBatches of [
+      [],
+      [{ quantity: '1.001' }],
+      [{ quantity: '0.999' }],
+      [{ quantity: '0' }, { quantity: '1' }],
+      [{ quantity: '-1' }],
+      [{ quantity: 'NaN' }],
+      [{ quantity: '1.0001' }],
+      [{ quantity: '1', expiryDate: '2035-02-30' }],
+      Array.from({ length: 51 }, () => ({ quantity: '1' })),
+    ])
+      expect(request({ ...line, expiryBatches }).success).toBe(false);
+    expect(
+      request({
+        ...line,
+        expiryDate: '2035-01-01',
+        expiryBatches: [{ quantity: '1', expiryDate: '2036-01-01' }],
+      }).success,
+    ).toBe(false);
+  });
 });

@@ -772,7 +772,13 @@ export class PurchasingController {
     ).rows;
     for (const r of receipts)
       r.lines = (
-        await c.query('SELECT * FROM goods_receipt_lines WHERE receipt_id=$1 ORDER BY sku', [r.id])
+        await c.query(
+          `SELECT l.*, CASE WHEN l.expiry_batches='[]'::jsonb
+          THEN jsonb_build_array(jsonb_build_object('quantity',l.quantity::text,'expiryDate',l.expiry_date::text))
+          ELSE l.expiry_batches END AS expiry_batches
+          FROM goods_receipt_lines l WHERE l.receipt_id=$1 AND l.store_id=$2 ORDER BY l.sku`,
+          [r.id, store],
+        )
       ).rows;
     return { ...p, lines, receipts };
   }
@@ -1172,6 +1178,10 @@ export class PurchasingController {
         if (!product.active)
           throw new BadRequestException('Activate the product before receiving it.');
         this.whole(line.unit, entry.quantity);
+        const expiryBatches = entry.expiryBatches ?? [
+          { quantity: entry.quantity, expiryDate: entry.expiryDate ?? null },
+        ];
+        for (const batch of expiryBatches) this.whole(line.unit, batch.quantity);
         if (
           toScaled(entry.quantity, 3) + toScaled(line.received_quantity, 3) >
           toScaled(line.ordered_quantity, 3)
@@ -1194,7 +1204,7 @@ export class PurchasingController {
         const totals = calculatePurchaseLine(cost, entry.quantity, line.tax_rate);
         subtotal += toScaled(totals.subtotal, 2);
         tax += toScaled(totals.tax, 2);
-        received.push({ line, entry, cost, totals, product });
+        received.push({ line, entry, cost, totals, product, expiryBatches });
       }
       if (received.length !== b.lines.length)
         throw new BadRequestException('Delivery contains a line outside this order.');
@@ -1216,10 +1226,10 @@ export class PurchasingController {
           ],
         )
       ).rows[0];
-      for (const { line, entry, cost, totals, product } of received) {
+      for (const { line, entry, cost, totals, product, expiryBatches } of received) {
         const receiptLine = (
           await c.query(
-            'INSERT INTO goods_receipt_lines(store_id,receipt_id,purchase_line_id,product_id,product_name,sku,unit,quantity,unit_cost,tax_rate,subtotal,tax,total,expiry_date) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id',
+            'INSERT INTO goods_receipt_lines(store_id,receipt_id,purchase_line_id,product_id,product_name,sku,unit,quantity,unit_cost,tax_rate,subtotal,tax,total,expiry_date,expiry_batches) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id',
             [
               store,
               receipt.id,
@@ -1234,14 +1244,25 @@ export class PurchasingController {
               totals.subtotal,
               totals.tax,
               totals.total,
-              entry.expiryDate ?? null,
+              expiryBatches.every(
+                (b) => (b.expiryDate ?? null) === (expiryBatches[0].expiryDate ?? null),
+              )
+                ? (expiryBatches[0].expiryDate ?? null)
+                : null,
+              JSON.stringify(
+                expiryBatches.map((b) => ({
+                  quantity: b.quantity,
+                  expiryDate: b.expiryDate ?? null,
+                })),
+              ),
             ],
           )
         ).rows[0];
-        await c.query(
-          'INSERT INTO stock_batches(store_id,product_id,receipt_line_id,expiry_date,quantity) VALUES($1,$2,$3,$4,$5)',
-          [store, product.id, receiptLine.id, entry.expiryDate ?? null, entry.quantity],
-        );
+        for (const batch of expiryBatches)
+          await c.query(
+            'INSERT INTO stock_batches(store_id,product_id,receipt_line_id,expiry_date,quantity) VALUES($1,$2,$3,$4,$5)',
+            [store, product.id, receiptLine.id, batch.expiryDate ?? null, batch.quantity],
+          );
         const balance = fromScaled(toScaled(product.stock, 3) + toScaled(entry.quantity, 3), 3);
         await c.query('UPDATE products SET stock=$2,cost=$3,price=COALESCE($4,price) WHERE id=$1', [
           product.id,
@@ -1282,12 +1303,13 @@ export class PurchasingController {
         {
           receiptId: receipt.id,
           number: receipt.number,
-          lines: received.map(({ line, entry, cost, product }) => ({
+          lines: received.map(({ line, entry, cost, product, expiryBatches }) => ({
             productId: product.id,
             quantity: entry.quantity,
             previousCost: product.cost,
             cost,
             orderedCost: line.unit_cost,
+            expiryBatches,
             previousSellingPrice: product.price,
             sellingPrice: entry.sellingPrice ?? product.price,
           })),
