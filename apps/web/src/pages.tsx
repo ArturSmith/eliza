@@ -397,11 +397,8 @@ export function Overview() {
   const list = products.data ?? [];
   const active = list.filter((p) => p.active);
   const low = active.filter((p) => toScaled(p.stock, 3) <= toScaled(p.minStock, 3));
-  const total = active.reduce(
-    (sum, p) => sum + toScaled(p.cost ?? '0', 2) * toScaled(p.stock, 3),
-    0n,
-  );
-  const inventoryValue = fromScaled((total + 500n) / 1000n, 2);
+  const total = active.reduce((sum, p) => sum + toScaled(p.stockValue ?? '0', 2), 0n);
+  const inventoryValue = fromScaled(total, 2);
   return (
     <>
       <PageHeading
@@ -479,7 +476,7 @@ export function Overview() {
               ? money(inventoryValue, session.store.currency)
               : 'Restricted'
           }
-          sub="Current stock × purchase cost"
+          sub="Purchase costs of remaining batches"
           icon={<Boxes />}
         />
         <Metric
@@ -964,12 +961,20 @@ export function InventoryPage() {
   useLanguage();
   const products = useProducts();
   const movements = useMovements();
+  const session = useSession();
   const [open, setOpen] = useState(false);
   const [batchProductId, setBatchProductId] = useState('');
   const selectedBatchProductId = batchProductId || products.data?.[0]?.id || '';
   const batches = useQuery<{
     product: { id: string; name: string; stock: string };
-    batches: { id: string; quantity: string; expiryDate: string | null; expired: boolean }[];
+    batches: {
+      id: string;
+      quantity: string;
+      expiryDate: string | null;
+      expired: boolean;
+      unitCost: string | null;
+      costSource: string | null;
+    }[];
   }>({
     queryKey: ['inventory-batches', selectedBatchProductId],
     queryFn: () => api('/inventory/products/' + selectedBatchProductId + '/batches'),
@@ -1038,6 +1043,15 @@ export function InventoryPage() {
                     ? t('Expires on {value0}', { value0: calendarDate(batch.expiryDate) })
                     : t('Expiry date not recorded')}
                 </span>
+                {batch.unitCost !== null && (
+                  <span className="muted">
+                    {t('Purchase cost')}:{' '}
+                    {money(batch.unitCost, session.data?.store.currency ?? 'USD')}
+                    {batch.costSource === 'legacy_estimate' && (
+                      <> · {t('Estimated historical cost')}</>
+                    )}
+                  </span>
+                )}
                 {batch.expired && <Badge tone="amber">{t('Expired')}</Badge>}
               </div>
             ))}

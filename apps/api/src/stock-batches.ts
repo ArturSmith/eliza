@@ -8,12 +8,12 @@ export async function addUnknownStock(
   storeId: string,
   productId: string,
   quantity: string,
+  historicalCost: string | null = null,
 ) {
   await c.query(
-    `INSERT INTO stock_batches(store_id,product_id,quantity) VALUES($1,$2,$3)
-     ON CONFLICT(store_id,product_id) WHERE receipt_line_id IS NULL AND expiry_date IS NULL
-     DO UPDATE SET quantity=stock_batches.quantity+EXCLUDED.quantity`,
-    [storeId, productId, quantity],
+    `INSERT INTO stock_batches(store_id,product_id,quantity,unit_cost,cost_source)
+     SELECT $1,$2,$3,COALESCE($4::numeric,cost),CASE WHEN $4::numeric IS NULL THEN 'adjustment' ELSE 'legacy_estimate' END FROM products WHERE store_id=$1 AND id=$2`,
+    [storeId, productId, quantity, historicalCost],
   );
 }
 
@@ -25,9 +25,10 @@ export async function consumeBatches(
   options: { saleItemId?: string } = {},
 ) {
   let remaining = toScaled(quantity, 3);
+  let totalCost = 0n;
   const rows = (
     await c.query(
-      `SELECT id,quantity::text,expiry_date FROM stock_batches
+      `SELECT id,quantity::text,expiry_date,unit_cost::text FROM stock_batches
        WHERE store_id=$1 AND product_id=$2 AND quantity>0
          AND ($3::boolean OR expiry_date IS NULL OR expiry_date>(now() AT TIME ZONE
            (SELECT timezone FROM stores WHERE id=$1))::date)
@@ -43,10 +44,19 @@ export async function consumeBatches(
       row.id,
       fromScaled(taken, 3),
     ]);
+    const cost = (toScaled(row.unit_cost, 2) * taken + 500n) / 1000n;
+    totalCost += cost;
     if (options.saleItemId)
       await c.query(
-        'INSERT INTO sale_batch_allocations(store_id,sale_item_id,batch_id,quantity) VALUES($1,$2,$3,$4)',
-        [storeId, options.saleItemId, row.id, fromScaled(taken, 3)],
+        'INSERT INTO sale_batch_allocations(store_id,sale_item_id,batch_id,quantity,unit_cost,cost_total) VALUES($1,$2,$3,$4,$5,$6)',
+        [
+          storeId,
+          options.saleItemId,
+          row.id,
+          fromScaled(taken, 3),
+          row.unit_cost,
+          fromScaled(cost, 2),
+        ],
       );
     remaining -= taken;
   }
@@ -56,6 +66,7 @@ export async function consumeBatches(
         ? 'Not enough unexpired stock. Remove expired items or correct the stock count.'
         : 'Batch stock is lower than the product stock. Reconcile this product before changing it.',
     );
+  return fromScaled(totalCost, 2);
 }
 
 export async function restockSaleBatches(
@@ -68,9 +79,11 @@ export async function restockSaleBatches(
   restock: boolean,
 ) {
   let remaining = toScaled(quantity, 3);
+  let restoredCost = 0n;
+  let legacy = false;
   const rows = (
     await c.query(
-      `SELECT a.id,a.batch_id,a.quantity::text,
+      `SELECT a.id,a.batch_id,a.quantity::text,a.cost_total::text,
          COALESCE((SELECT sum(r.quantity) FROM refund_batch_allocations r WHERE r.sale_batch_allocation_id=a.id),0)::text AS returned
        FROM sale_batch_allocations a
        JOIN sale_items i ON i.id=a.sale_item_id AND i.store_id=a.store_id
@@ -85,6 +98,14 @@ export async function restockSaleBatches(
     const available = toScaled(row.quantity, 3) - toScaled(row.returned, 3);
     const taken = remaining < available ? remaining : available;
     if (taken <= 0n) continue;
+    if (row.cost_total === null) legacy = true;
+    else if (restock) {
+      const cost = toScaled(row.cost_total, 2);
+      const sold = toScaled(row.quantity, 3);
+      const returned = toScaled(row.returned, 3);
+      restoredCost +=
+        (cost * (returned + taken) + sold / 2n) / sold - (cost * returned + sold / 2n) / sold;
+    }
     if (restock)
       await c.query('UPDATE stock_batches SET quantity=quantity+$2 WHERE id=$1', [
         row.batch_id,
@@ -96,7 +117,22 @@ export async function restockSaleBatches(
     );
     remaining -= taken;
   }
+  if (remaining > 0n) legacy = true;
   // Sales from before the migration have no allocation history.
-  if (remaining > 0n && restock)
-    await addUnknownStock(c, storeId, productId, fromScaled(remaining, 3));
+  if (remaining > 0n && restock) {
+    const historical = (
+      await c.query(
+        'SELECT round(sum(COALESCE(cost_total,round(cost*quantity,2)))/NULLIF(sum(quantity),0),2)::text AS cost FROM sale_items WHERE store_id=$1 AND sale_id=$2 AND product_id=$3',
+        [storeId, saleId, productId],
+      )
+    ).rows[0];
+    await addUnknownStock(
+      c,
+      storeId,
+      productId,
+      fromScaled(remaining, 3),
+      historical?.cost ?? null,
+    );
+  }
+  return !restock ? '0.00' : legacy ? null : fromScaled(restoredCost, 2);
 }

@@ -2057,7 +2057,9 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
                   <span>
                     {t('Apply this selling price to all stock of ')}
                     {l.product_name}
-                    {t(', including older items. Update the shelf label. ')}
+                    {t(
+                      ', including older items. Purchase costs stay unchanged for each batch. Update the shelf label. ',
+                    )}
                   </span>
                 </label>
               )}

@@ -408,24 +408,29 @@ export class CheckoutController {
       for (const line of lines) {
         const product = products.find((p) => p.id === line.productId)!;
         const balance = fromScaled(toScaled(product.stock, 3) - toScaled(line.quantity, 3), 3);
-        const saleItem = (
-          await client.query(
-            'INSERT INTO sale_items(store_id,sale_id,product_id,quantity,price,cost,tax_rate,total) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
-            [
-              actor.storeId,
-              receiptId,
-              product.id,
-              line.quantity,
-              line.price,
-              product.cost,
-              line.taxRate,
-              line.total,
-            ],
-          )
-        ).rows[0];
-        await consumeBatches(client, actor.storeId, product.id, line.quantity, {
-          saleItemId: saleItem.id,
+        const saleItemId = randomUUID();
+        const costTotal = await consumeBatches(client, actor.storeId, product.id, line.quantity, {
+          saleItemId,
         });
+        await client.query(
+          'INSERT INTO sale_items(id,store_id,sale_id,product_id,quantity,price,cost,tax_rate,total,cost_total) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+          [
+            saleItemId,
+            actor.storeId,
+            receiptId,
+            product.id,
+            line.quantity,
+            line.price,
+            fromScaled(
+              (toScaled(costTotal, 2) * 1000n + toScaled(line.quantity, 3) / 2n) /
+                toScaled(line.quantity, 3),
+              2,
+            ),
+            line.taxRate,
+            line.total,
+            costTotal,
+          ],
+        );
         await client.query('UPDATE products SET stock=$1 WHERE id=$2', [balance, product.id]);
         await client.query(
           "INSERT INTO movements(store_id,product_id,employee_id,device_id,quantity,balance,reason,notes,request_id,request_hash,sale_id,shift_id) VALUES($1,$2,$3,$4,$5,$6,'sale',$7,$8,$9,$10,$11)",

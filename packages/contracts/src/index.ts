@@ -141,6 +141,7 @@ export const deviceSchema = z.object({
 export type ProductInput = z.infer<typeof productSchema>;
 export type AdjustmentInput = z.infer<typeof adjustmentSchema>;
 export type Product = Omit<ProductInput, 'cost'> & {
+  stockValue?: string | null;
   cost: string | null;
   id: string;
   storeId: string;

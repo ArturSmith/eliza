@@ -1260,8 +1260,8 @@ export class PurchasingController {
         ).rows[0];
         for (const batch of expiryBatches)
           await c.query(
-            'INSERT INTO stock_batches(store_id,product_id,receipt_line_id,expiry_date,quantity) VALUES($1,$2,$3,$4,$5)',
-            [store, product.id, receiptLine.id, batch.expiryDate ?? null, batch.quantity],
+            "INSERT INTO stock_batches(store_id,product_id,receipt_line_id,expiry_date,quantity,unit_cost,cost_source) VALUES($1,$2,$3,$4,$5,$6,'receipt')",
+            [store, product.id, receiptLine.id, batch.expiryDate ?? null, batch.quantity, cost],
           );
         const balance = fromScaled(toScaled(product.stock, 3) + toScaled(entry.quantity, 3), 3);
         await c.query('UPDATE products SET stock=$2,cost=$3,price=COALESCE($4,price) WHERE id=$1', [

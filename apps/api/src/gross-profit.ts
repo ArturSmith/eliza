@@ -42,16 +42,16 @@ export class GrossProfitController {
  ) l ON true WHERE s.store_id=$1 AND s.created_at>=b.start AND s.created_at<b.finish
  AND ($6='' OR s.shift_id::text=$6) AND ($5='' OR l.total IS NOT NULL)
  ), original_costs AS (
- SELECT sale_id,product_id,sum(quantity) AS quantity,sum(round(cost*quantity,2)) AS cost FROM sale_items WHERE store_id=$1 AND ($5='' OR product_id::text=$5) GROUP BY sale_id,product_id
+ SELECT sale_id,product_id,sum(quantity) AS quantity,sum(COALESCE(cost_total,round(cost*quantity,2))) AS cost FROM sale_items WHERE store_id=$1 AND ($5='' OR product_id::text=$5) GROUP BY sale_id,product_id
  ), return_history AS (
- SELECT r.id,r.created_at,l.product_id,l.restock,l.quantity,c.cost,c.quantity AS sold_quantity,
+ SELECT r.id,r.created_at,l.product_id,l.restock,l.quantity,l.restored_cost,c.cost,c.quantity AS sold_quantity,
  COALESCE(sum(CASE WHEN l.restock THEN l.quantity ELSE 0 END) OVER(PARTITION BY l.sale_id,l.product_id ORDER BY r.created_at,r.id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS prior_restock
  FROM refund_lines l JOIN refunds r ON r.id=l.refund_id AND r.store_id=l.store_id
  JOIN sales s ON s.id=r.sale_id AND s.store_id=r.store_id
  LEFT JOIN original_costs c ON c.sale_id=l.sale_id AND c.product_id=l.product_id
  WHERE l.store_id=$1 AND ($5='' OR l.product_id::text=$5) AND ($6='' OR s.shift_id::text=$6)
  ), return_costs AS (
- SELECT COALESCE(sum(CASE WHEN restock THEN round(cost*(prior_restock+quantity)/sold_quantity,2)-round(cost*prior_restock/sold_quantity,2) ELSE 0 END),0) AS restored,
+ SELECT COALESCE(sum(COALESCE(restored_cost,CASE WHEN restock THEN round(cost*(prior_restock+quantity)/sold_quantity,2)-round(cost*prior_restock/sold_quantity,2) ELSE 0 END)),0) AS restored,
  count(*) FILTER(WHERE cost IS NULL) AS missing
  FROM return_history,bounds b WHERE created_at>=b.start AND created_at<b.finish
  ), amounts AS (

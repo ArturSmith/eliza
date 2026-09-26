@@ -34,12 +34,14 @@ export class InventoryController {
     const batches = await this.database.pool.query(
       `SELECT b.id,b.receipt_line_id AS "receiptLineId",b.expiry_date::text AS "expiryDate",
        b.quantity::text,b.created_at AS "createdAt",
+       CASE WHEN $3::boolean THEN b.unit_cost::text END AS "unitCost",
+       CASE WHEN $3::boolean THEN b.cost_source END AS "costSource",
        CASE WHEN b.expiry_date IS NOT NULL AND b.expiry_date<=(now() AT TIME ZONE s.timezone)::date
        THEN true ELSE false END AS expired
        FROM stock_batches b JOIN stores s ON s.id=b.store_id
        WHERE b.store_id=$1 AND b.product_id=$2 AND b.quantity>0
        ORDER BY b.expiry_date ASC NULLS LAST,b.created_at,b.id`,
-      [req.context.store.id, id],
+      [req.context.store.id, id, req.context.user.permissions.includes('costs.read')],
     );
     return { product: product.rows[0], batches: batches.rows };
   }

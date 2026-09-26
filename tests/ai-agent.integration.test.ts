@@ -183,6 +183,11 @@ describe.sequential('Eliza AI conversations', () => {
         }[];
       }>;
     const expiring = await lookup('expiring');
+    expect(JSON.stringify(expiring.rows)).not.toContain('unitCost');
+    req.context.user.permissions.push('costs.read');
+    const withCosts = await lookup('expiring');
+    expect(withCosts.rows[0]).toHaveProperty('unitCost');
+    req.context.user.permissions.pop();
     expect(expiring.rows).toMatchObject([
       { product: 'Expiring yogurt', quantity: '4.000', expiryStatus: 'expiring' },
     ]);

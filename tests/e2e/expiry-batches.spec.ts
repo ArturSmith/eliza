@@ -71,12 +71,19 @@ test('receives one product with multiple expiry dates and preserves batch quanti
   ).json();
   expect(inventory.product.stock).toBe('10.000');
   expect(inventory.batches).toMatchObject([
-    { quantity: '5.000', expiryDate: '2035-01-01' },
-    { quantity: '5.000', expiryDate: '2036-01-01' },
+    { quantity: '5.000', expiryDate: '2035-01-01', unitCost: '5.00' },
+    { quantity: '5.000', expiryDate: '2036-01-01', unitCost: '5.00' },
   ]);
   await page.reload();
   await page.getByRole('button', { name: 'View', exact: true }).click();
   await page.locator('.delivery-entry summary').first().click();
   await expect(page.locator('.delivery-expiry-history')).toContainText('2035-01-01');
   await expect(page.locator('.delivery-expiry-history')).toContainText('2036-01-01');
+  await page.goto('/inventory');
+  await expect(page.locator('.stock-batch-row')).toHaveCount(2);
+  await expect(page.locator('.stock-batch-row').first()).toContainText('Purchase cost');
+  await page.screenshot({ path: 'test-results/batch-costs-desktop.png', fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('.stock-batch-row').first()).toBeVisible();
+  await page.screenshot({ path: 'test-results/batch-costs-mobile.png', fullPage: true });
 });

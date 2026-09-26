@@ -51,8 +51,8 @@ const money = (value: unknown) => String(value ?? '0');
 // Receipt snapshots preserve the charged tax and category after catalog edits.
 // Restock costs are allocated cumulatively so partial refunds conserve cents.
 const financialEntries = `original_costs AS (
- SELECT sale_id,product_id,sum(quantity) AS quantity,sum(round(cost*quantity,2)) AS cost,
- count(*) FILTER(WHERE cost IS NULL) AS missing
+ SELECT sale_id,product_id,sum(quantity) AS quantity,sum(COALESCE(cost_total,round(cost*quantity,2))) AS cost,
+ count(*) FILTER(WHERE cost_total IS NULL AND cost IS NULL) AS missing
  FROM sale_items WHERE store_id=$1 GROUP BY sale_id,product_id
 ), receipt_lines AS (
  SELECT s.id AS sale_id,s.created_at,(j->>'productId')::uuid AS product_id,
@@ -74,7 +74,7 @@ const financialEntries = `original_costs AS (
  FROM snapshots s LEFT JOIN original_costs c ON c.sale_id=s.sale_id AND c.product_id=s.product_id
  UNION ALL
  SELECT created_at,product_id,category,0,-(total-tax),
- CASE WHEN restock THEN -(round(cost*(prior_restock+quantity)/sold_quantity,2)-round(cost*prior_restock/sold_quantity,2)) ELSE 0 END,missing
+ -COALESCE(restored_cost,CASE WHEN restock THEN round(cost*(prior_restock+quantity)/sold_quantity,2)-round(cost*prior_restock/sold_quantity,2) ELSE 0 END),missing
  FROM refund_history
 )`;
 
@@ -276,17 +276,17 @@ export class OwnerDashboardController {
  WHERE s.store_id=$1 AND s.created_at>=b.start AND s.created_at<b.finish
  AND ($5::text IS NULL OR to_char(s.created_at AT TIME ZONE $4,'HH24')<=$5)
 ), items AS (
- SELECT i.product_id,i.quantity,i.cost,i.price,i.total
+ SELECT i.product_id,i.quantity,i.cost,i.cost_total,i.price,i.total
  FROM sale_items i JOIN sold s ON s.id=i.sale_id WHERE i.store_id=$1
 ), costs AS (
- SELECT COALESCE(sum(round(i.cost*i.quantity,2)),0) AS cogs,
- count(*) FILTER(WHERE i.cost IS NULL) AS missing,
+ SELECT COALESCE(sum(COALESCE(i.cost_total,round(i.cost*i.quantity,2))),0) AS cogs,
+ count(*) FILTER(WHERE i.cost_total IS NULL AND i.cost IS NULL) AS missing,
  COALESCE(sum(i.quantity),0) AS units FROM items i
 ), original_costs AS (
- SELECT sale_id,product_id,sum(quantity) AS quantity,sum(round(cost*quantity,2)) AS cost
+ SELECT sale_id,product_id,sum(quantity) AS quantity,sum(COALESCE(cost_total,round(cost*quantity,2))) AS cost
  FROM sale_items WHERE store_id=$1 GROUP BY sale_id,product_id
 ), return_history AS (
- SELECT r.id,r.created_at,l.total,l.tax,l.quantity,l.restock,c.cost,c.quantity AS sold_quantity,
+ SELECT r.id,r.created_at,l.total,l.tax,l.quantity,l.restock,l.restored_cost,c.cost,c.quantity AS sold_quantity,
  COALESCE(sum(CASE WHEN l.restock THEN l.quantity ELSE 0 END) OVER(PARTITION BY l.sale_id,l.product_id ORDER BY r.created_at,r.id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS prior_restock
  FROM refunds r JOIN refund_lines l ON l.refund_id=r.id AND l.store_id=r.store_id
  LEFT JOIN original_costs c ON c.sale_id=l.sale_id AND c.product_id=l.product_id
@@ -295,7 +295,7 @@ export class OwnerDashboardController {
  SELECT COALESCE(sum(total),0) AS total,COALESCE(sum(tax),0) AS tax,
  COALESCE(sum(quantity),0) AS units,count(DISTINCT id) AS count,
  count(*) FILTER(WHERE cost IS NULL) AS missing,
- COALESCE(sum(CASE WHEN restock THEN round(cost*(prior_restock+quantity)/sold_quantity,2)-round(cost*prior_restock/sold_quantity,2) ELSE 0 END),0) AS restored
+ COALESCE(sum(COALESCE(restored_cost,CASE WHEN restock THEN round(cost*(prior_restock+quantity)/sold_quantity,2)-round(cost*prior_restock/sold_quantity,2) ELSE 0 END)),0) AS restored
  FROM return_history CROSS JOIN bounds b
  WHERE created_at>=b.start AND created_at<b.finish
  AND ($5::text IS NULL OR to_char(created_at AT TIME ZONE $4,'HH24')<=$5)
@@ -703,19 +703,20 @@ SELECT p.id,p.name,p.sku,p.category,p.unit,p.stock::text,p.min_stock::text AS "m
  JOIN sales s ON s.id=i.sale_id AND s.store_id=$1 WHERE i.store_id=$1 GROUP BY i.product_id
 ), stocked AS (
  SELECT p.id,p.stock,p.cost,p.min_stock,p.active,l.sold_at,
+ COALESCE((SELECT sum(round(b.quantity*b.unit_cost,2)) FROM stock_batches b WHERE b.product_id=p.id AND b.store_id=$1),0) AS batch_value,
  (p.stock>0) AS holds_stock,
  (l.sold_at IS NULL OR l.sold_at<now()-($2||' days')::interval) AS stale
  FROM products p LEFT JOIN last_sale l ON l.product_id=p.id WHERE p.store_id=$1
 )
 SELECT
- COALESCE(sum(round(stock*cost,2)) FILTER(WHERE holds_stock),0)::text AS value,
+ COALESCE(sum(batch_value) FILTER(WHERE holds_stock),0)::text AS value,
  count(*) FILTER(WHERE holds_stock)::text AS "inStock",
  count(*) FILTER(WHERE active AND stock<=0)::text AS "outOfStock",
  count(*) FILTER(WHERE active AND stock>0 AND stock<=min_stock)::text AS "lowStock",
  count(*) FILTER(WHERE holds_stock AND stale)::text AS "deadCount",
- COALESCE(sum(round(stock*cost,2)) FILTER(WHERE holds_stock AND stale),0)::text AS "deadValue",
+ COALESCE(sum(batch_value) FILTER(WHERE holds_stock AND stale),0)::text AS "deadValue",
  count(*) FILTER(WHERE holds_stock AND cost=0)::text AS "missingCost",
- COALESCE(sum(round(stock*cost,2)) FILTER(WHERE holds_stock AND cost=0),0)::text AS "uncostedValue"
+ COALESCE(sum(batch_value) FILTER(WHERE holds_stock AND cost=0),0)::text AS "uncostedValue"
  FROM stocked`,
         [store.id, String(deadDays)],
       )
@@ -723,7 +724,7 @@ SELECT
     const byCategory = (
       await this.database.pool.query(
         `SELECT COALESCE(category,'Uncategorised') AS category,
- sum(round(stock*cost,2))::text AS value,count(*)::text AS products
+ sum(COALESCE((SELECT sum(round(b.quantity*b.unit_cost,2)) FROM stock_batches b WHERE b.product_id=products.id AND b.store_id=$1),0))::text AS value,count(*)::text AS products
  FROM products WHERE store_id=$1 AND stock>0 GROUP BY 1 ORDER BY 2 DESC LIMIT 12`,
         [store.id],
       )

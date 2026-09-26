@@ -56,9 +56,21 @@ export class CatalogController {
       .select()
       .from(barcodes)
       .where(eq(barcodes.storeId, req.context.store.id));
+    const canReadCosts = req.context.user.permissions.includes('costs.read');
+    const values = canReadCosts
+      ? (
+          await this.database.pool.query(
+            'SELECT product_id,sum(round(quantity*unit_cost,2))::text AS value FROM stock_batches WHERE store_id=$1 GROUP BY product_id',
+            [req.context.store.id],
+          )
+        ).rows
+      : [];
     return rows.map((p) => ({
       ...p,
-      cost: req.context.user.permissions.includes('costs.read') ? p.cost : null,
+      cost: canReadCosts ? p.cost : null,
+      stockValue: canReadCosts
+        ? (values.find((v) => v.product_id === p.id)?.value ?? '0.00')
+        : null,
       plu: p.plu ?? '',
       barcodes: codes.filter((b) => b.productId === p.id).map((b) => b.value),
     }));
@@ -201,19 +213,33 @@ export class CatalogController {
       const product = selected.rows[0];
       if (!product) throw new NotFoundException('Product not found.');
       if (Number(product.stock) !== 0)
-        throw new ConflictException('This product has stock on hand. Count or adjust it to zero before deleting.');
-      await client.query('DELETE FROM barcodes WHERE product_id=$1 AND store_id=$2', [id, store.id]);
+        throw new ConflictException(
+          'This product has stock on hand. Count or adjust it to zero before deleting.',
+        );
+      await client.query('DELETE FROM barcodes WHERE product_id=$1 AND store_id=$2', [
+        id,
+        store.id,
+      ]);
       await client.query('DELETE FROM products WHERE id=$1 AND store_id=$2', [id, store.id]);
       await client.query(
         'INSERT INTO audits(store_id,employee_id,device_id,action,entity_id,details) VALUES($1,$2,$3,$4,$5,$6)',
-        [store.id, user.id, device.id, 'Product deleted', id, JSON.stringify({ name: product.name, sku: product.sku })],
+        [
+          store.id,
+          user.id,
+          device.id,
+          'Product deleted',
+          id,
+          JSON.stringify({ name: product.name, sku: product.sku }),
+        ],
       );
       await client.query('COMMIT');
       return { deleted: true };
     } catch (error) {
       await client.query('ROLLBACK');
       if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23503')
-        throw new ConflictException('This product is used in sales, purchases, inventory, counts or lists. Deactivate it instead to preserve those records.');
+        throw new ConflictException(
+          'This product is used in sales, purchases, inventory, counts or lists. Deactivate it instead to preserve those records.',
+        );
       throw error;
     } finally {
       client.release();

@@ -517,6 +517,7 @@ export async function executeAiTool(
         `SELECT b.id AS "batchId",p.id AS "productId",p.name AS product,p.sku,p.unit,
           p.stock::text AS "totalStock",b.quantity::text AS quantity,
           b.expiry_date::text AS "expiryDate",
+          ${req.context.user.permissions.includes('costs.read') ? 'b.unit_cost::text AS "unitCost",b.cost_source AS "costSource",' : ''}
           CASE WHEN b.expiry_date IS NULL THEN 'unknown'
             WHEN b.expiry_date<=d.today THEN 'expired'
             WHEN b.expiry_date<=d.today+$4::integer THEN 'expiring'
