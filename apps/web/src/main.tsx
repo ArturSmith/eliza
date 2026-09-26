@@ -37,6 +37,7 @@ function CheckoutRoute() {
     </Suspense>
   );
 }
+import { ExpensesPage } from './expenses';
 import { StoreSettingsPage } from './store-settings';
 import { StockCountsPage } from './stock-counts';
 import { SuppliersPage, PurchasesPage } from './purchasing';
@@ -138,6 +139,7 @@ const routes = [
   createRoute({ getParentRoute: () => root, path: '/team', component: TeamManagementPage }),
   createRoute({ getParentRoute: () => root, path: '/devices', component: DevicesPage }),
   createRoute({ getParentRoute: () => root, path: '/settings', component: StoreSettingsPage }),
+  createRoute({ getParentRoute: () => root, path: '/expenses', component: ExpensesPage }),
 ];
 const router = createRouter({ routeTree: root.addChildren(routes) });
 declare module '@tanstack/react-router' {

@@ -2,6 +2,7 @@ import { beforeAll, afterAll, describe, it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { createApp } from '../apps/api/dist/app.js';
 import { Database } from '../apps/api/dist/database.js';
+import { storeToday } from '../packages/contracts/src/index';
 
 const admin = new Database();
 const original = process.env.DATABASE_URL ?? 'postgresql://eliza:eliza_local@127.0.0.1:54329/eliza';
@@ -155,11 +156,62 @@ describe.sequential('owner dashboard', () => {
     expect(res.body.comparisons.some((c: any) => c.available === false)).toBe(true);
   });
 
-  it('declares operating expenses unavailable rather than reporting zero', async () => {
-    const res = await owner.request('/reports/owner-dashboard?period=month');
-    const expenses = res.body.unavailable.find((u: any) => u.metric === 'operatingExpenses');
-    expect(expenses).toBeTruthy();
-    expect(expenses.reason).toMatch(/operating expenses/i);
+  it('includes period expenses and payments without double-counting purchases in profit', async () => {
+    const session = (await owner.request('/auth/session')).body;
+    const today = storeToday(new Date(), session.store.timezone);
+    expect(
+      (
+        await owner.request('/expenses', {
+          date: today,
+          description: 'Utilities',
+          category: 'Utilities',
+          amount: '30.50',
+          paymentMethod: 'bank',
+        })
+      ).status,
+    ).toBe(201);
+    const supplier = (
+      await db.pool.query(
+        "INSERT INTO suppliers(store_id,code,name) VALUES($1,'TEST-SPEND','Supplier') RETURNING id",
+        [session.store.id],
+      )
+    ).rows[0];
+    await db.pool.query(
+      `INSERT INTO purchases(store_id,supplier_id,number,status,subtotal,tax,total,created_by,device_id,created_at,payment_status,paid_at) VALUES
+      ($1,$2,'SPEND-1','ordered',100.25,0,100.25,$3,$4,'2000-01-01','paid',now()),
+      ($1,$2,'SPEND-2','ordered',400,0,400,$3,$4,now(),'unpaid',NULL),
+      ($1,$2,'SPEND-3','ordered',900,0,900,$3,$4,'2000-01-01','paid','2000-01-02')`,
+      [session.store.id, supplier.id, session.user.id, session.device.id],
+    );
+    await owner.request('/expenses', {
+      date: '2000-01-02',
+      description: 'Old cost',
+      category: 'Other',
+      amount: '5.75',
+      paymentMethod: 'cash',
+    });
+    const otherStore = (
+      await db.pool.query(
+        "INSERT INTO stores(organization_id,name,currency,timezone) SELECT organization_id,'Other shop',currency,timezone FROM stores WHERE id=$1 RETURNING id",
+        [session.store.id],
+      )
+    ).rows[0];
+    await db.pool.query(
+      "INSERT INTO expenses(store_id,expense_date,description,category,amount,payment_method) VALUES($1,$2,'Other cost','Other',999,'cash')",
+      [otherStore.id, today],
+    );
+    const report = (await owner.request('/reports/owner-dashboard?period=today')).body;
+    expect(report.kpis.operatingExpenses.value).toBe(30.5);
+    expect(report.kpis.paidPurchases.value).toBe(100.25);
+    expect(report.kpis.totalSpending.value).toBe(130.75);
+    expect(report.kpis.grossProfit.value).toBe(80);
+    expect(report.kpis.netProfit.value).toBe(49.5);
+    expect(report.unavailable.some((u: any) => u.metric === 'operatingExpenses')).toBe(false);
+    const historical = (
+      await owner.request('/reports/owner-dashboard?period=custom&from=2000-01-02&to=2000-01-02')
+    ).body;
+    expect(historical.kpis.totalSpending.value).toBe(905.75);
+    expect(historical.kpis.netProfit.value).toBe(-5.75);
   });
 
   it('counts products that have no purchase cost', async () => {
@@ -215,5 +267,16 @@ describe.sequential('owner dashboard', () => {
     expect(res.body.kpis.grossProfit.value).toBeNull();
     expect(res.body.kpis.grossProfit.restricted).toBe(true);
     expect(res.body.kpis.grossMargin.restricted).toBe(true);
+    expect(res.body.kpis.netProfit.value).toBeNull();
+    expect(res.body.kpis.netProfit.restricted).toBe(true);
+    await db.pool.query(
+      `UPDATE roles SET permissions=(SELECT COALESCE(jsonb_agg(p),'[]'::jsonb) FROM jsonb_array_elements(permissions) p WHERE p NOT IN ('"expenses.read"'::jsonb,'"purchases.read"'::jsonb)) WHERE id=$1`,
+      [manager.id],
+    );
+    const restricted = (await limited.request('/reports/owner-dashboard?period=today')).body;
+    expect(restricted.kpis.operatingExpenses.value).toBeNull();
+    expect(restricted.kpis.paidPurchases.value).toBeNull();
+    expect(restricted.kpis.totalSpending.value).toBeNull();
+    expect(restricted.kpis.totalSpending.restricted).toBe(true);
   });
 });

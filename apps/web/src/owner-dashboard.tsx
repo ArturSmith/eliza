@@ -282,6 +282,18 @@ export function TodayOperations() {
                 : today.kpis.grossMargin.value.toFixed(1) + '%'}
             </strong>
           </article>
+          <Kpi
+            label="Total spending"
+            data={today.kpis.totalSpending}
+            currency={currency}
+            hint={t('Operating expenses + purchases paid in this period.')}
+          />
+          <Kpi
+            label="Net profit"
+            data={today.kpis.netProfit}
+            currency={currency}
+            hint={t('Gross profit − operating expenses.')}
+          />
         </div>
         <HourlySales rows={today.hourly} currency={currency} />
       </section>
@@ -343,6 +355,18 @@ export function OwnerDashboardPage() {
             <Kpi label="Sales" data={data.kpis.revenue} currency={currency} />
             <Kpi label="Gross profit" data={data.kpis.grossProfit} currency={currency} />
             <Kpi
+              label="Total spending"
+              data={data.kpis.totalSpending}
+              currency={currency}
+              hint={t('Operating expenses + purchases paid in this period.')}
+            />
+            <Kpi
+              label="Net profit"
+              data={data.kpis.netProfit}
+              currency={currency}
+              hint={t('Gross profit − operating expenses.')}
+            />
+            <Kpi
               label="Gross margin"
               data={data.kpis.grossMargin}
               currency={currency}
@@ -358,6 +382,17 @@ export function OwnerDashboardPage() {
             <Kpi label="Refunds" data={data.kpis.refunds} currency={currency} />
           </div>
 
+          <p className="muted">
+            {t('Operating expenses')}:{' '}
+            {data.kpis.operatingExpenses.value === null
+              ? t('Restricted')
+              : formatMoney(String(data.kpis.operatingExpenses.value), currency)}
+            {' · '}
+            {t('Paid purchases')}:{' '}
+            {data.kpis.paidPurchases.value === null
+              ? t('Restricted')
+              : formatMoney(String(data.kpis.paidPurchases.value), currency)}
+          </p>
           <p className="muted comparison-note">
             {t('Compared with')}:{' '}
             {data.comparisons

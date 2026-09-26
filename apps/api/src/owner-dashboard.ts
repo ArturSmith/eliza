@@ -65,6 +65,10 @@ export class OwnerDashboardController {
     const b = parse(query, input);
     const store = req.context.store as Store;
     const margin = req.context.user.permissions.includes('analytics.margin');
+    const finances = {
+      expenses: req.context.user.permissions.includes('expenses.read'),
+      purchases: req.context.user.permissions.includes('purchases.read'),
+    };
     const now = new Date();
     const today = storeToday(now, store.timezone);
     const hour = storeHour(now, store.timezone);
@@ -77,11 +81,11 @@ export class OwnerDashboardController {
     const cutoff = period === 'today' ? hour : null;
 
     const history = await this.history(store);
-    const current = await this.totals(store, range, cutoff, margin);
+    const current = await this.totals(store, range, cutoff, margin, finances);
     const compared = [];
     for (const baseline of baselines) {
       const length = daysBetween(baseline.range.from, baseline.range.to);
-      const totals = await this.totals(store, baseline.range, cutoff, margin);
+      const totals = await this.totals(store, baseline.range, cutoff, margin, finances);
       // A multi-day averaging window is scaled back to one comparable period.
       const scale = baseline.key === 'weekdayAverage' ? length / 7 : length / days;
       const divisor =
@@ -212,10 +216,9 @@ export class OwnerDashboardController {
       marginTrend,
       /** Blocks the dashboard deliberately does not show, and why. */
       unavailable: [
-        {
-          metric: 'operatingExpenses',
-          reason: 'This application does not record operating expenses yet.',
-        },
+        ...(!finances.expenses
+          ? [{ metric: 'operatingExpenses', reason: 'Requires the expenses.read permission.' }]
+          : []),
         ...(margin
           ? []
           : [{ metric: 'grossProfit', reason: 'Requires the analytics.margin permission.' }]),
@@ -224,7 +227,13 @@ export class OwnerDashboardController {
   }
 
   /** Sales, units, tax, discounts, refunds and - when permitted - COGS for a window. */
-  private async totals(store: Store, range: DateRange, cutoff: string | null, margin: boolean) {
+  private async totals(
+    store: Store,
+    range: DateRange,
+    cutoff: string | null,
+    margin: boolean,
+    finances: { expenses: boolean; purchases: boolean },
+  ) {
     const row = (
       await this.database.pool.query(
         `WITH bounds AS (
@@ -256,16 +265,28 @@ SELECT (SELECT count(*) FROM sold)::text AS transactions,
  COALESCE((SELECT sum(discount) FROM sold),0)::text AS discount,
  (SELECT units FROM costs)::text AS units,
  (SELECT total FROM returned)::text AS refunds,
+ (SELECT tax FROM returned)::text AS "refundTax",
  (SELECT count FROM returned)::text AS "refundCount",
  (SELECT units FROM returned)::text AS "refundUnits",
  (SELECT missing FROM costs)::text AS "missingCost",
- CASE WHEN $6 THEN ((SELECT cogs FROM costs)-(SELECT restored FROM returned))::text END AS cogs`,
-        [store.id, range.from, range.to, store.timezone, cutoff, margin],
+ CASE WHEN $6 THEN ((SELECT cogs FROM costs)-(SELECT restored FROM returned))::text END AS cogs,
+ CASE WHEN $7 THEN (SELECT COALESCE(sum(amount),0)::text FROM expenses WHERE store_id=$1 AND expense_date BETWEEN $2::date AND $3::date) END AS "operatingExpenses",
+ CASE WHEN $8 THEN (SELECT COALESCE(sum(p.total),0)::text FROM purchases p CROSS JOIN bounds b WHERE p.store_id=$1 AND p.payment_status='paid' AND p.paid_at>=b.start AND p.paid_at<b.finish AND ($5::text IS NULL OR to_char(p.paid_at AT TIME ZONE $4,'HH24')<=$5)) END AS "paidPurchases"`,
+        [
+          store.id,
+          range.from,
+          range.to,
+          store.timezone,
+          cutoff,
+          margin,
+          finances.expenses,
+          finances.purchases,
+        ],
       )
     ).rows[0];
     // Revenue is net of tax and refunds so it can be compared against cost of goods.
     const grossExTax = num(row.grossSales) - num(row.tax);
-    const refundsExTax = num(row.refunds) - 0;
+    const refundsExTax = num(row.refunds) - num(row.refundTax);
     const revenue = grossExTax - refundsExTax;
     const cogs = margin && row.cogs !== null ? num(row.cogs) : null;
     const missing = num(row.missingCost);
@@ -280,6 +301,15 @@ SELECT (SELECT count(*) FROM sold)::text AS transactions,
       refunds: num(row.refunds),
       refundCount: num(row.refundCount),
       cogs,
+      operatingExpenses: finances.expenses ? num(row.operatingExpenses) : null,
+      paidPurchases: finances.purchases ? num(row.paidPurchases) : null,
+      totalSpending:
+        finances.expenses && finances.purchases
+          ? num(row.operatingExpenses) + num(row.paidPurchases)
+          : null,
+      netProfit: profit !== null && finances.expenses ? profit - num(row.operatingExpenses) : null,
+      netProfitRestricted: !margin || !finances.expenses,
+      spendingRestricted: !finances.expenses || !finances.purchases,
       grossProfit: profit,
       grossMargin: grossMargin(profit, revenue),
       averageBasket: averageBasket(revenue, num(row.transactions)),
@@ -296,6 +326,26 @@ SELECT (SELECT count(*) FROM sold)::text AS transactions,
     });
     return {
       revenue: compare('revenue', current.revenue, previous?.revenue ?? null),
+      operatingExpenses: {
+        ...compare(
+          'operatingExpenses',
+          current.operatingExpenses,
+          previous?.operatingExpenses ?? null,
+        ),
+        restricted: current.operatingExpenses === null,
+      },
+      paidPurchases: {
+        ...compare('paidPurchases', current.paidPurchases, previous?.paidPurchases ?? null),
+        restricted: current.paidPurchases === null,
+      },
+      totalSpending: {
+        ...compare('totalSpending', current.totalSpending, previous?.totalSpending ?? null),
+        restricted: current.spendingRestricted,
+      },
+      netProfit: {
+        ...compare('netProfit', current.netProfit, previous?.netProfit ?? null),
+        restricted: current.netProfitRestricted,
+      },
       grossProfit: margin
         ? compare('grossProfit', current.grossProfit, previous?.grossProfit ?? null)
         : { value: null, previous: null, change: null, metric: 'grossProfit', restricted: true },
@@ -1208,6 +1258,10 @@ function scaleTotals(totals: any, divisor: number) {
     units: scale(totals.units),
     cogs: scale(totals.cogs),
     grossProfit: profit,
+    operatingExpenses: scale(totals.operatingExpenses),
+    paidPurchases: scale(totals.paidPurchases),
+    totalSpending: scale(totals.totalSpending),
+    netProfit: scale(totals.netProfit),
     // Ratios are unaffected by scaling, so they are recomputed rather than divided.
     grossMargin: grossMargin(profit, revenue),
     averageBasket: averageBasket(revenue, totals.transactions / divisor),

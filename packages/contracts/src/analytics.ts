@@ -178,6 +178,7 @@ export function multiplyMoney(value: string, factor: string) {
  */
 export type Direction = 'up-good' | 'up-bad' | 'neutral';
 export const metricDirection: Record<string, Direction> = {
+  netProfit: 'up-good',
   revenue: 'up-good',
   grossProfit: 'up-good',
   grossMargin: 'up-good',

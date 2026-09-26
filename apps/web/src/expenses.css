@@ -1,0 +1,74 @@
+.expenses-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr 2fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.expenses-summary {
+  display: flex;
+  gap: 3rem;
+  margin: 1.5rem 0;
+}
+.expenses-summary > div {
+  display: grid;
+  gap: 0.5rem;
+}
+.expenses-summary strong {
+  font-size: 1.7rem;
+  color: #254938;
+}
+.expenses-table {
+  overflow-x: auto;
+}
+.expenses-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.expenses-table th,
+.expenses-table td {
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.expenses-table small {
+  display: block;
+  margin-top: 0.35rem;
+  max-width: 420px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #6b7c70;
+}
+.expenses-amount {
+  white-space: nowrap;
+  font-weight: 600;
+}
+.expenses-actions,
+.expenses-pagination {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+.expenses-pagination {
+  justify-content: flex-end;
+  margin: 1rem 0;
+}
+.expenses-form {
+  display: grid;
+  gap: 1rem;
+  border: 0;
+  padding: 0;
+  margin: 1rem 0 0;
+  min-width: 0;
+}
+@media (max-width: 700px) {
+  .expenses-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+  .expenses-filters > :last-child {
+    grid-column: 1 / -1;
+  }
+  .expenses-summary {
+    gap: 1.5rem;
+  }
+}

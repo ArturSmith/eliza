@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm';
 import {
   pgTable,
+  date,
+  integer,
   uuid,
   text,
   boolean,
@@ -167,4 +169,22 @@ export const audits = pgTable('audits', {
   entityId: uuid('entity_id').notNull(),
   details: jsonb('details').notNull(),
   createdAt: created(),
+});
+
+export const expenses = pgTable('expenses', {
+  id: id(),
+  storeId: uuid('store_id')
+    .notNull()
+    .references(() => stores.id),
+  date: date('expense_date').notNull(),
+  description: text('description').notNull(),
+  category: text('category').notNull(),
+  amount: numeric('amount', { precision: 14, scale: 2 }).notNull(),
+  paymentMethod: text('payment_method').notNull(),
+  payee: text('payee').notNull().default(''),
+  reference: text('reference').notNull().default(''),
+  notes: text('notes').notNull().default(''),
+  version: integer('version').notNull().default(1),
+  createdAt: created(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
