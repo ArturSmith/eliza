@@ -394,6 +394,62 @@ describe.sequential('purchasing and receiving', () => {
       paid_at: null,
     });
   });
+  it('serializes concurrent payment updates and preserves the original paid date on retries', async () => {
+    const before = (await manager.request('/purchases/' + order.id)).body;
+    const payload = {
+      requestId: requestId(),
+      version: before.version,
+      status: 'paid',
+      dueDate: '',
+    };
+    const replies = await Promise.all([
+      manager.request('/purchases/' + order.id + '/payment', payload),
+      manager.request('/purchases/' + order.id + '/payment', payload),
+    ]);
+    expect(replies.map((r) => r.status)).toEqual([201, 201]);
+    expect(replies[0].body).toEqual(replies[1].body);
+    const paid = replies[0].body;
+    expect(paid.version).toBe(before.version + 1);
+    expect(
+      (
+        await manager.request('/purchases/' + order.id + '/payment', {
+          ...payload,
+          status: 'unpaid',
+        })
+      ).status,
+    ).toBe(409);
+    const again = await manager.request('/purchases/' + order.id + '/payment', {
+      ...payload,
+      requestId: requestId(),
+      version: paid.version,
+    });
+    expect(again.status).toBe(201);
+    expect(again.body.paid_at).toBe(paid.paid_at);
+    const race = await Promise.all(
+      ['unpaid', 'paid'].map((status) =>
+        manager.request('/purchases/' + order.id + '/payment', {
+          ...payload,
+          requestId: requestId(),
+          version: again.body.version,
+          status,
+        }),
+      ),
+    );
+    expect(race.map((r) => r.status).sort()).toEqual([201, 409]);
+    const current = (await manager.request('/purchases/' + order.id)).body;
+    expect(current.version).toBe(again.body.version + 1);
+    expect(
+      (
+        await manager.request('/purchases/' + order.id + '/payment', {
+          ...payload,
+          requestId: requestId(),
+          version: current.version,
+          status: 'unpaid',
+        })
+      ).status,
+    ).toBe(201);
+  });
+
   it('closes a partial remainder once, preserving stock, receipts and unpaid status', async () => {
     await db.pool.query('UPDATE suppliers SET active=true WHERE id=$1', [supplier.id]);
     let current = (
@@ -524,8 +580,12 @@ describe.sequential('purchasing and receiving', () => {
       200,
     );
     expect((await manager.request('/purchases/' + draft.body.id)).status).toBe(404);
+    // Draft creation also records the supplier's product offer; deleting the draft
+    // must not silently discard that reusable price relationship.
     expect((await manager.request('/suppliers/' + fresh.body.id, undefined, 'DELETE')).status).toBe(
-      200,
+      409,
     );
+    const offers = (await manager.request('/suppliers/' + fresh.body.id + '/products')).body;
+    expect(JSON.stringify(offers)).toContain(productId);
   });
 });

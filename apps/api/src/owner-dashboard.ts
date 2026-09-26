@@ -4,6 +4,9 @@ import { AuthModule } from './auth.js';
 import { AccessGuard, Require, parse, type AuthRequest } from './security.js';
 import { Database } from './database.js';
 import {
+  calculateLine,
+  toScaled,
+  fromScaled,
   type DateRange,
   type Period,
   storeToday,
@@ -44,6 +47,36 @@ const query = z
 
 const num = (value: unknown) => Number(value ?? 0);
 const money = (value: unknown) => String(value ?? '0');
+
+// Receipt snapshots preserve the charged tax and category after catalog edits.
+// Restock costs are allocated cumulatively so partial refunds conserve cents.
+const financialEntries = `original_costs AS (
+ SELECT sale_id,product_id,sum(quantity) AS quantity,sum(round(cost*quantity,2)) AS cost,
+ count(*) FILTER(WHERE cost IS NULL) AS missing
+ FROM sale_items WHERE store_id=$1 GROUP BY sale_id,product_id
+), receipt_lines AS (
+ SELECT s.id AS sale_id,s.created_at,(j->>'productId')::uuid AS product_id,
+ COALESCE(j->>'category','Uncategorised') AS category,
+ (j->>'quantity')::numeric AS quantity,(j->>'total')::numeric-(j->>'tax')::numeric AS revenue
+ FROM sales s CROSS JOIN LATERAL jsonb_array_elements(s.receipt->'lines') j WHERE s.store_id=$1
+), snapshots AS (
+ SELECT sale_id,product_id,min(category) AS category,sum(quantity) AS quantity,sum(revenue) AS revenue,min(created_at) AS created_at
+ FROM receipt_lines GROUP BY sale_id,product_id
+), refund_history AS (
+ SELECT r.created_at,l.*,c.cost,c.quantity AS sold_quantity,COALESCE(c.missing,1) AS missing,
+ COALESCE(s.category,'Uncategorised') AS category,
+ COALESCE(sum(CASE WHEN l.restock THEN l.quantity ELSE 0 END) OVER(PARTITION BY l.sale_id,l.product_id ORDER BY r.created_at,r.id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS prior_restock
+ FROM refunds r JOIN refund_lines l ON l.refund_id=r.id AND l.store_id=r.store_id
+ LEFT JOIN original_costs c ON c.sale_id=l.sale_id AND c.product_id=l.product_id
+ LEFT JOIN snapshots s ON s.sale_id=l.sale_id AND s.product_id=l.product_id WHERE r.store_id=$1
+), financial_entries AS (
+ SELECT s.created_at,s.product_id,s.category,s.quantity,s.revenue,c.cost,COALESCE(c.missing,1) AS missing
+ FROM snapshots s LEFT JOIN original_costs c ON c.sale_id=s.sale_id AND c.product_id=s.product_id
+ UNION ALL
+ SELECT created_at,product_id,category,0,-(total-tax),
+ CASE WHEN restock THEN -(round(cost*(prior_restock+quantity)/sold_quantity,2)-round(cost*prior_restock/sold_quantity,2)) ELSE 0 END,missing
+ FROM refund_history
+)`;
 
 type Store = { id: string; timezone: string; currency: string };
 
@@ -249,15 +282,23 @@ export class OwnerDashboardController {
  SELECT COALESCE(sum(round(i.cost*i.quantity,2)),0) AS cogs,
  count(*) FILTER(WHERE i.cost IS NULL) AS missing,
  COALESCE(sum(i.quantity),0) AS units FROM items i
-), returned AS (
- SELECT COALESCE(sum(l.total),0) AS total,COALESCE(sum(l.tax),0) AS tax,
- COALESCE(sum(l.quantity),0) AS units,count(DISTINCT r.id) AS count,
- COALESCE(sum(CASE WHEN l.restock THEN round(COALESCE(c.cost,0)*l.quantity,2) ELSE 0 END),0) AS restored
+), original_costs AS (
+ SELECT sale_id,product_id,sum(quantity) AS quantity,sum(round(cost*quantity,2)) AS cost
+ FROM sale_items WHERE store_id=$1 GROUP BY sale_id,product_id
+), return_history AS (
+ SELECT r.id,r.created_at,l.total,l.tax,l.quantity,l.restock,c.cost,c.quantity AS sold_quantity,
+ COALESCE(sum(CASE WHEN l.restock THEN l.quantity ELSE 0 END) OVER(PARTITION BY l.sale_id,l.product_id ORDER BY r.created_at,r.id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS prior_restock
  FROM refunds r JOIN refund_lines l ON l.refund_id=r.id AND l.store_id=r.store_id
- CROSS JOIN bounds b
- LEFT JOIN LATERAL (SELECT i.cost FROM sale_items i WHERE i.sale_id=l.sale_id AND i.product_id=l.product_id AND i.store_id=$1 LIMIT 1) c ON true
- WHERE r.store_id=$1 AND r.created_at>=b.start AND r.created_at<b.finish
- AND ($5::text IS NULL OR to_char(r.created_at AT TIME ZONE $4,'HH24')<=$5)
+ LEFT JOIN original_costs c ON c.sale_id=l.sale_id AND c.product_id=l.product_id
+ WHERE r.store_id=$1
+), returned AS (
+ SELECT COALESCE(sum(total),0) AS total,COALESCE(sum(tax),0) AS tax,
+ COALESCE(sum(quantity),0) AS units,count(DISTINCT id) AS count,
+ count(*) FILTER(WHERE cost IS NULL) AS missing,
+ COALESCE(sum(CASE WHEN restock THEN round(cost*(prior_restock+quantity)/sold_quantity,2)-round(cost*prior_restock/sold_quantity,2) ELSE 0 END),0) AS restored
+ FROM return_history CROSS JOIN bounds b
+ WHERE created_at>=b.start AND created_at<b.finish
+ AND ($5::text IS NULL OR to_char(created_at AT TIME ZONE $4,'HH24')<=$5)
 )
 SELECT (SELECT count(*) FROM sold)::text AS transactions,
  COALESCE((SELECT sum(total) FROM sold),0)::text AS "grossSales",
@@ -268,7 +309,7 @@ SELECT (SELECT count(*) FROM sold)::text AS transactions,
  (SELECT tax FROM returned)::text AS "refundTax",
  (SELECT count FROM returned)::text AS "refundCount",
  (SELECT units FROM returned)::text AS "refundUnits",
- (SELECT missing FROM costs)::text AS "missingCost",
+ ((SELECT missing FROM costs)+(SELECT missing FROM returned)+(SELECT count(*) FROM sold s WHERE NOT EXISTS(SELECT 1 FROM original_costs c WHERE c.sale_id=s.id)))::text AS "missingCost",
  CASE WHEN $6 THEN ((SELECT cogs FROM costs)-(SELECT restored FROM returned))::text END AS cogs,
  CASE WHEN $7 THEN (SELECT COALESCE(sum(amount),0)::text FROM expenses WHERE store_id=$1 AND expense_date BETWEEN $2::date AND $3::date) END AS "operatingExpenses",
  CASE WHEN $8 THEN (SELECT COALESCE(sum(p.total),0)::text FROM purchases p CROSS JOIN bounds b WHERE p.store_id=$1 AND p.payment_status='paid' AND p.paid_at>=b.start AND p.paid_at<b.finish AND ($5::text IS NULL OR to_char(p.paid_at AT TIME ZONE $4,'HH24')<=$5)) END AS "paidPurchases"`,
@@ -285,12 +326,15 @@ SELECT (SELECT count(*) FROM sold)::text AS transactions,
       )
     ).rows[0];
     // Revenue is net of tax and refunds so it can be compared against cost of goods.
-    const grossExTax = num(row.grossSales) - num(row.tax);
-    const refundsExTax = num(row.refunds) - num(row.refundTax);
-    const revenue = grossExTax - refundsExTax;
+    const cents = (value: unknown) => toScaled(String(value ?? '0'), 2);
+    const amount = (value: bigint) => Number(fromScaled(value, 2));
+    const revenueCents =
+      cents(row.grossSales) - cents(row.tax) - cents(row.refunds) + cents(row.refundTax);
+    const revenue = amount(revenueCents);
     const cogs = margin && row.cogs !== null ? num(row.cogs) : null;
     const missing = num(row.missingCost);
-    const profit = cogs === null || missing > 0 ? null : revenue - cogs;
+    const profitCents = cogs === null || missing > 0 ? null : revenueCents - cents(row.cogs);
+    const profit = profitCents === null ? null : amount(profitCents);
     return {
       transactions: num(row.transactions),
       grossSales: money(row.grossSales),
@@ -305,9 +349,12 @@ SELECT (SELECT count(*) FROM sold)::text AS transactions,
       paidPurchases: finances.purchases ? num(row.paidPurchases) : null,
       totalSpending:
         finances.expenses && finances.purchases
-          ? num(row.operatingExpenses) + num(row.paidPurchases)
+          ? amount(cents(row.operatingExpenses) + cents(row.paidPurchases))
           : null,
-      netProfit: profit !== null && finances.expenses ? profit - num(row.operatingExpenses) : null,
+      netProfit:
+        profitCents !== null && finances.expenses
+          ? amount(profitCents - cents(row.operatingExpenses))
+          : null,
       netProfitRestricted: !margin || !finances.expenses,
       spendingRestricted: !finances.expenses || !finances.purchases,
       grossProfit: profit,
@@ -441,22 +488,17 @@ SELECT (SELECT count(*) FROM sold)::text AS transactions,
   ) {
     const rows = (
       await this.database.pool.query(
-        `WITH windows AS (
+        `WITH ${financialEntries}, windows AS (
  SELECT 'current' AS phase,$2::date AS from_day,$3::date AS to_day
  UNION ALL SELECT 'previous',$5::date,$6::date WHERE $5 IS NOT NULL
 ), lines AS (
- SELECT w.phase,COALESCE(p.category,'Uncategorised') AS category,
- i.quantity,i.total,i.cost,i.price
- FROM windows w JOIN sales s ON s.store_id=$1
- AND s.created_at>=(w.from_day::timestamp AT TIME ZONE $4)
- AND s.created_at<((w.to_day+1)::timestamp AT TIME ZONE $4)
- JOIN sale_items i ON i.sale_id=s.id AND i.store_id=$1
- LEFT JOIN products p ON p.id=i.product_id AND p.store_id=$1
+ SELECT w.phase,e.* FROM windows w JOIN financial_entries e
+ ON e.created_at>=(w.from_day::timestamp AT TIME ZONE $4)
+ AND e.created_at<((w.to_day+1)::timestamp AT TIME ZONE $4)
 )
-SELECT phase,category,sum(total)::text AS revenue,sum(quantity)::text AS units,
- CASE WHEN $7 AND count(*) FILTER(WHERE cost IS NULL)=0
-  THEN (sum(total)-sum(round(cost*quantity,2)))::text END AS "grossProfit"
- FROM lines GROUP BY phase,category ORDER BY sum(total) DESC`,
+SELECT phase,category,sum(revenue)::text AS revenue,sum(quantity)::text AS units,
+ CASE WHEN $7 AND sum(missing)=0 THEN (sum(revenue)-sum(cost))::text END AS "grossProfit"
+ FROM lines GROUP BY phase,category ORDER BY sum(revenue) DESC`,
         [
           store.id,
           range.from,
@@ -472,7 +514,12 @@ SELECT phase,category,sum(total)::text AS revenue,sum(quantity)::text AS units,
       rows.filter((r: any) => r.phase === 'previous').map((r: any) => [r.category, r]),
     );
     const currentRows = rows.filter((r: any) => r.phase === 'current');
-    const total = currentRows.reduce((sum: number, r: any) => sum + num(r.revenue), 0);
+    const total = Number(
+      fromScaled(
+        currentRows.reduce((sum: bigint, r: any) => sum + toScaled(r.revenue, 2), 0n),
+        2,
+      ),
+    );
     return {
       total,
       rows: currentRows.map((r: any) => {
@@ -505,14 +552,11 @@ SELECT phase,category,sum(total)::text AS revenue,sum(quantity)::text AS units,
     const days = daysBetween(range.from, range.to);
     const rows = (
       await this.database.pool.query(
-        `WITH bounds AS (
+        `WITH ${financialEntries}, bounds AS (
  SELECT ($2::date::timestamp AT TIME ZONE $4) AS start,(($3::date+1)::timestamp AT TIME ZONE $4) AS finish
 ), sold AS (
- SELECT i.product_id,sum(i.quantity) AS units,sum(i.total) AS revenue,
- sum(round(i.cost*i.quantity,2)) AS cost,count(*) FILTER(WHERE i.cost IS NULL) AS missing
- FROM sale_items i JOIN sales s ON s.id=i.sale_id AND s.store_id=$1 CROSS JOIN bounds b
- WHERE i.store_id=$1 AND s.created_at>=b.start AND s.created_at<b.finish
- GROUP BY i.product_id
+ SELECT product_id,sum(quantity) AS units,sum(revenue) AS revenue,sum(cost) AS cost,sum(missing) AS missing
+ FROM financial_entries CROSS JOIN bounds b WHERE created_at>=b.start AND created_at<b.finish GROUP BY product_id
 ), returned AS (
  SELECT l.product_id,sum(l.total) AS total,sum(l.quantity) AS units
  FROM refund_lines l JOIN refunds r ON r.id=l.refund_id AND r.store_id=l.store_id CROSS JOIN bounds b
@@ -526,7 +570,7 @@ SELECT phase,category,sum(total)::text AS revenue,sum(quantity)::text AS units,
  WHERE i.store_id=$1 AND s.created_at>=now()-interval '7 days' GROUP BY i.product_id
 )
 SELECT p.id,p.name,p.sku,p.category,p.unit,p.stock::text,p.min_stock::text AS "minStock",
- p.price::text,p.active,
+ p.price::text,p.tax_rate::text AS "taxRate",p.active,
  CASE WHEN $5 THEN p.cost::text END AS cost,
  COALESCE(sold.units,0)::text AS units,COALESCE(sold.revenue,0)::text AS revenue,
  COALESCE(returned.total,0)::text AS refunds,
@@ -547,10 +591,15 @@ SELECT p.id,p.name,p.sku,p.category,p.unit,p.stock::text,p.min_stock::text AS "m
     const enriched = rows.map((r: any) => {
       const revenue = num(r.revenue);
       const soldCost = r.soldCost === null ? null : num(r.soldCost);
-      const profit = soldCost === null ? null : revenue - soldCost;
+      const profit =
+        soldCost === null
+          ? null
+          : Number(fromScaled(toScaled(r.revenue, 2) - toScaled(r.soldCost, 2), 2));
+      const unitTax = calculateLine(r.price, '1', r.taxRate, '0').tax;
+      const netUnitPrice = Number(fromScaled(toScaled(r.price, 2) - toScaled(unitTax, 2), 2));
       const unitMargin =
-        margin && r.cost !== null && num(r.price) > 0
-          ? ((num(r.price) - num(r.cost)) / num(r.price)) * 100
+        margin && r.cost !== null && netUnitPrice > 0
+          ? ((netUnitPrice - num(r.cost)) / netUnitPrice) * 100
           : null;
       const velocity = dailyVelocity(r.units, days);
       return {
@@ -1129,14 +1178,13 @@ SELECT COALESCE(s.phase,f.phase) AS phase,
   private async marginTrend(store: Store, today: string) {
     const rows = (
       await this.database.pool.query(
-        `WITH months AS (
+        `WITH ${financialEntries}, months AS (
  SELECT to_char(generate_series(date_trunc('month',$2::date)-interval '11 months',date_trunc('month',$2::date),interval '1 month'),'YYYY-MM') AS month
 ), sold AS (
- SELECT to_char(s.created_at AT TIME ZONE $3,'YYYY-MM') AS month,
- sum(i.total) AS revenue,sum(round(i.cost*i.quantity,2)) AS cost,
- count(*) FILTER(WHERE i.cost IS NULL) AS missing
- FROM sale_items i JOIN sales s ON s.id=i.sale_id AND s.store_id=$1
- WHERE i.store_id=$1 AND s.created_at>=(date_trunc('month',$2::date)-interval '11 months')
+ SELECT to_char(created_at AT TIME ZONE $3,'YYYY-MM') AS month,
+ sum(revenue) AS revenue,sum(cost) AS cost,sum(missing) AS missing
+ FROM financial_entries
+ WHERE created_at>=((date_trunc('month',$2::date)-interval '11 months') AT TIME ZONE $3)
  GROUP BY 1
 )
 SELECT m.month,COALESCE(sold.revenue,0)::text AS revenue,

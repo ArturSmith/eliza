@@ -1673,5 +1673,10 @@
   "Operating expenses": "Операционные расходы",
   "Paid purchases": "Оплаченные закупки",
   "Operating expenses + purchases paid in this period.": "Операционные расходы и закупки, оплаченные за этот период.",
-  "Gross profit − operating expenses.": "Валовая прибыль минус операционные расходы."
+  "Gross profit − operating expenses.": "Валовая прибыль минус операционные расходы.",
+  "From": "С",
+  "To": "По",
+  "Notes (optional)": "Примечания (необязательно)",
+  "Reference (optional)": "Номер документа (необязательно)",
+  "Timezone": "Часовой пояс"
 }

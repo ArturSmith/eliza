@@ -214,6 +214,77 @@ describe.sequential('owner dashboard', () => {
     expect(historical.kpis.netProfit.value).toBe(-5.75);
   });
 
+  it('keeps spending totals exact to the cent', async () => {
+    const session = (await owner.request('/auth/session')).body;
+    await owner.request('/expenses', {
+      date: '2001-01-02',
+      description: 'Small cost',
+      category: 'Other',
+      amount: '0.10',
+      paymentMethod: 'cash',
+    });
+    const supplier = (
+      await db.pool.query('SELECT id FROM suppliers WHERE store_id=$1 LIMIT 1', [session.store.id])
+    ).rows[0];
+    await db.pool.query(
+      `INSERT INTO purchases(store_id,supplier_id,number,status,subtotal,tax,total,created_by,device_id,payment_status,paid_at) VALUES($1,$2,'CENTS','ordered',0.2,0,0.2,$3,$4,'paid','2001-01-02T12:00:00Z')`,
+      [session.store.id, supplier.id, session.user.id, session.device.id],
+    );
+    const report = (
+      await owner.request('/reports/owner-dashboard?period=custom&from=2001-01-02&to=2001-01-02')
+    ).body;
+    expect(report.kpis.totalSpending.value).toBe(0.3);
+    expect(report.kpis.netProfit.value).toBe(-0.1);
+  });
+
+  it('uses shop-local midnight for payments across the daylight-saving change', async () => {
+    const session = (await owner.request('/auth/session')).body;
+    const supplier = (
+      await db.pool.query('SELECT id FROM suppliers WHERE store_id=$1 LIMIT 1', [session.store.id])
+    ).rows[0];
+    for (const [index, paidAt, amount] of [
+      [0, '2026-03-28T22:59:59.999Z', '0.01'],
+      [1, '2026-03-28T23:00:00Z', '0.02'],
+      [2, '2026-03-29T21:59:59.999Z', '0.04'],
+      [3, '2026-03-29T22:00:00Z', '0.08'],
+    ])
+      await db.pool.query(
+        `INSERT INTO purchases(store_id,supplier_id,number,status,subtotal,tax,total,created_by,device_id,payment_status,paid_at) VALUES($1,$2,$3,'ordered',$4,0,$4,$5,$6,'paid',$7)`,
+        [
+          session.store.id,
+          supplier.id,
+          'DST-' + index,
+          amount,
+          session.user.id,
+          session.device.id,
+          paidAt,
+        ],
+      );
+    for (const [date, amount] of [
+      ['2026-03-28', '0.20'],
+      ['2026-03-29', '0.10'],
+      ['2026-03-30', '0.40'],
+    ])
+      expect(
+        (
+          await owner.request('/expenses', {
+            date,
+            amount,
+            description: 'Date boundary',
+            category: 'Other',
+            paymentMethod: 'cash',
+          })
+        ).status,
+      ).toBe(201);
+    const report = (
+      await owner.request('/reports/owner-dashboard?period=custom&from=2026-03-29&to=2026-03-29')
+    ).body;
+    expect(report.kpis.paidPurchases.value).toBe(0.06);
+    expect(report.kpis.operatingExpenses.value).toBe(0.1);
+    expect(report.kpis.totalSpending.value).toBe(0.16);
+    expect(report.kpis.netProfit.value).toBe(-0.1);
+  });
+
   it('counts products that have no purchase cost', async () => {
     const res = await owner.request('/reports/owner-dashboard?period=today');
     expect(res.body.readiness.missingCost).toBeGreaterThan(0);

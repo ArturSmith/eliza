@@ -45,9 +45,10 @@ test('receiving and payment statuses stay independent and payment filters persis
   });
   await page.goto('/purchases');
   await page.getByRole('button', { name: 'View', exact: true }).click();
-  const payment = page.getByRole('heading', { name: 'Purchase payment' }).locator('..');
-  await payment.getByLabel('Payment due date').fill('2000-01-01');
-  await payment.getByRole('button', { name: 'Save payment status' }).click();
+  const payment = page.locator('.order-payment');
+  await payment.getByRole('button', { name: 'Update payment' }).click();
+  await page.getByRole('dialog').getByLabel('Payment due date').fill('2000-01-01');
+  await page.getByRole('dialog').getByRole('button', { name: 'Save payment status' }).click();
   await expect(payment.getByText('Overdue', { exact: true })).toBeVisible();
   order = await page.request.get('/api/purchases/' + order.id).then((r) => r.json());
   await post('/purchases/' + order.id + '/receipts', {
@@ -59,8 +60,9 @@ test('receiving and payment statuses stay independent and payment filters persis
   await page.locator('.table-toolbar').getByLabel('Payment status').selectOption('overdue');
   await expect(page.getByRole('cell', { name: 'received', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'View', exact: true }).click();
-  await payment.getByLabel('Payment status', { exact: true }).selectOption('paid');
-  await payment.getByRole('button', { name: 'Save payment status' }).click();
+  await payment.getByRole('button', { name: 'Update payment' }).click();
+  await page.getByRole('dialog').getByLabel('Payment status', { exact: true }).selectOption('paid');
+  await page.getByRole('dialog').getByRole('button', { name: 'Save payment status' }).click();
   await expect(payment.locator('.badge').filter({ hasText: /^Paid$/ })).toBeVisible();
   await page.locator('.table-toolbar').getByLabel('Payment status').selectOption('paid');
   await expect(page.getByRole('cell', { name: 'received', exact: true })).toBeVisible();

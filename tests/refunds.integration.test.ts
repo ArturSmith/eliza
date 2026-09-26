@@ -359,12 +359,23 @@ describe.sequential('receipt search and refunds', () => {
       ).body;
       expect(r.restoredCost).toBe(cost);
       expect(r.netRevenue).toBe('-0.01');
+      const dashboard = (
+        await manager.request(
+          `/reports/owner-dashboard?period=custom&from=2020-01-0${day}&to=2020-01-0${day}`,
+        )
+      ).body;
+      expect(dashboard.kpis.grossProfit.value).toBe(Number(r.grossProfit));
+      expect(dashboard.kpis.netProfit.value).toBe(Number(r.grossProfit));
     }
     const total = (await manager.request('/reports/gross-profit?from=2020-01-01&to=2020-01-04'))
       .body;
     expect(total.soldCost).toBe('0.02');
     expect(total.restoredCost).toBe('0.02');
     expect(total.grossProfit).toBe('0.00');
+    const dashboard = (
+      await manager.request('/reports/owner-dashboard?period=custom&from=2020-01-01&to=2020-01-04')
+    ).body;
+    expect(dashboard.kpis.grossProfit.value).toBe(0);
   });
 
   it('withholds profit when historical cost records are missing', async () => {
@@ -378,6 +389,11 @@ describe.sequential('receipt search and refunds', () => {
     expect(r.grossProfit).toBeNull();
     expect(r.costOfGoodsSold).toBeNull();
     expect(r.missingCostRecords).toBe('1');
+    const dashboard = (
+      await manager.request('/reports/owner-dashboard?period=custom&from=2002-01-01&to=2002-01-01')
+    ).body;
+    expect(dashboard.kpis.grossProfit.value).toBeNull();
+    expect(dashboard.kpis.netProfit.value).toBeNull();
   });
 
   it('updates store settings, defaults new product tax, and preserves original receipt details', async () => {
@@ -443,5 +459,201 @@ describe.sequential('receipt search and refunds', () => {
     expect(stored.storeName).toBe('Updated Market');
     expect(stored.receiptFooter).toBe('Come again!');
     expect((await register.request('/store-profile', current)).status).toBe(401);
+  });
+  it('rolls back an unfunded cash refund and conserves tax across competing partial refunds', async () => {
+    const created = await manager.request('/products', {
+      ...product,
+      name: 'Tax rounding',
+      sku: 'TAX-ROUND',
+      price: '0.10',
+      cost: '0.01',
+      taxRate: '15',
+      plu: '',
+      barcodes: [],
+    });
+    expect(created.status).toBe(201);
+    const id = created.body.id;
+    await manager.request('/inventory/adjustments', {
+      requestId: crypto.randomUUID(),
+      productId: id,
+      quantity: '3',
+      reason: 'opening_balance',
+    });
+    const sold = await register.request(
+      '/pos/sales',
+      sale({
+        lines: [{ productId: id, quantity: '3', expectedPrice: '0.10', expectedTaxRate: '15' }],
+        discountPercent: '10',
+        payment: { method: 'cash', tendered: '0.27' },
+      }),
+    );
+    expect(sold.status).toBe(201);
+    expect(sold.body.tax).toBe('0.04');
+    const paidDay = (
+      await db.pool.query("SELECT to_char(now() AT TIME ZONE 'Europe/Oslo','YYYY-MM-DD') AS day")
+    ).rows[0].day;
+    const saleReport = (
+      await manager.request(`/reports/owner-dashboard?period=custom&from=${paidDay}&to=${paidDay}`)
+    ).body;
+    expect(saleReport.products.byRevenue.find((p: any) => p.id === id).grossProfit).toBe(0.2);
+    expect(saleReport.products.byRevenue.find((p: any) => p.id === id).unitMargin).toBeCloseTo(
+      ((0.09 - 0.01) / 0.09) * 100,
+    );
+    expect(saleReport.categories.total).toBe(saleReport.kpis.revenue.value);
+
+    await enroll(second, 'Empty refund drawer');
+    expect((await unlock(second, 'OWNER', '654321')).status).toBe(200);
+    const emptyShift = (
+      await second.request('/pos/shifts', { requestId: crypto.randomUUID(), openingCash: '0' })
+    ).body;
+    const refund = {
+      requestId: crypto.randomUUID(),
+      saleId: sold.body.id,
+      reason: 'Return',
+      method: 'cash',
+      confirmed: true,
+      lines: [{ productId: id, quantity: '2', restock: true }],
+    };
+    expect((await second.request('/pos/refunds', refund)).status).toBe(400);
+    expect(
+      (
+        await db.pool.query('SELECT count(*)::int AS n FROM refunds WHERE sale_id=$1', [
+          sold.body.id,
+        ])
+      ).rows[0].n,
+    ).toBe(0);
+    expect(
+      (await db.pool.query('SELECT stock FROM products WHERE id=$1', [id])).rows[0].stock,
+    ).toBe('0.000');
+    expect((await second.request('/pos/context')).body.shift.expectedCash).toBe('0.00');
+    expect(
+      (
+        await second.request('/pos/cash', {
+          requestId: crypto.randomUUID(),
+          direction: 'in',
+          amount: '1',
+          reason: 'Refund float',
+        })
+      ).status,
+    ).toBe(201);
+    const replies = await Promise.all([
+      second.request('/pos/refunds', refund),
+      second.request('/pos/refunds', { ...refund, requestId: crypto.randomUUID() }),
+    ]);
+    expect(replies.map((r) => r.status).sort()).toEqual([201, 409]);
+    expect(
+      (
+        await second.request('/pos/refunds', {
+          ...refund,
+          requestId: crypto.randomUUID(),
+          lines: [{ productId: id, quantity: '1', restock: true }],
+        })
+      ).status,
+    ).toBe(201);
+    const totals = (
+      await db.pool.query(
+        'SELECT sum(total)::text AS total,sum(tax)::text AS tax FROM refunds WHERE sale_id=$1',
+        [sold.body.id],
+      )
+    ).rows[0];
+    expect(totals).toEqual({ total: '0.27', tax: '0.04' });
+    expect((await second.request('/pos/context')).body.shift.expectedCash).toBe('0.73');
+    expect(
+      (await db.pool.query('SELECT stock FROM products WHERE id=$1', [id])).rows[0].stock,
+    ).toBe('3.000');
+    const today = (
+      await db.pool.query("SELECT to_char(now() AT TIME ZONE 'Europe/Oslo','YYYY-MM-DD') AS day")
+    ).rows[0].day;
+    const detailed = (await manager.request(`/reports/gross-profit?from=${today}&to=${today}`))
+      .body;
+    const dashboard = (
+      await manager.request(`/reports/owner-dashboard?period=custom&from=${today}&to=${today}`)
+    ).body;
+    expect(dashboard.kpis.grossProfit.value).toBe(Number(detailed.grossProfit));
+    expect(dashboard.products.byProfit.find((p: any) => p.id === id).grossProfit).toBe(0);
+    expect(dashboard.categories.total).toBe(dashboard.kpis.revenue.value);
+    const trend = dashboard.marginTrend.at(-1);
+    expect(Number(trend.revenue)).toBe(dashboard.kpis.revenue.value);
+    expect(trend.margin).toBe(Number(dashboard.kpis.grossMargin.value.toFixed(2)));
+
+    expect(emptyShift.id).toBeTruthy();
+  });
+  it('records a fully discounted sale with zero tax and no cash change', async () => {
+    const p = (
+      await manager.request('/products', {
+        ...product,
+        name: 'Giveaway',
+        sku: 'FREE-SALE',
+        price: '9.99',
+        cost: '1',
+        taxRate: '20',
+        plu: '',
+        barcodes: [],
+      })
+    ).body;
+    await manager.request('/inventory/adjustments', {
+      requestId: crypto.randomUUID(),
+      productId: p.id,
+      quantity: '1',
+      reason: 'opening_balance',
+    });
+    const before = (await second.request('/pos/context')).body.shift;
+    const free = await second.request('/pos/sales', {
+      requestId: crypto.randomUUID(),
+      shiftId: before.id,
+      lines: [{ productId: p.id, quantity: '1', expectedPrice: '9.99', expectedTaxRate: '20' }],
+      discountPercent: '100',
+      payment: { method: 'cash', tendered: '0' },
+    });
+    expect(free.status).toBe(201);
+    expect(free.body).toMatchObject({ total: '0.00', tax: '0.00', discount: '9.99' });
+    expect((await second.request('/pos/context')).body.shift.expectedCash).toBe(
+      before.expectedCash,
+    );
+    expect(
+      (await db.pool.query('SELECT stock FROM products WHERE id=$1', [p.id])).rows[0].stock,
+    ).toBe('0.000');
+  });
+  it('rejects totals above the supported sale limit without recording payment or stock changes', async () => {
+    const p = (
+      await manager.request('/products', {
+        ...product,
+        name: 'Maximum price',
+        sku: 'MAX-PRICE',
+        price: '999999999.99',
+        cost: '1',
+        taxRate: '0',
+        plu: '',
+        barcodes: [],
+      })
+    ).body;
+    await manager.request('/inventory/adjustments', {
+      requestId: crypto.randomUUID(),
+      productId: p.id,
+      quantity: '2',
+      reason: 'opening_balance',
+    });
+    const before = (await second.request('/pos/context')).body.shift;
+    const requestId = crypto.randomUUID();
+    const rejected = await second.request('/pos/sales', {
+      requestId,
+      shiftId: before.id,
+      lines: [
+        { productId: p.id, quantity: '2', expectedPrice: '999999999.99', expectedTaxRate: '0' },
+      ],
+      payment: { method: 'cash', tendered: '999999999.99' },
+    });
+    expect(rejected.status).toBe(400);
+    expect(rejected.body.message).toMatch(/supported total/);
+    expect(
+      (await db.pool.query('SELECT count(*)::int AS n FROM sales WHERE request_id=$1', [requestId]))
+        .rows[0].n,
+    ).toBe(0);
+    expect(
+      (await db.pool.query('SELECT stock FROM products WHERE id=$1', [p.id])).rows[0].stock,
+    ).toBe('2.000');
+    expect((await second.request('/pos/context')).body.shift.expectedCash).toBe(
+      before.expectedCash,
+    );
   });
 });

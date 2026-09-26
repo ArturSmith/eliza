@@ -1,4 +1,7 @@
 import { test, expect } from '@playwright/test';
+test.beforeEach(async ({ page }) => {
+  page.setDefaultTimeout(10000);
+});
 test('owner setup, inventory, employee PINs, checkout recovery, and shift reconciliation', async ({
   page,
 }) => {
@@ -22,16 +25,15 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await dialog.getByLabel('Tax rate (%)').fill('15');
   await dialog.getByRole('button', { name: 'Create product' }).click();
   await expect(page.getByRole('cell', { name: 'Sourdough bread BREAD-01' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'No barcode', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'PLU 1', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Edit Sourdough bread' }).click();
   await dialog.getByLabel('Barcodes (optional)').fill('7090123456789');
   await dialog.getByRole('button', { name: 'Save changes' }).click();
   await expect(page.getByRole('cell', { name: '7090123456789' })).toBeVisible();
   await page.getByRole('link', { name: 'Inventory', exact: true }).click();
   await page.getByRole('button', { name: 'Adjust stock' }).click();
-  await dialog
-    .getByLabel('Product', { exact: true })
-    .selectOption({ label: 'Sourdough bread · 0 piece on hand' });
+  await dialog.getByRole('button', { name: 'Select a product', exact: true }).click();
+  await page.getByRole('option', { name: /Sourdough bread/ }).click();
   await dialog.getByLabel('Quantity change').fill('24');
   await dialog.getByLabel('Notes').fill('Counted before opening');
   await dialog.getByRole('button', { name: 'Record adjustment' }).click();
@@ -176,10 +178,11 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.getByRole('button', { name: 'Lock', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Ready for your shift?' })).toBeVisible();
   await page.getByRole('link', { name: 'Management sign in' }).click();
-  await expect(page.getByRole('heading', { name: 'Welcome back' })).toBeVisible();
-  await page.getByLabel('Email address').fill('alex@example.test');
+  await expect(page.getByRole('heading', { name: 'Switch to Management' })).toBeVisible();
+  await page.getByLabel('Management email').fill('alex@example.test');
   await page.getByLabel('Password', { exact: true }).fill('local-test-password-123');
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Switch to Management', exact: true }).click();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole('link', { name: 'Sales', exact: true }).click();
   await expect(
@@ -248,10 +251,10 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await expect(page.getByRole('cell', { name: 'Local Bakery BAKERY' })).toBeVisible();
   await page.getByRole('link', { name: 'Purchases', exact: true }).click();
   await page.getByRole('button', { name: 'New purchase order' }).click();
-  await dialog.getByLabel('Supplier', { exact: true }).selectOption({ label: 'Local Bakery' });
-  await dialog
-    .getByLabel('Product', { exact: true })
-    .selectOption({ label: 'Sourdough bread · BREAD-01 (piece)' });
+  await dialog.getByRole('button', { name: 'Select a supplier', exact: true }).click();
+  await page.getByRole('option', { name: /Local Bakery/ }).click();
+  await dialog.getByRole('button', { name: 'Select a product', exact: true }).click();
+  await page.getByRole('option', { name: /Sourdough bread/ }).click();
   await dialog.getByLabel('Quantity', { exact: true }).fill('24');
   await dialog.getByLabel('Purchase tax %').fill('15');
   await dialog.getByLabel('Unit cost excl. tax', { exact: true }).fill('21');
@@ -268,20 +271,18 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.getByRole('button', { name: 'Place order' }).click();
   await page.getByRole('button', { name: 'Receive delivery' }).click();
   await dialog.getByLabel('Delivery reference').fill('DEL-1');
-  await dialog.getByLabel(/Sourdough bread —/).fill('18');
-  await expect(
-    dialog.getByLabel('New selling price incl. tax for Sourdough bread (optional)'),
-  ).toHaveValue('54.90');
+  await dialog.getByLabel('Quantity', { exact: true }).fill('18');
+  await expect(dialog.getByLabel('New selling price incl. tax (optional)')).toHaveValue('54.90');
   await expect(dialog.getByText('Current selling price: NOK 49.90 including tax.')).toBeVisible();
   await dialog.getByRole('button', { name: 'Record delivery' }).click();
   await expect(dialog).toBeVisible();
   await dialog.getByRole('checkbox').check();
   await dialog.getByRole('button', { name: 'Record delivery' }).click();
-  await expect(page.getByRole('cell', { name: 'partially received', exact: true })).toBeVisible();
+  await expect(page.getByRole('cell', { name: 'partially_received', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Receive delivery' }).click();
-  await dialog.getByLabel(/Sourdough bread —/).fill('6');
+  await dialog.getByLabel('Quantity', { exact: true }).fill('6');
   await expect(dialog.getByText('Current selling price: NOK 54.90 including tax.')).toBeVisible();
-  await dialog.getByLabel('New selling price incl. tax for Sourdough bread (optional)').fill('');
+  await dialog.getByLabel('New selling price incl. tax (optional)').fill('');
   await dialog.getByRole('button', { name: 'Record delivery' }).click();
   await expect(page.getByRole('cell', { name: 'received', exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/purchasing-desktop.png', fullPage: true });
@@ -293,7 +294,9 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.getByRole('link', { name: 'Stock counts', exact: true }).click();
   await page.getByRole('button', { name: 'New stock count' }).click();
   await dialog.getByLabel('Count name').fill('Bakery shelf count');
-  await dialog.getByLabel('Sourdough bread · BREAD-01 (piece)', { exact: true }).check();
+  await dialog
+    .getByRole('checkbox', { name: 'Sourdough bread BREAD-01 · piece', exact: true })
+    .check();
   await dialog.getByRole('button', { name: 'Create draft' }).click();
   await page.getByRole('button', { name: 'Start counting' }).click();
   await page.getByLabel('Counted Sourdough bread').fill('45');
@@ -347,18 +350,23 @@ test('purchase dialog creates suppliers and products and finds barcodes without 
   await page.getByRole('button', { name: 'New purchase order' }).click();
   const draft = page.getByRole('dialog', { name: 'New purchase order', exact: true });
   await draft.getByLabel('Supplier reference').fill('Keep my draft');
-  await draft.getByLabel('Supplier', { exact: true }).selectOption('__new');
+  await draft.getByRole('button', { name: 'Select a supplier', exact: true }).click();
+  await page.getByRole('button', { name: 'Add new supplier', exact: true }).click();
   const supplier = page.getByRole('dialog', { name: 'Add supplier', exact: true });
   await supplier.getByLabel('Supplier code').fill('FRESH');
   await supplier.getByLabel('Supplier name').fill('Fresh deliveries');
   await supplier.getByRole('button', { name: 'Save supplier' }).click();
   await expect(supplier).not.toBeVisible();
-  await expect(draft.getByLabel('Supplier', { exact: true }).locator('option:checked')).toHaveText(
+  await expect(draft.getByRole('button', { name: /Fresh deliveries/ }).first()).toContainText(
     'Fresh deliveries',
   );
   await expect(draft.getByLabel('Supplier reference')).toHaveValue('Keep my draft');
 
-  await draft.getByLabel('Product', { exact: true }).selectOption('__new');
+  await draft
+    .getByRole('button', { name: /Select a product|Orange juice/ })
+    .first()
+    .click();
+  await page.getByRole('button', { name: 'Create new product', exact: true }).click();
   const product = page.getByRole('dialog', { name: 'Add a product', exact: true });
   await product.getByLabel('Product name').fill('Orange juice');
   await product.getByLabel('SKU', { exact: true }).fill('JUICE-01');
@@ -368,9 +376,9 @@ test('purchase dialog creates suppliers and products and finds barcodes without 
   await product.getByLabel('Barcodes (optional)').fill('7090123456796');
   await product.getByRole('button', { name: 'Create product' }).click();
   await expect(product).not.toBeVisible();
-  await expect(
-    draft.getByLabel('Product', { exact: true }).locator('option:checked'),
-  ).toContainText('Orange juice');
+  await expect(draft.getByRole('button', { name: /Orange juice/ }).first()).toContainText(
+    'Orange juice',
+  );
   await expect(draft.getByLabel('Proposed selling price incl. tax (optional)')).toHaveValue(
     '35.00',
   );
@@ -378,8 +386,8 @@ test('purchase dialog creates suppliers and products and finds barcodes without 
   await draft.getByLabel('Unit cost excl. tax', { exact: true }).fill('22');
   await expect(draft.locator('.purchase-cost-change')).toHaveCSS('color', 'rgb(180, 35, 24)');
   await expect(
-    draft.locator('.field').filter({ hasText: 'Unit cost excl. tax' }).locator('+ .field'),
-  ).toContainText('Proposed selling price');
+    draft.getByRole('columnheader', { name: 'Selling price incl. tax', exact: true }),
+  ).toContainText('Selling price');
 
   await draft.getByLabel('Proposed selling price incl. tax (optional)').fill('99');
   await draft.getByRole('button', { name: 'Scan barcode', exact: true }).click();
@@ -390,18 +398,22 @@ test('purchase dialog creates suppliers and products and finds barcodes without 
   await scanner.getByLabel('Barcode', { exact: true }).fill('7090123456796');
   await scanner.getByLabel('Barcode', { exact: true }).press('Enter');
   await expect(scanner).not.toBeVisible();
-  await expect(
-    draft.getByLabel('Product', { exact: true }).locator('option:checked'),
-  ).toContainText('Orange juice');
+  await expect(draft.getByRole('button', { name: /Orange juice/ }).first()).toContainText(
+    'Orange juice',
+  );
   await expect(draft.getByLabel('Proposed selling price incl. tax (optional)')).toHaveValue(
     '35.00',
   );
   await expect(draft.getByLabel('Supplier reference')).toHaveValue('Keep my draft');
-  await draft.getByLabel('Product', { exact: true }).selectOption('__new');
+  await draft
+    .getByRole('button', { name: /Select a product|Orange juice/ })
+    .first()
+    .click();
+  await page.getByRole('button', { name: 'Create new product', exact: true }).click();
   await product.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(
-    draft.getByLabel('Product', { exact: true }).locator('option:checked'),
-  ).toContainText('Orange juice');
+  await expect(draft.getByRole('button', { name: /Orange juice/ }).first()).toContainText(
+    'Orange juice',
+  );
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(draft.getByRole('button', { name: 'Scan barcode', exact: true })).toBeVisible();
   expect(await draft.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -497,7 +509,7 @@ test('analytics combines dates, product and shift filters with charts', async ({
       payment: { method: 'cash', tendered: '150' },
     });
     await page.goto('/analytics');
-    await expect(page.getByRole('heading', { name: 'Analytics', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
     const summary = page.getByRole('region', { name: 'Sales summary', exact: true });
     await summary.getByLabel('Product filter').selectOption(ids[0]);
     await summary.getByLabel('Shift filter').selectOption(shift.id);

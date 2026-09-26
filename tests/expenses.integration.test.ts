@@ -146,6 +146,34 @@ describe.sequential('Expenses', () => {
       'Expense deleted',
     ]);
   });
+  it('paginates without losing totals and rejects simultaneous stale edits', async () => {
+    const session = (await owner.request('/auth/session')).body;
+    await db.pool.query(
+      "INSERT INTO expenses(store_id,expense_date,description,category,amount,payment_method) SELECT $1,'2026-09-26','Small expense '||n,'Other',0.01,'cash' FROM generate_series(1,51) n",
+      [session.store.id],
+    );
+    const first = (await owner.request('/expenses?page=1')).body,
+      second = (await owner.request('/expenses?page=2')).body;
+    expect(first.rows).toHaveLength(50);
+    expect(second.rows).toHaveLength(1);
+    expect(new Set([...first.rows, ...second.rows].map((r) => r.id)).size).toBe(51);
+    expect(first.total).toBe('0.51');
+    expect(second.total).toBe('0.51');
+    expect(first.count).toBe(51);
+    const entry = first.rows[0];
+    const replies = await Promise.all(
+      ['0.02', '0.03'].map((amount) =>
+        owner.request('/expenses/' + entry.id, { ...entry, amount }, 'PATCH'),
+      ),
+    );
+    expect(replies.map((r) => r.status).sort()).toEqual([200, 409]);
+    const saved = (
+      await db.pool.query('SELECT amount,version FROM expenses WHERE id=$1', [entry.id])
+    ).rows[0];
+    expect(saved.version).toBe(2);
+    expect(saved.amount).toBe(replies.find((r) => r.status === 200)!.body.amount);
+  });
+
   it('denies access without expense permissions', async () => {
     const session = (await other.request('/auth/session')).body;
     await db.pool.query("UPDATE roles SET permissions='[]'::jsonb WHERE store_id=$1", [

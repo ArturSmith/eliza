@@ -279,6 +279,10 @@ describe.sequential('register, shifts and checkout', () => {
       { lines: [{ productId, quantity: '0.5', expectedPrice: '115.00', expectedTaxRate: '15' }] },
       { lines: [{ productId, quantity: '1', expectedPrice: '1.00', expectedTaxRate: '15' }] },
       { payment: { method: 'cash', tendered: '1' } },
+      { payment: { method: 'card', tendered: '115.01' } },
+      { payment: { method: 'card', tendered: '114.99' } },
+      { lines: [{ productId, quantity: '1', expectedPrice: '115.00', expectedTaxRate: '0' }] },
+      { payment: { method: 'cash', tendered: '115.001' } },
     ]) {
       const r = await register.request('/pos/sales', sale(overrides));
       expect([400, 409]).toContain(r.status);
