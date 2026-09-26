@@ -17,6 +17,9 @@
   font-size: 1.7rem;
   color: #254938;
 }
+.expenses-note {
+  margin-bottom: 1.5rem;
+}
 .expenses-table {
   overflow-x: auto;
 }

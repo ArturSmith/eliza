@@ -211,7 +211,7 @@ export function AuthForm({ setup }: { setup: boolean }) {
               <div className="form-grid">
                 <Field label={t('Currency')}>
                   <select name="currency" defaultValue="NOK">
-                    {['NOK', 'EUR', 'USD', 'GBP', 'SEK', 'DKK'].map((c) => (
+                    {['NOK', 'EUR', 'USD', 'GBP', 'SEK', 'DKK', 'RUB'].map((c) => (
                       <option key={c}>{c}</option>
                     ))}
                   </select>

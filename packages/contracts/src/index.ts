@@ -55,7 +55,7 @@ export const setupSchema = z.object({
     .max(254)
     .transform((s) => s.toLowerCase()),
   password: z.string().min(12).max(128),
-  currency: z.enum(['NOK', 'EUR', 'USD', 'GBP', 'SEK', 'DKK']),
+  currency: z.enum(['NOK', 'EUR', 'USD', 'GBP', 'SEK', 'DKK', 'RUB']),
   timezone: z
     .string()
     .max(80)

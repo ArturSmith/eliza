@@ -113,7 +113,7 @@ export function ExpensesPage() {
           <strong>{list.data?.count ?? 0}</strong>
         </div>
       </div>
-      <p className="muted">
+      <p className="muted expenses-note">
         {t('Expense records do not change register cash or purchase payments.')}
       </p>
       <section className="panel expenses-table">

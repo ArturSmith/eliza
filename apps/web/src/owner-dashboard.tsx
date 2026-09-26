@@ -50,12 +50,14 @@ function Kpi({
   currency,
   money = true,
   hint,
+  showComparison = true,
 }: {
   label: string;
   data: Change;
   currency: string;
   money?: boolean;
   hint?: string;
+  showComparison?: boolean;
 }) {
   useLanguage();
   const value =
@@ -76,7 +78,7 @@ function Kpi({
       ) : (
         <strong className="kpi-value">{value}</strong>
       )}
-      <Delta change={data.change} metric={data.metric} unit={data.unit} />
+      {showComparison && <Delta change={data.change} metric={data.metric} unit={data.unit} />}
       {hint && <small className="muted">{hint}</small>}
     </article>
   );
@@ -286,13 +288,13 @@ export function TodayOperations() {
             label="Total spending"
             data={today.kpis.totalSpending}
             currency={currency}
-            hint={t('Operating expenses + purchases paid in this period.')}
+            showComparison={false}
           />
           <Kpi
             label="Net profit"
             data={today.kpis.netProfit}
             currency={currency}
-            hint={t('Gross profit − operating expenses.')}
+            showComparison={false}
           />
         </div>
         <HourlySales rows={today.hourly} currency={currency} />
@@ -358,13 +360,13 @@ export function OwnerDashboardPage() {
               label="Total spending"
               data={data.kpis.totalSpending}
               currency={currency}
-              hint={t('Operating expenses + purchases paid in this period.')}
+              showComparison={false}
             />
             <Kpi
               label="Net profit"
               data={data.kpis.netProfit}
               currency={currency}
-              hint={t('Gross profit − operating expenses.')}
+              showComparison={false}
             />
             <Kpi
               label="Gross margin"
