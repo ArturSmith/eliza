@@ -211,3 +211,36 @@
     max-height: 24mm;
   }
 }
+
+.price-tags-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+.price-tags-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid #cad9ca;
+  border-radius: 0.65rem;
+  background: white;
+  color: #516755;
+  font-weight: 600;
+  cursor: pointer;
+}
+.price-tags-tabs button[aria-selected='true'] {
+  background: #244e3c;
+  border-color: #244e3c;
+  color: white;
+}
+.price-tags-counter {
+  padding: 0.1rem 0.5rem;
+  border-radius: 1rem;
+  background: #eaf0e7;
+  color: #244e3c;
+}
+.price-tags-empty {
+  padding: 1rem 0;
+  color: #66776a;
+}

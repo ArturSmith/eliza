@@ -7,6 +7,7 @@ import {
   HttpCode,
   Module,
   Post,
+  Param,
   Req,
   Res,
   UnauthorizedException,
@@ -149,7 +150,7 @@ export class PriceTagsController {
     const { device } = await this.operator(req);
     return (
       await this.database.pool.query(
-        "SELECT p.id,p.name,p.sku,p.price::text,p.unit,p.plu,COALESCE((SELECT b.value FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id ORDER BY b.value LIMIT 1),'') AS barcode,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),'[]'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active ORDER BY p.name",
+        'SELECT p.id,p.name,p.sku,p.price::text,p.unit,p.plu,p.tag_price_version AS "priceVersion",(p.tag_price_version>p.tag_printed_version) AS "priceChanged",COALESCE((SELECT b.value FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id ORDER BY b.value LIMIT 1),\'\') AS barcode,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),\'[]\'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active ORDER BY p.name',
         [device.store_id],
       )
     ).rows;
@@ -191,16 +192,50 @@ export class PriceTagsController {
     const body = parse(z.object({ productIds: z.array(z.uuid()).min(1).max(100) }), input);
     const { device, employee } = await this.operator(req);
     const products = await this.database.pool.query(
-      "SELECT p.id,p.name,p.sku,p.price::text,p.unit,p.plu,COALESCE((SELECT b.value FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id ORDER BY b.value LIMIT 1),'') AS barcode,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),'[]'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active AND p.id=ANY($2::uuid[])",
+      'SELECT p.id,p.name,p.sku,p.price::text,p.unit,p.plu,p.tag_price_version AS "priceVersion",(p.tag_price_version>p.tag_printed_version) AS "priceChanged",COALESCE((SELECT b.value FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id ORDER BY b.value LIMIT 1),\'\') AS barcode,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),\'[]\'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active AND p.id=ANY($2::uuid[])',
       [device.store_id, body.productIds],
     );
     if (products.rows.length !== new Set(body.productIds).size)
       throw new ForbiddenException('One or more products are unavailable. Refresh the list.');
-    await this.database.pool.query(
-      'INSERT INTO price_tag_prints(store_id,device_id,employee_id,products) VALUES($1,$2,$3,$4)',
+    const job = await this.database.pool.query(
+      'INSERT INTO price_tag_prints(store_id,device_id,employee_id,products) VALUES($1,$2,$3,$4) RETURNING id',
       [device.store_id, device.id, employee.id, JSON.stringify(products.rows)],
     );
-    return { products: products.rows };
+    return { id: job.rows[0].id, products: products.rows };
+  }
+  @Post('prints/:id/complete') @HttpCode(200) async complete(
+    @Req() req: Request,
+    @Param('id') id: string,
+  ) {
+    const jobId = parse(z.uuid(), id);
+    const { device } = await this.operator(req);
+    const client = await this.database.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const job = (
+        await client.query(
+          'SELECT products,completed_at FROM price_tag_prints WHERE id=$1 AND store_id=$2 AND device_id=$3 FOR UPDATE',
+          [jobId, device.store_id, device.id],
+        )
+      ).rows[0];
+      if (!job) throw new ForbiddenException('This print job is unavailable.');
+      if (!job.completed_at) {
+        for (const product of job.products) {
+          await client.query(
+            'UPDATE products SET tag_printed_version=$3 WHERE id=$1 AND store_id=$2 AND tag_price_version=$3 AND tag_printed_version<$3',
+            [product.id, device.store_id, product.priceVersion],
+          );
+        }
+        await client.query('UPDATE price_tag_prints SET completed_at=now() WHERE id=$1', [jobId]);
+      }
+      await client.query('COMMIT');
+      return { ok: true };
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 }
 @Module({ controllers: [PriceTagsController] })

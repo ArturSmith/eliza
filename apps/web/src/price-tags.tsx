@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { toScaled, fromScaled, type ScaleBarcodeSettings, type TagDesign } from '@eliza/contracts';
+import {
+  encodeScaleBarcode,
+  toScaled,
+  fromScaled,
+  type ScaleBarcodeSettings,
+  type TagDesign,
+} from '@eliza/contracts';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { LockKeyhole, Printer } from 'lucide-react';
 import { api, queryClient } from './api';
@@ -30,6 +36,8 @@ type Product = {
   plu: string;
   barcode: string;
   barcodes: string[];
+  priceVersion: number;
+  priceChanged: boolean;
 };
 
 type WeightLabel = { barcode: string; name: string; sku: string; price: string; weight: string };
@@ -47,6 +55,8 @@ export function PriceTagsPage() {
     queryFn: () => api<Product[]>('/price-tags/products'),
     enabled: !!context.data?.operator,
   });
+  const [tab, setTab] = useState<'changed' | 'all'>('changed');
+  const [completingPrint, setCompletingPrint] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [packageWeights, setPackageWeights] = useState<Record<string, string>>({});
   const [printItems, setPrintItems] = useState<PrintItem[]>([]);
@@ -106,6 +116,7 @@ export function PriceTagsPage() {
       return;
     }
     const product = matching[0];
+    if (!product.priceChanged) setTab('all');
     setSelected((before) => (before.includes(product.id) ? before : [...before, product.id]));
     setScanFeedback({
       type: 'success',
@@ -122,35 +133,67 @@ export function PriceTagsPage() {
   });
   const print = useMutation({
     mutationFn: async (items: Product[]) => {
-      const regular = items.filter((product) => product.unit !== 'kilogram');
-      const weighted = items.filter((product) => product.unit === 'kilogram');
-      const [regularResult, ...weightResults] = await Promise.all([
-        regular.length
-          ? api<{ products: Product[] }>('/price-tags/prints', {
-              productIds: regular.map((product) => product.id),
-            })
-          : Promise.resolve({ products: [] as Product[] }),
-        ...weighted.map((product) =>
-          api<WeightLabel>('/price-tags/weight-barcode', {
-            productId: product.id,
-            weight: packageWeights[product.id].trim().replace(',', '.'),
+      // Validate package weights before creating the print snapshot.
+      const weights = new Map(
+        items
+          .filter((p) => p.unit === 'kilogram')
+          .map((p) => {
+            const weight = packageWeights[p.id].trim().replace(',', '.');
+            encodeScaleBarcode(p.plu, weight, context.data!.store.scaleBarcode);
+            return [p.id, weight];
           }),
-        ),
-      ]);
-      const regularById = new Map(regularResult.products.map((product) => [product.id, product]));
-      const weightedById = new Map(
-        weighted.map((product, index) => [product.id, weightResults[index]]),
       );
-      return items.map((product) => ({
-        product: regularById.get(product.id) ?? product,
-        weightLabel: weightedById.get(product.id),
-      }));
+      const job = await api<{ id: string; products: Product[] }>('/price-tags/prints', {
+        productIds: items.map((product) => product.id),
+      });
+      const snapshots = new Map(job.products.map((product) => [product.id, product]));
+      return {
+        id: job.id,
+        items: items.map((item) => {
+          const product = snapshots.get(item.id)!;
+          const weight = weights.get(product.id);
+          return {
+            product,
+            weightLabel: weight
+              ? {
+                  barcode: encodeScaleBarcode(
+                    product.plu,
+                    weight,
+                    context.data!.store.scaleBarcode,
+                  ),
+                  name: product.name,
+                  sku: product.sku,
+                  price: product.price,
+                  weight,
+                }
+              : undefined,
+          };
+        }),
+      };
     },
-    onSuccess: (items) => {
-      setPrintItems(items);
-      requestAnimationFrame(() => requestAnimationFrame(() => window.print()));
+    onSuccess: (job) => {
+      setCompletingPrint(true);
+      setPrintItems(job.items);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(async () => {
+          try {
+            window.print();
+            await api('/price-tags/prints/' + job.id + '/complete', {});
+            setSelected((before) =>
+              before.filter((id) => !job.items.some((item) => item.product.id === id)),
+            );
+            await queryClient.invalidateQueries({ queryKey: ['price-tags-products'] });
+          } catch (error) {
+            setPrintError(error);
+          } finally {
+            setCompletingPrint(false);
+          }
+        }),
+      );
     },
   });
+  const [printError, setPrintError] = useState<unknown>(null);
+
   const lock = useMutation({
     mutationFn: () => api('/price-tags/lock', {}),
     onSuccess: () => {
@@ -221,11 +264,14 @@ export function PriceTagsPage() {
       </div>
     );
   const all = products.data ?? [];
-  const visible = all.filter((product) =>
-    [product.name, product.sku, product.barcode, product.plu, ...(product.barcodes ?? [])].some(
-      (text) => text?.toLowerCase().includes(search.toLowerCase()),
-    ),
-  );
+  const changedCount = all.filter((product) => product.priceChanged).length;
+  const visible = all
+    .filter((product) => tab === 'all' || product.priceChanged)
+    .filter((product) =>
+      [product.name, product.sku, product.barcode, product.plu, ...(product.barcodes ?? [])].some(
+        (text) => text?.toLowerCase().includes(search.toLowerCase()),
+      ),
+    );
   const chosen = selected
     .map((id) => all.find((product) => product.id === id))
     .filter((product): product is Product => !!product);
@@ -256,6 +302,14 @@ export function PriceTagsPage() {
         </Button>
         <a href="/management-access?from=price-tags">{t('Management sign in')}</a>
       </header>
+      <div className="price-tags-tabs" role="tablist" aria-label={t('Product lists')}>
+        <button role="tab" aria-selected={tab === 'changed'} onClick={() => setTab('changed')}>
+          {t('Price changed')} <span className="price-tags-counter">{changedCount}</span>
+        </button>
+        <button role="tab" aria-selected={tab === 'all'} onClick={() => setTab('all')}>
+          {t('All products')}
+        </button>
+      </div>
       <div className="price-tags-controls">
         <div className="price-tags-search-field">
           <label htmlFor="price-tags-search">{t('Find products')}</label>
@@ -284,8 +338,17 @@ export function PriceTagsPage() {
           {scanFeedback.text}
         </p>
       )}
-      <ErrorMessage error={products.error ?? print.error} />
-      <div className="price-tags-product-list">
+      <ErrorMessage error={products.error ?? print.error ?? printError} />
+      {!products.isPending && !products.error && !visible.length && (
+        <p className="price-tags-empty">
+          {t(
+            tab === 'changed' && !search
+              ? 'No price changes waiting for tags.'
+              : 'No products found.',
+          )}
+        </p>
+      )}
+      <div className="price-tags-product-list" role="tabpanel">
         {visible.map((product) => (
           <div key={product.id} className="price-tags-product-entry">
             <label className="price-tags-product">
@@ -341,11 +404,15 @@ export function PriceTagsPage() {
       </div>
       <div className="price-tags-print-action">
         <Button
-          onClick={() => print.mutate(chosen)}
+          onClick={() => {
+            setPrintError(null);
+            print.mutate(chosen);
+          }}
           disabled={
             !chosen.length ||
             !weightReady ||
             print.isPending ||
+            completingPrint ||
             chosen.some(
               (product) =>
                 product.unit === 'kilogram' &&

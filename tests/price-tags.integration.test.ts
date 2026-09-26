@@ -193,11 +193,60 @@ describe.sequential('Price Tags station', () => {
         })
       ).status,
     ).toBe(400);
+    const changed = async (id: string) =>
+      (await manager.request('/price-tags/products')).body.find((p: any) => p.id === id);
+    expect((await changed(product.body.id)).priceChanged).toBe(false);
+    // Cost-only edits and assigning the same price do not require new tags.
+    await db.pool.query('UPDATE products SET cost=9,price=12 WHERE id=$1', [product.body.id]);
+    expect((await changed(product.body.id)).priceChanged).toBe(false);
+    await db.pool.query('UPDATE products SET price=13 WHERE id=$1', [product.body.id]);
+    expect(await changed(product.body.id)).toMatchObject({ priceChanged: true, priceVersion: 1 });
+    const oldJob = await manager.request('/price-tags/prints', { productIds: [product.body.id] });
+    expect((await changed(product.body.id)).priceChanged).toBe(true);
+    // The price changes twice, even returning to its earlier value: old jobs must not clear it.
+    await db.pool.query('UPDATE products SET price=14 WHERE id=$1', [product.body.id]);
+    await db.pool.query('UPDATE products SET price=13 WHERE id=$1', [product.body.id]);
+    expect(
+      (await manager.request('/price-tags/prints/' + oldJob.body.id + '/complete', {})).status,
+    ).toBe(200);
+    expect((await changed(product.body.id)).priceChanged).toBe(true);
+    const currentJob = await manager.request('/price-tags/prints', {
+      productIds: [product.body.id],
+    });
+    expect(
+      (await manager.request('/price-tags/prints/' + currentJob.body.id + '/complete', {})).status,
+    ).toBe(200);
+    expect((await changed(product.body.id)).priceChanged).toBe(false);
+    await db.pool.query('UPDATE products SET price=12 WHERE id=$1', [product.body.id]);
+    expect(
+      (await manager.request('/price-tags/prints/' + currentJob.body.id + '/complete', {})).status,
+    ).toBe(200);
+    expect((await changed(product.body.id)).priceChanged).toBe(true);
+    // Weighted products participate in the same persisted queue.
+    await db.pool.query('UPDATE products SET price=31 WHERE id=$1', [weighed.body.id]);
+    const weightedJob = await manager.request('/price-tags/prints', {
+      productIds: [weighed.body.id],
+    });
+    expect(
+      (await manager.request('/price-tags/prints/' + weightedJob.body.id + '/complete', {})).status,
+    ).toBe(200);
+    expect((await changed(weighed.body.id)).priceChanged).toBe(false);
+    expect((await changed(product.body.id)).priceChanged).toBe(true);
+    expect(
+      (await manager.request('/price-tags/prints/' + crypto.randomUUID() + '/complete', {})).status,
+    ).toBe(403);
     const printed = await manager.request('/price-tags/prints', { productIds: [product.body.id] });
     expect(printed.status).toBe(201);
     expect(printed.body.products[0].price).toBe('12.00');
+    expect(
+      (await manager.request('/price-tags/prints/' + printed.body.id + '/complete', {})).status,
+    ).toBe(200);
+    expect((await changed(product.body.id)).priceChanged).toBe(false);
     expect((await manager.request('/price-tags/lock', {})).status).toBe(200);
     expect((await manager.request('/price-tags/products')).status).toBe(401);
+    expect(
+      (await manager.request('/price-tags/prints/' + printed.body.id + '/complete', {})).status,
+    ).toBe(401);
     expect(
       (
         await manager.request('/price-tags/weight-barcode', {

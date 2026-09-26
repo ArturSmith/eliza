@@ -30,7 +30,7 @@ test('prints selected weight labels and regular price tags together', async ({ p
     barcodes: [],
     plu: '42',
   });
-  await post('/products', {
+  const water = await post('/products', {
     name: 'Bottled water',
     sku: 'WATER-1',
     category: 'Drinks',
@@ -42,6 +42,11 @@ test('prints selected weight labels and regular price tags together', async ({ p
     barcodes: ['4601234567893'],
     plu: '',
   });
+  const editedWater = await page.request.patch('/api/products/' + water.id, {
+    headers: { Origin: 'http://localhost:5174', 'X-Eliza-Request': '1' },
+    data: { ...water, price: '26', barcodes: ['4601234567893'] },
+  });
+  expect(editedWater.ok(), await editedWater.text()).toBe(true);
   const profile = await (await page.request.get('/api/store-profile')).json();
   await post('/store-profile', {
     ...profile,
@@ -66,6 +71,14 @@ test('prints selected weight labels and regular price tags together', async ({ p
   await page.getByLabel('Employee').selectOption('SAM');
   await page.getByLabel('PIN').fill('123456');
   await page.getByRole('button', { name: 'Unlock Price Tags' }).click();
+  const changedTab = page.getByRole('tab', { name: /Price changed/ });
+  await expect(changedTab).toHaveAttribute('aria-selected', 'true');
+  await expect(changedTab).toContainText('1');
+  await expect(page.locator('.price-tags-product-entry')).toHaveCount(1);
+  await expect(page.locator('.price-tags-product-entry')).toContainText('Bottled water');
+  await page.reload();
+  await expect(changedTab).toContainText('1');
+  await page.getByRole('tab', { name: 'All products', exact: true }).click();
   const weightedRow = page.locator('.price-tags-product-entry', { hasText: 'Apples by weight' });
   await weightedRow.locator('input[type="checkbox"]').check();
   await weightedRow.getByPlaceholder('Enter package weight').fill('0.532');
@@ -91,4 +104,12 @@ test('prints selected weight labels and regular price tags together', async ({ p
     page.locator('.price-tags-print-sheet .price-tag:not(.price-tag-weight)'),
   ).toContainText('Bottled water');
   await expect(page.locator('.price-tags-print-sheet .price-tag')).toHaveCount(2);
+  await expect(changedTab).toContainText('0');
+  await changedTab.click();
+  await expect(page.locator('.price-tags-product-entry')).toHaveCount(0);
+  await expect(page.getByText('No price changes waiting for tags.')).toBeVisible();
+  await page.reload();
+  await expect(changedTab).toContainText('0');
+  await page.getByRole('tab', { name: 'All products', exact: true }).click();
+  await expect(page.locator('.price-tags-product-entry')).toHaveCount(2);
 });

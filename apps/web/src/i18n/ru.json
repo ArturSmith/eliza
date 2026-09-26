@@ -1678,5 +1678,9 @@
   "To": "По",
   "Notes (optional)": "Примечания (необязательно)",
   "Reference (optional)": "Номер документа (необязательно)",
-  "Timezone": "Часовой пояс"
+  "Timezone": "Часовой пояс",
+  "Price changed": "Цена изменена",
+  "Product lists": "Списки товаров",
+  "No price changes waiting for tags.": "Нет изменений цен, требующих новых ценников.",
+  "No products found.": "Товары не найдены."
 }
