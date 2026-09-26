@@ -62,7 +62,9 @@ function Kpi({
   useLanguage();
   const value =
     data.value === null
-      ? null
+      ? data.metric === 'grossMargin' && !data.restricted
+        ? '0%'
+        : null
       : money
         ? formatMoney(String(data.value.toFixed(2)), currency)
         : data.unit === 'points'
@@ -280,7 +282,9 @@ export function TodayOperations() {
             <span className="kpi-label">{t('Gross margin')}</span>
             <strong className="kpi-value">
               {today.kpis.grossMargin.value === null
-                ? t(today.kpis.grossMargin.restricted ? 'Restricted' : 'Unavailable')
+                ? today.kpis.grossMargin.restricted
+                  ? t('Restricted')
+                  : '0%'
                 : today.kpis.grossMargin.value.toFixed(1) + '%'}
             </strong>
           </article>
