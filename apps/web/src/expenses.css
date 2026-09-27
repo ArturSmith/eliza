@@ -32,7 +32,7 @@
   padding: 1rem;
   text-align: left;
   border-bottom: 1px solid var(--border);
-  vertical-align: top;
+  vertical-align: middle;
 }
 .expenses-table small {
   display: block;
@@ -74,4 +74,19 @@
   .expenses-summary {
     gap: 1.5rem;
   }
+}
+
+.expenses-table th:nth-child(5),
+.expenses-table td.expenses-amount,
+.expenses-table th:last-child {
+  text-align: right;
+}
+.expenses-table th:last-child,
+.expenses-table td:last-child {
+  width: 1%;
+  white-space: nowrap;
+}
+.expenses-table .expenses-actions {
+  justify-content: flex-end;
+  gap: 8px;
 }

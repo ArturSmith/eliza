@@ -153,11 +153,12 @@ export function ExpensesPage() {
                 <td>
                   {canManage && (
                     <div className="expenses-actions">
-                      <Button variant="outline" onClick={() => setEditing(expense)}>
+                      <Button variant="outline" size="sm" onClick={() => setEditing(expense)}>
                         {t('Edit')}
                       </Button>
                       <Button
                         variant="outline"
+                        size="sm"
                         onClick={() => {
                           remove.reset();
                           setDeleting(expense);

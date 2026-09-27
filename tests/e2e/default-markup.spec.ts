@@ -33,8 +33,8 @@ test('persists markup and suggests editable VAT-inclusive prices only for new pr
   await add.getByLabel('Selling price', { exact: true }).fill('240');
   await add.getByLabel('Purchase cost', { exact: true }).fill('300');
   await expect(add.getByLabel('Selling price', { exact: true })).toHaveValue('240');
-  await add.getByRole('button', { name: 'Use default markup' }).click();
-  await expect(add.getByLabel('Selling price', { exact: true })).toHaveValue('345.00');
+  await expect(add.getByRole('button', { name: 'Use default markup' })).toHaveCount(0);
+  await add.getByLabel('Selling price', { exact: true }).fill('115.00');
   await add.getByLabel('Purchase cost', { exact: true }).fill('100');
   await add.getByRole('button', { name: 'Create product', exact: true }).click();
   await expect(add).not.toBeVisible();

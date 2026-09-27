@@ -508,10 +508,20 @@ export function ProductForm({
         </Field>
       </div>
       <div className="form-grid">
+        <Field label={t('Purchase cost')}>
+          <input
+            name="cost"
+            inputMode="decimal"
+            placeholder={t('0.00')}
+            value={cost}
+            onChange={(e) => setCost(e.target.value)}
+            required
+          />
+        </Field>
         <Field
           label={t('Selling price')}
           hint={
-            !initial
+            !initial && !manualPrice
               ? t(
                   'Suggested using {percent}% markup on purchase cost. This price already includes VAT.',
                   { percent: markup },
@@ -531,11 +541,6 @@ export function ProductForm({
             required
           />
         </Field>
-        {!initial && manualPrice && (
-          <Button type="button" variant="outline" onClick={() => setManualPrice(false)}>
-            {t('Use default markup')}
-          </Button>
-        )}
         <Field
           label={t('Tax rate (%)')}
           hint={t('Selling prices include this tax. Set the appropriate rate for this product.')}
@@ -544,16 +549,6 @@ export function ProductForm({
             name="taxRate"
             inputMode="decimal"
             defaultValue={initial?.taxRate ?? profile.data?.defaultTaxRate ?? '0'}
-            required
-          />
-        </Field>
-        <Field label={t('Purchase cost')}>
-          <input
-            name="cost"
-            inputMode="decimal"
-            placeholder={t('0.00')}
-            value={cost}
-            onChange={(e) => setCost(e.target.value)}
             required
           />
         </Field>
