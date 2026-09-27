@@ -1029,20 +1029,12 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
           />
         </Field>
         <fieldset className="purchase-document-details">
-          <legend>{t('Supplier document details (optional)')}</legend>
+          <legend>{t('Driver details (optional)')}</legend>
           <div className="form-grid">
             {(
               [
-                ['buyerName', 'Buyer'],
-                ['buyerDetails', 'Buyer details'],
                 ['driverName', 'Driver'],
                 ['driverPhone', 'Driver phone'],
-                ['goodsNumber', 'Goods number'],
-                ['buyerTaxNumber', 'Buyer tax number'],
-                ['grossWeight', 'Gross weight'],
-                ['documentVat', 'VAT on document'],
-                ['returnAmount', 'Return amount'],
-                ['documentComment', 'Document comment'],
               ] as const
             ).map(([key, label]) => (
               <Field key={key} label={t(label)}>
