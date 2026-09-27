@@ -3,7 +3,7 @@ import { readDocumentHandoff } from './document-purchase';
 import { countText, t, useLanguage, getLocale } from './i18n';
 import { useState, useEffect, useId, type ReactNode } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Search, X } from 'lucide-react';
+import { Search, X, WandSparkles } from 'lucide-react';
 import {
   supplierSchema,
   purchaseDraftSchema,
@@ -532,26 +532,37 @@ export function SupplierForm({
         ).map((key) =>
           key === 'code' ? (
             <div className="field" key={key}>
-              <div className="supplier-code-heading">
-                <label htmlFor={codeInputId}>{t('Supplier code')}</label>
+              <span id={`${codeInputId}-label`}>{t('Supplier code')}</span>
+              <div className="supplier-code-control">
+                <input
+                  id={codeInputId}
+                  aria-labelledby={`${codeInputId}-label`}
+                  required
+                  value={value.code}
+                  onChange={(event) =>
+                    setValue((current) => ({ ...current, code: event.target.value }))
+                  }
+                />
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={generateCode.isPending || mutation.isPending}
+                  variant="outline"
+                  size="icon"
+                  aria-label={t('Generate supplier code')}
+                  title={t(
+                    supplier && value.code.trim()
+                      ? 'Clear the current code to generate a replacement'
+                      : 'Generate supplier code',
+                  )}
+                  disabled={
+                    generateCode.isPending ||
+                    mutation.isPending ||
+                    (!!supplier && !!value.code.trim())
+                  }
                   onClick={() => generateCode.mutate()}
                 >
-                  {t(generateCode.isPending ? 'Generating…' : 'Generate')}
+                  <WandSparkles size={16} aria-hidden="true" />
                 </Button>
               </div>
-              <input
-                id={codeInputId}
-                required
-                value={value.code}
-                onChange={(event) =>
-                  setValue((current) => ({ ...current, code: event.target.value }))
-                }
-              />
             </div>
           ) : (
             <Field

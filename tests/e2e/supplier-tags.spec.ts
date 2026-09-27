@@ -56,7 +56,7 @@ test('edits supplier tags and combines supplier filters', async ({ page }) => {
   await page.getByLabel('Supplier tag').selectOption('Wholesale');
   await expect(page.locator('tbody tr')).toHaveCount(1);
   await page.getByRole('button', { name: 'Add supplier', exact: true }).click();
-  await page.getByRole('button', { name: 'Generate', exact: true }).click();
+  await page.getByRole('button', { name: 'Generate supplier code', exact: true }).click();
   await expect(page.getByLabel('Supplier code', { exact: true })).toHaveValue('SUP-00002');
   expect(errors).toEqual([]);
 });

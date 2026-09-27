@@ -1,4 +1,6 @@
 {
+  "Generate supplier code": "Сгенерировать код поставщика",
+  "Clear the current code to generate a replacement": "Очистите текущий код, чтобы сгенерировать новый",
   "Clear filters": "Сбросить фильтры",
   "Supplier status": "Статус поставщика",
   "Supplier tag": "Тег поставщика",

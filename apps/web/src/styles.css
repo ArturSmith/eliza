@@ -5189,16 +5189,19 @@ input.shopping-section-title {
   justify-content: flex-start;
 }
 
-.supplier-code-heading {
+.supplier-code-control {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: stretch;
+  gap: 8px;
 }
-.supplier-code-heading .button-sm {
-  padding: 2px 8px;
-  min-height: 24px;
-  font-size: 12px;
+.supplier-code-control > input {
+  flex: 1;
+  min-width: 0;
+}
+.supplier-code-control > .button {
+  flex-shrink: 0;
+  width: 40px;
+  height: auto;
 }
 
 .supplier-tags {
