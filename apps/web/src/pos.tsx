@@ -898,6 +898,19 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
               </div>
             ))}
           </div>
+          {catalog.isPending ? (
+            <div className="empty">{t('Loading products…')}</div>
+          ) : (
+            !visible.length && (
+              <div className="empty">
+                <Package size={32} />
+                <h3>{t('No matching products')}</h3>
+                <p className="muted">
+                  {t('Try another search, or ask a manager to add products and stock. ')}
+                </p>
+              </div>
+            )
+          )}
           {!!catalog.data?.total && (
             <nav className="pos-pagination" aria-label={t('Product pages')}>
               <button disabled={page === 1 || catalog.isFetching} onClick={() => setPage(page - 1)}>
@@ -916,19 +929,6 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                 {t('Next')}
               </button>
             </nav>
-          )}
-          {catalog.isPending ? (
-            <div className="empty">{t('Loading products…')}</div>
-          ) : (
-            !visible.length && (
-              <div className="empty">
-                <Package size={32} />
-                <h3>{t('No matching products')}</h3>
-                <p className="muted">
-                  {t('Try another search, or ask a manager to add products and stock. ')}
-                </p>
-              </div>
-            )
           )}
         </section>
         <aside className="pos-cart">
