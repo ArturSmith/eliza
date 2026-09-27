@@ -26,6 +26,7 @@ test('persists markup and suggests editable VAT-inclusive prices only for new pr
   await add.getByLabel('Category', { exact: true }).fill('Dairy');
   await add.getByLabel('Purchase cost', { exact: true }).fill('100');
   await expect(add.getByLabel('Selling price', { exact: true })).toHaveValue('115.00');
+  await expect(add.locator('.product-margin-preview')).toContainText('13.04%');
   await add.getByLabel('Tax rate (%)', { exact: true }).fill('25');
   await expect(add.getByLabel('Selling price', { exact: true })).toHaveValue('115.00');
   await add.getByLabel('Purchase cost', { exact: true }).fill('200');
@@ -33,6 +34,10 @@ test('persists markup and suggests editable VAT-inclusive prices only for new pr
   await add.getByLabel('Selling price', { exact: true }).fill('240');
   await add.getByLabel('Purchase cost', { exact: true }).fill('300');
   await expect(add.getByLabel('Selling price', { exact: true })).toHaveValue('240');
+  await expect(add.locator('.product-margin-preview')).toContainText('-56.25%');
+  await add.getByLabel('Tax rate (%)', { exact: true }).fill('0');
+  await expect(add.locator('.product-margin-preview')).toContainText('-25.00%');
+  await add.getByLabel('Tax rate (%)', { exact: true }).fill('25');
   await expect(add.getByRole('button', { name: 'Use default markup' })).toHaveCount(0);
   await add.getByLabel('Selling price', { exact: true }).fill('115.00');
   await add.getByLabel('Purchase cost', { exact: true }).fill('100');

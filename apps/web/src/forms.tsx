@@ -17,6 +17,9 @@ import {
   productSchema,
   productSku,
   suggestSellingPrice,
+  calculateLine,
+  toScaled,
+  fromScaled,
   setupSchema,
   adjustmentSchema,
   type Product,
@@ -254,6 +257,7 @@ export function ProductForm({
   const formRef = useRef<HTMLFormElement>(null);
   const [cost, setCost] = useState(initial?.cost ?? prefill?.cost ?? '');
   const [price, setPrice] = useState(initial?.price ?? prefill?.price ?? '');
+  const [taxRate, setTaxRate] = useState<string | undefined>(initial?.taxRate);
   const [manualPrice, setManualPrice] = useState(!!initial || !!prefill?.price);
   const [productName, setProductName] = useState(initial?.name ?? prefill?.name ?? '');
   const [sku, setSku] = useState(initial?.sku ?? '');
@@ -295,6 +299,22 @@ export function ProductForm({
   });
   const markup = profile.data?.defaultMarkupPercent ?? '15';
   const suggestedPrice = suggestSellingPrice(cost, markup);
+  const effectiveTaxRate = taxRate ?? profile.data?.defaultTaxRate ?? '0';
+  let marginPreview = '—';
+  const selling = productSchema.shape.price.safeParse(manualPrice ? price : suggestedPrice);
+  const buying = productSchema.shape.cost.safeParse(cost);
+  const tax = productSchema.shape.taxRate.safeParse(effectiveTaxRate);
+  if (selling.success && buying.success && tax.success) {
+    const line = calculateLine(selling.data, '1', tax.data);
+    const net = toScaled(line.total, 2) - toScaled(line.tax, 2);
+    const profit = net - toScaled(buying.data, 2);
+    const percent =
+      net > 0n
+        ? (((profit < 0n ? -profit : profit) * 10000n + net / 2n) / net) * (profit < 0n ? -1n : 1n)
+        : 0n;
+    marginPreview = fromScaled(percent, 2) + '%';
+  }
+
   const [error, setError] = useState<unknown>(null);
   const mutation = useMutation({
     mutationFn: (body: unknown) =>
@@ -540,6 +560,9 @@ export function ProductForm({
             }}
             required
           />
+          <small className="product-margin-preview" aria-live="polite">
+            {t('Gross margin')}: {marginPreview}
+          </small>
         </Field>
         <Field
           label={t('Tax rate (%)')}
@@ -548,7 +571,8 @@ export function ProductForm({
           <input
             name="taxRate"
             inputMode="decimal"
-            defaultValue={initial?.taxRate ?? profile.data?.defaultTaxRate ?? '0'}
+            value={effectiveTaxRate}
+            onChange={(event) => setTaxRate(event.target.value)}
             required
           />
         </Field>
