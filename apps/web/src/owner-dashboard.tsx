@@ -1,5 +1,5 @@
 import { dashboardText, dashboardSummary } from './i18n/dashboard';
-import { useState, type ReactNode } from 'react';
+import { useState, useId, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { api, useSession } from './api';
@@ -158,32 +158,142 @@ function Insights({ insights, currency }: { insights: any[]; currency: string })
   );
 }
 
-/** Hourly sales with the comparable-day average drawn behind the live bars. */
+/** Store-local hourly sales, with an optional comparable-weekday line. */
 function HourlySales({ rows, currency }: { rows: any[]; currency: string }) {
   useLanguage();
-  const max = Math.max(...rows.map((r) => Math.max(r.total, r.comparison ?? 0)), 1);
+  const [selected, setSelected] = useState<number | null>(null);
+  const tooltipId = useId();
+  const values = rows.flatMap((row) => [Number(row.total) || 0, Number(row.comparison) || 0]);
+  const min = Math.min(0, ...values);
+  const max = Math.max(1, ...values);
+  const x = (index: number) => 80 + (index * 900) / Math.max(1, rows.length - 1);
+  const y = (value: number) => 210 - ((value - min) * 180) / (max - min);
+  const path = (key: 'total' | 'comparison') =>
+    rows
+      .map((row, index) =>
+        (key === 'total' && !row.elapsed) || (key === 'comparison' && row.comparison == null)
+          ? null
+          : { index, value: Number(row[key]) || 0 },
+      )
+      .reduce(
+        (result, point, index, points) =>
+          point
+            ? result +
+              `${index === 0 || !points[index - 1] ? 'M' : 'L'}${x(point.index)},${y(point.value)} `
+            : result,
+        '',
+      );
+  const current = selected === null ? null : rows[selected];
+  const hasComparison = rows.some((row) => row.comparison != null);
   return (
     <section className="panel">
       <div className="panel-heading">
         <h2>{t('Sales by hour')}</h2>
-        <p>{t('Bars show today. The line marks a typical same weekday.')}</p>
+        <p>{t('Hover over the line to see hourly sales.')}</p>
       </div>
-      <div className="hour-chart panel-padding">
-        {rows.map((r) => (
-          <div key={r.hour} className={'hour-column' + (r.elapsed ? '' : ' hour-future')}>
-            <div className="hour-track">
-              <div className="hour-bar" style={{ height: (r.total / max) * 100 + '%' }} />
-              {r.comparison !== null && (
-                <div
-                  className="hour-baseline"
-                  style={{ bottom: (r.comparison / max) * 100 + '%' }}
-                  title={t('Typical') + ': ' + formatMoney(String(r.comparison), currency)}
+      <div className="hour-line-chart panel-padding" onPointerLeave={() => setSelected(null)}>
+        <div className="hour-line-legend">
+          <span>{t('Sales')}</span>
+          {hasComparison && <span className="hour-line-typical">{t('Typical')}</span>}
+        </div>
+        <svg viewBox="0 0 1000 245" role="group" aria-label={t('Sales by hour')}>
+          {[min, (min + max) / 2, max].map((value) => (
+            <g key={value}>
+              <line x1="80" x2="980" y1={y(value)} y2={y(value)} stroke="#e4e9df" />
+              <text x="70" y={y(value) + 4} textAnchor="end" className="hour-line-label">
+                {formatMoney(String(value), currency)}
+              </text>
+            </g>
+          ))}
+          {hasComparison && (
+            <path
+              d={path('comparison')}
+              fill="none"
+              stroke="#b77a28"
+              strokeWidth="2"
+              strokeDasharray="6 5"
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+          <path
+            className="hour-sales-line"
+            d={path('total')}
+            fill="none"
+            stroke="var(--green)"
+            strokeWidth="3"
+            vectorEffect="non-scaling-stroke"
+          />
+          {current && (
+            <>
+              <line
+                x1={x(selected!)}
+                x2={x(selected!)}
+                y1="30"
+                y2="210"
+                stroke="#8c9f85"
+                strokeDasharray="4 4"
+              />
+              {current.elapsed && (
+                <circle
+                  cx={x(selected!)}
+                  cy={y(Number(current.total) || 0)}
+                  r="5"
+                  fill="var(--green)"
+                  stroke="white"
+                  strokeWidth="2"
                 />
               )}
-            </div>
-            <span className="hour-label">{r.hour}</span>
+            </>
+          )}
+          {rows.map((row, index) => (
+            <g key={row.hour}>
+              {(index % 4 === 0 || index === rows.length - 1) && (
+                <text x={x(index)} y="234" textAnchor="middle" className="hour-line-label">
+                  {row.hour}:00
+                </text>
+              )}
+              <rect
+                className="hour-line-hit"
+                x={Math.max(80, x(index) - 450 / Math.max(1, rows.length - 1))}
+                y="20"
+                width={
+                  Math.min(980, x(index) + 450 / Math.max(1, rows.length - 1)) -
+                  Math.max(80, x(index) - 450 / Math.max(1, rows.length - 1))
+                }
+                height="195"
+                fill="transparent"
+                tabIndex={0}
+                role="button"
+                aria-label={`${row.hour}:00 · ${formatMoney(String(row.total), currency)}`}
+                aria-describedby={selected === index ? tooltipId : undefined}
+                onPointerEnter={() => setSelected(index)}
+                onPointerDown={() => setSelected(index)}
+                onFocus={() => setSelected(index)}
+                onBlur={() => setSelected(null)}
+              />
+            </g>
+          ))}
+        </svg>
+        {current && (
+          <div
+            id={tooltipId}
+            role="tooltip"
+            className="hour-line-tooltip"
+            style={{ left: Math.max(20, Math.min(80, x(selected!) / 10)) + '%' }}
+          >
+            <strong>
+              {current.hour}:00–{current.hour}:59
+            </strong>
+            <span>
+              {t('Sales')}: {formatMoney(String(current.total), currency)}
+            </span>
+            {current.comparison != null && (
+              <span>
+                {t('Typical')}: {formatMoney(String(current.comparison), currency)}
+              </span>
+            )}
           </div>
-        ))}
+        )}
       </div>
     </section>
   );

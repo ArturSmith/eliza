@@ -2914,45 +2914,66 @@ input.shopping-section-title {
   justify-self: start;
 }
 
-.hour-chart {
-  display: flex;
-  align-items: flex-end;
-  gap: 4px;
-  height: 190px;
-}
-.hour-column {
-  flex: 1;
-  display: grid;
-  gap: 6px;
-  height: 100%;
-  grid-template-rows: 1fr auto;
-}
-.hour-track {
+.hour-line-chart {
   position: relative;
-  height: 100%;
-  background: #f2f4f0;
-  border-radius: 4px;
 }
-.hour-future {
-  opacity: 0.4;
+.hour-line-chart svg {
+  display: block;
+  width: 100%;
+  min-height: 180px;
+  overflow: visible;
 }
-.hour-bar {
-  position: absolute;
-  inset: auto 0 0 0;
-  background: var(--green);
-  border-radius: 4px;
+.hour-line-label {
+  font-size: 12px;
+  fill: var(--muted);
 }
-.hour-baseline {
-  position: absolute;
-  left: -1px;
-  right: -1px;
-  height: 2px;
-  background: #c77700;
+.hour-line-hit {
+  cursor: crosshair;
 }
-.hour-label {
-  text-align: center;
-  font-size: 10px;
+.hour-line-hit:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: -2px;
+}
+.hour-line-legend {
+  display: flex;
+  gap: 24px;
+  font-size: 12px;
   color: var(--muted);
+  margin-bottom: 12px;
+}
+.hour-line-legend span::before {
+  content: '';
+  display: inline-block;
+  width: 22px;
+  border-top: 3px solid var(--green);
+  vertical-align: middle;
+  margin-right: 8px;
+}
+.hour-line-legend .hour-line-typical::before {
+  border-top: 2px dashed #b77a28;
+}
+.hour-line-tooltip {
+  position: absolute;
+  top: 60px;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 5px;
+  padding: 10px 14px;
+  background: white;
+  border: 1px solid #dfe6d7;
+  border-radius: 10px;
+  box-shadow: 0 4px 16px #203b2414;
+  pointer-events: none;
+  font-size: 12px;
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .hour-line-chart svg {
+    min-height: 160px;
+  }
+  .hour-line-chart {
+    padding: 16px;
+  }
 }
 
 .stat-row,
