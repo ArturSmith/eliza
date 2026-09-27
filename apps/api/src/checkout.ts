@@ -1,7 +1,9 @@
+import { z } from 'zod';
 import {
   Body,
   Controller,
   Get,
+  Query,
   HttpException,
   Module,
   Param,
@@ -54,6 +56,19 @@ async function openShift(client: PoolClient, actor: Operator, id?: string) {
     throw new ConflictException('Start your shift before using this register.');
   return shift;
 }
+const posCatalogSql = `SELECT p.id,p.image,p.source,p.name,p.sku,p.category,p.unit,p.price::text,p.tax_rate::text AS "taxRate",
+          COALESCE((SELECT sum(sb.quantity) FROM stock_batches sb
+            WHERE sb.store_id=p.store_id AND sb.product_id=p.id
+              AND (sb.expiry_date IS NULL OR sb.expiry_date>(now() AT TIME ZONE
+                (SELECT timezone FROM stores WHERE id=p.store_id))::date)),0)::numeric(15,3)::text AS stock,
+          COALESCE(p.plu,'') AS plu,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),'[]'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active`;
+const catalogFilters = z.object({
+  page: z.coerce.number().int().min(1).max(100000).default(1),
+  category: z.string().max(200).default(''),
+  search: z.string().max(200).default(''),
+  favorites: z.enum(['true', 'false']).default('false'),
+  popular: z.enum(['true', 'false']).default('false'),
+});
 @Controller('pos')
 export class CheckoutController {
   constructor(
@@ -70,20 +85,84 @@ export class CheckoutController {
       ).rows[0];
     });
   }
-  @Get('products') products(@Req() req: Request) {
+  @Get('products') products(
+    @Req() req: Request,
+    @Query('code') code?: string,
+    @Query('plu') plu?: string,
+  ) {
+    if (code !== undefined && (typeof code !== 'string' || code.length > 200))
+      throw new BadRequestException('Invalid product code.');
+    if (plu !== undefined && (typeof plu !== 'string' || !/^[0-9]{1,100}$/.test(plu)))
+      throw new BadRequestException('Invalid PLU.');
     return this.operations.transaction(async (client) => {
       const actor = await this.registers.operator(client, req);
       return (
         await client.query(
-          `SELECT p.id,p.image,p.source,p.name,p.sku,p.category,p.unit,p.price,p.tax_rate AS "taxRate",
-          COALESCE((SELECT sum(sb.quantity) FROM stock_batches sb
-            WHERE sb.store_id=p.store_id AND sb.product_id=p.id
-              AND (sb.expiry_date IS NULL OR sb.expiry_date>(now() AT TIME ZONE
-                (SELECT timezone FROM stores WHERE id=p.store_id))::date)),0)::numeric(15,3) AS stock,
-          COALESCE(p.plu,'') AS plu,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id),'[]'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active ORDER BY p.name`,
-          [actor.storeId],
+          `SELECT * FROM (${posCatalogSql}) p WHERE
+            ($2::text IS NULL OR p.sku=$2 OR p.plu=$2 OR p.barcodes ? $2)
+            AND ($3::text IS NULL OR (p.plu ~ '^[0-9]+$' AND ltrim(p.plu,'0')=ltrim($3,'0')))
+            ORDER BY p.name,p.id`,
+          [actor.storeId, code ?? null, plu ?? null],
         )
       ).rows;
+    });
+  }
+  @Get('catalog') catalog(@Req() req: Request, @Query() input: unknown) {
+    const filters = parse(catalogFilters, input);
+    return this.operations.transaction(async (client) => {
+      const actor = await this.registers.operator(client, req);
+      const result = await client.query(
+        `WITH available AS (
+        SELECT p.*, EXISTS(SELECT 1 FROM pos_product_favorites f WHERE f.store_id=$1 AND f.employee_id=$2 AND f.product_id=p.id) AS favorite,
+        CASE WHEN $6::boolean THEN COALESCE((SELECT sum(i.quantity) FROM sale_items i JOIN sales s ON s.id=i.sale_id AND s.store_id=i.store_id
+          WHERE i.store_id=$1 AND i.product_id=p.id AND s.created_at>=now()-interval '30 days'),0) ELSE 0 END AS popularity
+        FROM (${posCatalogSql}) p WHERE p.stock::numeric>0
+      ), filtered AS (
+        SELECT * FROM available WHERE ($3='' OR category=$3) AND (NOT $4::boolean OR favorite)
+        AND ($5='' OR name ILIKE '%'||$5||'%' OR sku ILIKE '%'||$5||'%' OR plu ILIKE '%'||$5||'%'
+          OR EXISTS(SELECT 1 FROM jsonb_array_elements_text(barcodes) b WHERE b ILIKE '%'||$5||'%'))
+      ) SELECT
+        (SELECT count(*) FROM filtered)::integer AS total,
+        COALESCE((SELECT jsonb_agg(category ORDER BY category) FROM (SELECT DISTINCT category FROM available) c),'[]'::jsonb) AS categories,
+        COALESCE((SELECT jsonb_agg(row_to_json(p)) FROM (SELECT * FROM filtered
+          ORDER BY CASE WHEN $6::boolean THEN popularity END DESC,name,id LIMIT 20 OFFSET $7) p),'[]'::jsonb) AS products`,
+        [
+          actor.storeId,
+          actor.employeeId,
+          filters.category,
+          filters.favorites === 'true',
+          filters.search,
+          filters.popular === 'true',
+          (filters.page - 1) * 20,
+        ],
+      );
+      return { ...result.rows[0], page: filters.page, pageSize: 20 };
+    });
+  }
+  @Post('products/:id/favorite') favorite(
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: unknown,
+  ) {
+    const body = parse(z.object({ favorite: z.boolean() }).strict(), input);
+    return this.operations.transaction(async (client) => {
+      const actor = await this.registers.operator(client, req);
+      const product = await client.query('SELECT id FROM products WHERE id=$1 AND store_id=$2', [
+        id,
+        actor.storeId,
+      ]);
+      if (!product.rowCount) throw new NotFoundException('Product not found.');
+      if (body.favorite)
+        await client.query(
+          'INSERT INTO pos_product_favorites(store_id,employee_id,product_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING',
+          [actor.storeId, actor.employeeId, id],
+        );
+      else
+        await client.query(
+          'DELETE FROM pos_product_favorites WHERE store_id=$1 AND employee_id=$2 AND product_id=$3',
+          [actor.storeId, actor.employeeId, id],
+        );
+      return body;
     });
   }
   @Post('shifts') start(@Body() input: unknown, @Req() req: Request) {

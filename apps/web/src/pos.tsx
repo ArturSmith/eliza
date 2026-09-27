@@ -22,6 +22,7 @@ import {
   Pause,
   Clock3,
   RefreshCw,
+  Star,
 } from 'lucide-react';
 import {
   decodeScaleBarcode,
@@ -395,17 +396,54 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       return [];
     }
   });
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('');
+  const [favorites, setFavorites] = useState(false);
+  const [popular, setPopular] = useState(false);
+  const [page, setPage] = useState(1);
   const catalog = useQuery({
-    queryKey: ['pos-products', context.store!.id, context.operator!.id],
-    queryFn: () => api<PosProduct[]>('/pos/products'),
+    queryKey: [
+      'pos-products',
+      context.store!.id,
+      context.operator!.id,
+      search,
+      category,
+      favorites,
+      popular,
+      page,
+    ],
+    queryFn: () =>
+      api<{
+        products: (PosProduct & { favorite: boolean })[];
+        total: number;
+        categories: string[];
+      }>(
+        '/pos/catalog?' +
+          new URLSearchParams({
+            search,
+            category,
+            favorites: String(favorites),
+            popular: String(popular),
+            page: String(page),
+          }),
+      ),
     staleTime: 0,
+  });
+  const favorite = useMutation({
+    mutationFn: ({ id, value }: { id: string; value: boolean }) =>
+      api('/pos/products/' + id + '/favorite', { favorite: value }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['pos-products'] });
+    },
   });
   const history = useQuery({
     queryKey: ['pos-sales', context.device!.id, context.operator!.id],
     queryFn: () => api<Receipt[]>('/pos/sales'),
   });
-  const [search, setSearch] = useState(''),
-    [category, setCategory] = useState('All products');
+  useEffect(() => {
+    if (catalog.data && page > 1 && (page - 1) * 20 >= catalog.data.total)
+      setPage(Math.max(1, Math.ceil(catalog.data.total / 20)));
+  }, [catalog.data, page]);
   const [message, setMessage] = useState('');
   const scanSound = useRef<AudioContext | null>(null);
   useEffect(
@@ -560,7 +598,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     if (['piece', 'pack', 'box'].includes(p.unit)) add(p);
     else setWeighted(p);
   }
-  function scanCode(term: string) {
+  async function scanCode(term: string) {
     if (noShift) {
       setMessage('Start your shift before adding items to the cart.');
       return;
@@ -576,10 +614,9 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         scaleProfile.data?.scaleBarcode &&
         decodeScaleBarcode(term, scaleProfile.data.scaleBarcode);
       if (decoded) {
-        const matching =
-          catalog.data?.filter(
-            (p) => p.plu && /^\d+$/.test(p.plu) && BigInt(p.plu) === BigInt(decoded.productCode),
-          ) ?? [];
+        const matching = await api<PosProduct[]>(
+          '/pos/products?plu=' + encodeURIComponent(decoded.productCode),
+        );
         if (matching.length !== 1) {
           setMessage('Scale product code is missing or ambiguous. Check the product PLU.');
           return;
@@ -601,9 +638,13 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       setMessage(error instanceof Error ? error.message : 'Invalid scale barcode.');
       return;
     }
-    const exact =
-      catalog.data?.filter((p) => p.barcodes.includes(term) || p.sku === term || p.plu === term) ??
-      [];
+    let exact: PosProduct[];
+    try {
+      exact = await api<PosProduct[]>('/pos/products?code=' + encodeURIComponent(term));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Could not load product.');
+      return;
+    }
     if (exact.length === 1) {
       if (['piece', 'pack', 'box'].includes(exact[0].unit)) {
         add(exact[0]);
@@ -678,15 +719,8 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       setStorageError(new Error('Could not restore the held cart.'));
     }
   }
-  const visible = (catalog.data ?? []).filter(
-    (p) =>
-      (category === 'All products' || p.category === category) &&
-      (!search ||
-        [p.name, p.sku, p.plu, ...p.barcodes].some((v) =>
-          v.toLowerCase().includes(search.toLowerCase()),
-        )),
-  );
-  const categories = ['All products', ...new Set(catalog.data?.map((p) => p.category))];
+  const visible = catalog.data?.products ?? [];
+  const categories = catalog.data?.categories ?? [];
   return (
     <div className="pos-shell">
       <header className="pos-topbar">
@@ -758,6 +792,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
+                setPage(1);
                 setMessage('');
               }}
               disabled={frozen || noShift}
@@ -771,17 +806,52 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
             <kbd>{t('Enter')}</kbd>
           </form>
           <div className="pos-categories">
+            <button
+              className={!category && !favorites && !popular ? 'selected' : ''}
+              onClick={() => {
+                setCategory('');
+                setFavorites(false);
+                setPopular(false);
+                setPage(1);
+              }}
+            >
+              {t('All products')}
+            </button>
+            <button
+              aria-pressed={favorites}
+              className={favorites ? 'selected' : ''}
+              onClick={() => {
+                setFavorites(!favorites);
+                setPage(1);
+              }}
+            >
+              {t('Favorites')}
+            </button>
+            <button
+              aria-pressed={popular}
+              className={popular ? 'selected' : ''}
+              onClick={() => {
+                setPopular(!popular);
+                setPage(1);
+              }}
+            >
+              {t('Most popular')}
+            </button>
             {categories.map((c) => (
               <button
                 key={c}
+                aria-pressed={c === category}
                 className={c === category ? 'selected' : ''}
-                onClick={() => setCategory(c)}
+                onClick={() => {
+                  setCategory(c === category ? '' : c);
+                  setPage(1);
+                }}
               >
-                {c === 'All products' ? t('All products') : c}
+                {c}
               </button>
             ))}
           </div>
-          <ErrorMessage error={catalog.error ?? lock.error} />
+          <ErrorMessage error={catalog.error ?? favorite.error ?? lock.error} />
           {message && (
             <p className="notice" role="status">
               {translateError(message)}
@@ -789,31 +859,64 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
           )}
           <div className="pos-product-grid">
             {visible.map((p) => (
-              <button
-                className="pos-product"
-                key={p.id}
-                onClick={() => choose(p)}
-                disabled={frozen || noShift || Number(p.stock) <= 0}
-              >
-                <span className={`product-icon color-${p.category.length % 4}`}>
-                  {p.image ? (
-                    <img src={p.image} alt={t('')} loading="lazy" />
-                  ) : (
-                    <Package size={25} />
+              <div className="pos-product-card" key={p.id}>
+                <button
+                  className="pos-product"
+                  key={p.id}
+                  onClick={() => choose(p)}
+                  disabled={frozen || noShift || Number(p.stock) <= 0}
+                >
+                  <span className={`product-icon color-${p.category.length % 4}`}>
+                    {p.image ? (
+                      <img src={p.image} alt={t('')} loading="lazy" />
+                    ) : (
+                      <Package size={25} />
+                    )}
+                  </span>
+                  <small>{p.category}</small>
+                  <strong>{p.name}</strong>
+                  <span className="pos-product-price">
+                    {formatMoney(p.price, currency)}
+                    <small>/ {t(p.unit ?? '')}</small>
+                  </span>
+                  <span className="pos-stock">
+                    {Number(p.stock)} {t(' on hand')}
+                  </span>
+                </button>
+                <button
+                  className="pos-favorite"
+                  aria-label={t(
+                    p.favorite ? 'Remove {name} from favorites' : 'Add {name} to favorites',
+                    { name: p.name },
                   )}
-                </span>
-                <small>{p.category}</small>
-                <strong>{p.name}</strong>
-                <span className="pos-product-price">
-                  {formatMoney(p.price, currency)}
-                  <small>/ {t(p.unit ?? '')}</small>
-                </span>
-                <span className="pos-stock">
-                  {Number(p.stock)} {t(' on hand')}
-                </span>
-              </button>
+                  aria-pressed={p.favorite}
+                  disabled={favorite.isPending}
+                  onClick={() => favorite.mutate({ id: p.id, value: !p.favorite })}
+                >
+                  <Star size={20} fill={p.favorite ? 'currentColor' : 'none'} />
+                </button>
+              </div>
             ))}
           </div>
+          {!!catalog.data?.total && (
+            <nav className="pos-pagination" aria-label={t('Product pages')}>
+              <button disabled={page === 1 || catalog.isFetching} onClick={() => setPage(page - 1)}>
+                {t('Previous')}
+              </button>
+              <span>
+                {t('Page {page} of {pages}', {
+                  page: String(page),
+                  pages: String(Math.ceil(catalog.data.total / 20)),
+                })}
+              </span>
+              <button
+                disabled={page * 20 >= catalog.data.total || catalog.isFetching}
+                onClick={() => setPage(page + 1)}
+              >
+                {t('Next')}
+              </button>
+            </nav>
+          )}
           {catalog.isPending ? (
             <div className="empty">{t('Loading products…')}</div>
           ) : (

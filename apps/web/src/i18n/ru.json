@@ -1,4 +1,10 @@
 {
+  "Favorites": "Избранное",
+  "Most popular": "Самые популярные",
+  "Add {name} to favorites": "Добавить {name} в избранное",
+  "Remove {name} from favorites": "Удалить {name} из избранного",
+  "Product pages": "Страницы товаров",
+  "Page {page} of {pages}": "Страница {page} из {pages}",
   "remaining": "осталось",
   "New selling price incl. tax (optional)": "Новая цена продажи с налогом (необязательно)",
   "Read physical purchase": "Считать бумажную накладную",
