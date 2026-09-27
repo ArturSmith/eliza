@@ -295,7 +295,6 @@ export function ProductForm({
   const profile = useQuery({
     queryKey: ['store-profile'],
     queryFn: () => api<{ defaultTaxRate: string; defaultMarkupPercent: string }>('/store-profile'),
-    enabled: !initial,
   });
   const markup = profile.data?.defaultMarkupPercent ?? '15';
   const suggestedPrice = suggestSellingPrice(cost, markup);
@@ -534,14 +533,17 @@ export function ProductForm({
             inputMode="decimal"
             placeholder={t('0.00')}
             value={cost}
-            onChange={(e) => setCost(e.target.value)}
+            onChange={(e) => {
+              setCost(e.target.value);
+              setManualPrice(false);
+            }}
             required
           />
         </Field>
         <Field
           label={t('Selling price')}
           hint={
-            !initial && !manualPrice
+            !manualPrice
               ? t(
                   'Suggested using {percent}% markup on purchase cost. This price already includes VAT.',
                   { percent: markup },

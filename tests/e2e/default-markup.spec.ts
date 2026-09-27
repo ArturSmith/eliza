@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('persists markup and suggests editable VAT-inclusive prices only for new products', async ({
+test('applies saved markup on purchase-cost changes and allows selling-price overrides', async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -33,6 +33,8 @@ test('persists markup and suggests editable VAT-inclusive prices only for new pr
   await expect(add.getByLabel('Selling price', { exact: true })).toHaveValue('230.00');
   await add.getByLabel('Selling price', { exact: true }).fill('240');
   await add.getByLabel('Purchase cost', { exact: true }).fill('300');
+  await expect(add.getByLabel('Selling price', { exact: true })).toHaveValue('345.00');
+  await add.getByLabel('Selling price', { exact: true }).fill('240');
   await expect(add.getByLabel('Selling price', { exact: true })).toHaveValue('240');
   await expect(add.locator('.product-margin-preview')).toContainText('-56.25%');
   await add.getByLabel('Tax rate (%)', { exact: true }).fill('0');
@@ -64,7 +66,9 @@ test('persists markup and suggests editable VAT-inclusive prices only for new pr
   const edit = page.getByRole('dialog', { name: 'Edit product', exact: true });
   await expect(edit.getByLabel('Selling price', { exact: true })).toHaveValue('115.00');
   await edit.getByLabel('Purchase cost', { exact: true }).fill('200');
-  await expect(edit.getByLabel('Selling price', { exact: true })).toHaveValue('115.00');
+  await expect(edit.getByLabel('Selling price', { exact: true })).toHaveValue('250.00');
+  await edit.getByLabel('Selling price', { exact: true }).fill('260');
+  await expect(edit.getByLabel('Selling price', { exact: true })).toHaveValue('260');
   await edit.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByRole('button', { name: 'Add product', exact: true }).first().click();
   await add.getByLabel('Purchase cost', { exact: true }).fill('100');
