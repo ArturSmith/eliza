@@ -122,6 +122,23 @@ Exploratory proposals, not implementation commitments. This order ranks AI ideas
 |     7 | Unusual-activity review                         | Review unusually high refunds and the affected receipts.                                             | Highlight evidence for investigation; do not accuse employees or automatically restrict them.         |
 |     8 | Contextual workflow help                        | Ask what to enter when only half a delivery arrives.                                                 | Explain the current screen and actual workflow using maintained Eliza documentation.                  |
 
+### AI traffic analysis and product placement optimization — planned
+
+The store is equipped with motion sensors, and its floor space is virtually divided into individual zones or cells. The system continuously records visitor movement and collects data on how many people visited each zone during a selected period.
+
+Using this data, **Eliza** creates a store traffic heatmap and identifies high-traffic and low-traffic zones. Changes in visitor traffic can also be analyzed over time—by hour, day, week, or other periods.
+
+Traffic data is combined with sales information and product locations. This allows AI to identify opportunities to optimize product placement and provide specific recommendations.
+
+For example, Eliza may recommend:
+
+- Moving **well-selling products into low-traffic zones** to draw shoppers into less-visited parts of the store.
+- Placing **products with low sales in high-traffic zones** to increase their visibility and test the effect of traffic on sales.
+- Identifying zones where heavy customer traffic does not translate into sales.
+- Comparing performance before and after changes in product placement to assess the actual effect of rearranging products.
+
+In this way, Eliza turns data about shoppers' physical movement into a tool for optimizing retail space. The system shows **where shoppers are** and helps determine **how to change product placement to improve store performance**.
+
 ### Shared design rules
 
 - Eliza calculates; AI explains. Use validated application logic for sales, taxes, stock, margins, and reorder quantities.
