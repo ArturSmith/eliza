@@ -263,7 +263,7 @@ export const aiToolDefinitions = [
     name: 'propose_change',
     permission: 'catalog.read',
     description:
-      'Prepare a supplier, product, or purchase draft create/update for explicit user approval. This does not write anything. First search existing records. Data is a JSON string matching the normal Eliza form fields. Supplier fields: code,name,contactName,contactPhone,email,phone,address,companyNumber,paymentTerms,notes,active; update also needs id,version. Product fields: name,sku,category,unit,price,cost,minStock,plu,barcodes,description (optional),autoSku,autoPlu; update also needs id and full current fields. Purchase fields: supplierId,supplierReference,documentDate,expectedDate,notes,lines array of productId,quantity,unitCost,taxRate and optional sellingPrice; optional buyerName,buyerDetails,driverName,driverPhone,goodsNumber,buyerTaxNumber,grossWeight,documentVat,returnAmount,documentComment; update also needs id,version and must be a draft. Never invent IDs, prices, costs, tax rates, or missing required fields. Ask user for missing information first. The proposal is saved only after user clicks Approve.',
+      'Prepare a supplier, product, or purchase draft create/update for explicit user approval. This does not write anything. First search existing records. Data is a JSON string matching the normal Eliza form fields. Supplier fields: code,name,contactName,contactPhone,email,phone,address,companyNumber,paymentTerms,notes,tags (array of strings),active; update also needs id,version. Product fields: name,sku,category,unit,price,cost,minStock,plu,barcodes,description (optional),autoSku,autoPlu; update also needs id and full current fields. Purchase fields: supplierId,supplierReference,documentDate,expectedDate,notes,lines array of productId,quantity,unitCost,taxRate and optional sellingPrice; optional buyerName,buyerDetails,driverName,driverPhone,goodsNumber,buyerTaxNumber,grossWeight,documentVat,returnAmount,documentComment; update also needs id,version and must be a draft. Never invent IDs, prices, costs, tax rates, or missing required fields. Ask user for missing information first. The proposal is saved only after user clicks Approve.',
     parameters: {
       type: 'object',
       properties: {
@@ -542,12 +542,12 @@ export async function executeAiTool(
     }
     case 'search_suppliers':
       return query(
-        `SELECT id,code,name,phone,contact_name,contact_phone,company_number,email,address,payment_terms,active,version FROM suppliers WHERE store_id=$1 AND (name ILIKE $2 OR code ILIKE $2 OR phone ILIKE $2 OR contact_name ILIKE $2 OR contact_phone ILIKE $2 OR company_number ILIKE $2) ORDER BY name LIMIT 20`,
+        `SELECT id,code,name,phone,contact_name,contact_phone,company_number,email,address,payment_terms,tags,active,version FROM suppliers WHERE store_id=$1 AND (name ILIKE $2 OR code ILIKE $2 OR phone ILIKE $2 OR contact_name ILIKE $2 OR contact_phone ILIKE $2 OR company_number ILIKE $2 OR EXISTS(SELECT 1 FROM jsonb_array_elements_text(tags) tag WHERE tag ILIKE $2)) ORDER BY name LIMIT 20`,
         [store.id, pattern],
       );
     case 'supplier_details': {
       const rows = await query(
-        `SELECT id,code,name,contact_name AS "contactName",contact_phone AS "contactPhone",phone,email,address,company_number AS "companyNumber",payment_terms AS "paymentTerms",notes,active,version FROM suppliers WHERE store_id=$1 AND id=$2`,
+        `SELECT id,code,name,contact_name AS "contactName",contact_phone AS "contactPhone",phone,email,address,company_number AS "companyNumber",payment_terms AS "paymentTerms",notes,tags,active,version FROM suppliers WHERE store_id=$1 AND id=$2`,
         [store.id, a.id],
       );
       return rows[0] ?? { notFound: true };

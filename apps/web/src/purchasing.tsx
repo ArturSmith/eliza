@@ -1,7 +1,7 @@
 import { PurchaseDocument, type DocumentDraftLine } from './purchase-document';
 import { readDocumentHandoff } from './document-purchase';
 import { countText, t, useLanguage, getLocale } from './i18n';
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, useId, type ReactNode } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Search, X } from 'lucide-react';
 import {
@@ -265,10 +265,18 @@ export function SuppliersPage() {
     },
   });
   const [search, setSearch] = useState('');
-  const rows = (q.data ?? []).filter((s) =>
-    [s.name, s.code, s.contactName, s.contactPhone, s.email, s.phone].some((v) =>
-      (v ?? '').toLowerCase().includes(search.trim().toLowerCase()),
-    ),
+  const [status, setStatus] = useState('all');
+  const [tag, setTag] = useState('');
+  const tags = [...new Set((q.data ?? []).flatMap((s) => s.tags ?? []))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+  const rows = (q.data ?? []).filter(
+    (s) =>
+      (status === 'all' || s.active === (status === 'active')) &&
+      (!tag || (s.tags ?? []).some((value) => value.toLowerCase() === tag.toLowerCase())) &&
+      [s.name, s.code, s.contactName, s.contactPhone, s.email, s.phone, ...(s.tags ?? [])].some(
+        (value) => (value ?? '').toLowerCase().includes(search.trim().toLowerCase()),
+      ),
   );
   return (
     <>
@@ -283,11 +291,45 @@ export function SuppliersPage() {
             <Search size={18} />
             <input
               aria-label={t('Search suppliers')}
-              placeholder={t('Search name, code, contact, email, or phone…')}
+              placeholder={t('Search name, code, tag, contact, email, or phone…')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          <select
+            aria-label={t('Supplier status')}
+            value={status}
+            onChange={(event) => setStatus(event.target.value)}
+          >
+            <option value="all">{t('All statuses')}</option>
+            <option value="active">{t('Active')}</option>
+            <option value="inactive">{t('Inactive')}</option>
+          </select>
+          <select
+            aria-label={t('Supplier tag')}
+            value={tag}
+            onChange={(event) => setTag(event.target.value)}
+          >
+            <option value="">{t('All tags')}</option>
+            {tags.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+          {(search || tag || status !== 'all') && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearch('');
+                setTag('');
+                setStatus('all');
+              }}
+            >
+              {t('Clear filters')}
+            </Button>
+          )}
           <span className="muted">{countText('suppliers', rows.length)}</span>
         </div>
         <ErrorMessage error={q.error} />
@@ -311,6 +353,15 @@ export function SuppliersPage() {
                     <td>
                       <strong>{s.name}</strong>
                       <small>{s.code}</small>
+                      {!!s.tags?.length && (
+                        <div className="supplier-tags">
+                          {s.tags.map((tag) => (
+                            <span className="badge badge-gray" key={tag}>
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td>
                       {s.contactName || '—'}
@@ -427,9 +478,30 @@ export function SupplierForm({
       active: true,
     },
   );
+  const [tagsText, setTagsText] = useState((supplier?.tags ?? []).join(', '));
+  const codeInputId = useId();
+  const generateCode = useMutation({
+    mutationFn: async () => {
+      const suppliers = await api<Supplier[]>('/suppliers');
+      const used = new Set(suppliers.map((entry) => entry.code.toUpperCase()));
+      used.add(value.code.trim().toUpperCase());
+      let sequence = 1;
+      while (used.has(`SUP-${String(sequence).padStart(5, '0')}`)) sequence++;
+      return `SUP-${String(sequence).padStart(5, '0')}`;
+    },
+    onSuccess: (code) => setValue((current) => ({ ...current, code })),
+  });
   const [requestId] = useState(() => crypto.randomUUID());
   const mutation = useMutation({
-    mutationFn: () => api<Supplier>('/suppliers', { ...value, requestId }),
+    mutationFn: () =>
+      api<Supplier>('/suppliers', {
+        ...value,
+        tags: tagsText
+          .split(',')
+          .map((tag) => tag.trim())
+          .filter(Boolean),
+        requestId,
+      }),
     onSuccess: (saved) => {
       onCreated?.(saved);
       void refresh();
@@ -457,33 +529,68 @@ export function SupplierForm({
             'paymentTerms',
             'notes',
           ] as const
-        ).map((key) => (
-          <Field
-            key={key}
-            label={t(
-              {
-                code: 'Supplier code',
-                name: 'Supplier name',
-                contactName: 'Sales representative',
-                contactPhone: 'Representative phone',
-                companyNumber: 'Company number',
-                paymentTerms: 'Payment terms',
-                email: 'Email',
-                phone: 'Supplier phone',
-                address: 'Address',
-                notes: 'Notes',
-              }[key],
-            )}
-          >
-            <input
-              required={key === 'code' || key === 'name'}
-              type={key === 'email' ? 'email' : 'text'}
-              value={value[key]}
-              onChange={(e) => setValue({ ...value, [key]: e.target.value })}
-            />
-          </Field>
-        ))}
+        ).map((key) =>
+          key === 'code' ? (
+            <div className="field" key={key}>
+              <div className="supplier-code-heading">
+                <label htmlFor={codeInputId}>{t('Supplier code')}</label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={generateCode.isPending || mutation.isPending}
+                  onClick={() => generateCode.mutate()}
+                >
+                  {t(generateCode.isPending ? 'Generating…' : 'Generate')}
+                </Button>
+              </div>
+              <input
+                id={codeInputId}
+                required
+                value={value.code}
+                onChange={(event) =>
+                  setValue((current) => ({ ...current, code: event.target.value }))
+                }
+              />
+            </div>
+          ) : (
+            <Field
+              key={key}
+              label={t(
+                {
+                  code: 'Supplier code',
+                  name: 'Supplier name',
+                  contactName: 'Sales representative',
+                  contactPhone: 'Representative phone',
+                  companyNumber: 'Company number',
+                  paymentTerms: 'Payment terms',
+                  email: 'Email',
+                  phone: 'Supplier phone',
+                  address: 'Address',
+                  notes: 'Notes',
+                }[key],
+              )}
+            >
+              <input
+                required={key === 'name'}
+                type={key === 'email' ? 'email' : 'text'}
+                value={value[key]}
+                onChange={(e) => setValue({ ...value, [key]: e.target.value })}
+              />
+            </Field>
+          ),
+        )}
       </div>
+      <Field
+        label={t('Tags (optional)')}
+        hint={t('Separate tags with commas, for example: drinks, local, wholesale.')}
+      >
+        <input
+          value={tagsText}
+          onChange={(event) => setTagsText(event.target.value)}
+          placeholder={t('drinks, local, wholesale')}
+        />
+      </Field>
       <label className="checkbox-field">
         <input
           type="checkbox"
@@ -492,7 +599,7 @@ export function SupplierForm({
         />
         {t('Active supplier ')}
       </label>
-      <ErrorMessage error={mutation.error} />
+      <ErrorMessage error={generateCode.error ?? mutation.error} />
       <div className="form-actions">
         <Button disabled={mutation.isPending}>
           {mutation.isPending ? t('Saving…') : t('Save supplier')}

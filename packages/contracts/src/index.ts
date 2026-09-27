@@ -392,6 +392,16 @@ export type Receipt = {
 
 // Supplier purchase costs exclude tax; selling prices use the separate inclusive-tax model.
 export const supplierSchema = z.object({
+  tags: z
+    .array(z.string().trim().min(1).max(40))
+    .max(20)
+    .default([])
+    .transform((tags) =>
+      tags.filter(
+        (tag, index) =>
+          tags.findIndex((other) => other.toLowerCase() === tag.toLowerCase()) === index,
+      ),
+    ),
   code: z
     .string()
     .trim()

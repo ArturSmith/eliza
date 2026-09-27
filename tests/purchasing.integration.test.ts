@@ -756,4 +756,48 @@ describe.sequential('purchasing and receiving', () => {
     const offers = (await manager.request('/suppliers/' + fresh.body.id + '/products')).body;
     expect(JSON.stringify(offers)).toContain(productId);
   });
+  it('stores normalized supplier tags, validates limits, and preserves omitted tags on updates', async () => {
+    const created = await manager.request('/suppliers', {
+      requestId: requestId(),
+      code: 'TAGGED',
+      name: 'Tagged supplier',
+      tags: [' Drinks ', 'drinks', 'Local'],
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.tags).toEqual(['Drinks', 'Local']);
+    const { tags, ...withoutTags } = created.body;
+    const updated = await manager.request('/suppliers', {
+      ...withoutTags,
+      name: 'Renamed supplier',
+      requestId: requestId(),
+    });
+    expect(updated.status).toBe(201);
+    expect(updated.body.tags).toEqual(['Drinks', 'Local']);
+    const cleared = await manager.request('/suppliers', {
+      ...updated.body,
+      tags: [],
+      requestId: requestId(),
+    });
+    expect(cleared.body.tags).toEqual([]);
+    expect(
+      (
+        await manager.request('/suppliers', {
+          requestId: requestId(),
+          code: 'INVALID-TAGS',
+          name: 'Invalid',
+          tags: [''],
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await manager.request('/suppliers', {
+          requestId: requestId(),
+          code: 'TOO-MANY-TAGS',
+          name: 'Invalid',
+          tags: Array.from({ length: 21 }, (_, i) => 'Tag ' + i),
+        })
+      ).status,
+    ).toBe(400);
+  });
 });
