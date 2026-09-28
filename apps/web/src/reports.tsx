@@ -7,11 +7,10 @@ import { api, useSession } from './api';
 import { ErrorMessage } from './forms';
 import { Dialog } from './components/ui/dialog';
 import { Button } from './components/ui/button';
-import { ReceiptView, formatMoney } from './receipts';
+import { formatMoney } from './receipts';
 export function SalesPage() {
   useLanguage();
   const query = useQuery({ queryKey: ['sales'], queryFn: () => api<Receipt[]>('/reports/sales') });
-  const [receipt, setReceipt] = useState<Receipt | null>(null);
   return (
     <>
       <div className="page-heading">
@@ -61,7 +60,7 @@ export function SalesPage() {
                     <td>{r.payment.method === 'cash' ? t('Cash') : t('Card recorded')}</td>
                     <td>{formatMoney(r.total, r.currency)}</td>
                     <td>
-                      <Button variant="ghost" onClick={() => setReceipt(r)}>
+                      <Button variant="ghost" onClick={() => window.location.assign('/sales/receipts/' + r.id)}>
                         {t('View receipt ')}
                       </Button>
                     </td>
@@ -77,20 +76,6 @@ export function SalesPage() {
           </div>
         )}
       </section>
-      <Dialog
-        open={!!receipt}
-        onOpenChange={(v) => !v && setReceipt(null)}
-        title={t('Sale receipt')}
-        description={t('Historical sale details.')}
-      >
-        {receipt && (
-          <ReceiptView
-            receipt={receipt}
-            reprint
-            beforePrint={() => api(`/reports/sales/${receipt.id}/reprint`, {})}
-          />
-        )}
-      </Dialog>
     </>
   );
 }

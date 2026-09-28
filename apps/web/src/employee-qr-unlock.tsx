@@ -27,21 +27,29 @@ export function EmployeeQrUnlock({
   }
   return (
     <div className="employee-qr-unlock">
-      <p>{t('Or scan your employee QR code')}</p>
-      <form onSubmit={submit}>
-        <input
-          type="password"
-          autoComplete="off"
-          aria-label={t('Employee QR code')}
-          value={credential}
-          onChange={(event) => setCredential(event.target.value)}
-          placeholder={t('Scan employee QR')}
-          disabled={disabled}
-        />
-        <CameraBarcodeScanner onScan={unlock} disabled={disabled} />
-        <Button disabled={disabled || !credential}>{t('Unlock with QR')}</Button>
+      <p className="employee-qr-heading">{t('Or scan your employee QR code')}</p>
+      <form className="employee-qr-form" onSubmit={submit}>
+        <div className="employee-qr-input-row">
+          <input
+            type="password"
+            autoComplete="off"
+            aria-label={t('Employee QR code')}
+            value={credential}
+            onChange={(event) => setCredential(event.target.value)}
+            placeholder={t('Scan employee QR')}
+            disabled={disabled}
+          />
+          <CameraBarcodeScanner onScan={unlock} disabled={disabled} />
+        </div>
+        <Button className="full" disabled={disabled || !credential}>
+          {t('Unlock with QR')}
+        </Button>
       </form>
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <p className="employee-qr-error" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

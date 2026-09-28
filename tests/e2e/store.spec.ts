@@ -148,12 +148,18 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
 
   await page.getByRole('button', { name: 'Search / refund' }).click();
   await dialog.getByRole('button', { name: 'Open receipt' }).first().click();
-  await dialog.getByLabel(/Sourdough bread —/).fill('1');
-  await dialog.getByLabel('Saleable: restore stock').check();
-  await dialog.getByLabel('Return reason').fill('Customer returned unopened item');
-  await dialog.getByLabel('I confirm these items should be refunded in cash.').check();
-  await dialog.getByLabel('Approving manager code').fill('OWNER');
-  await dialog.getByLabel('Approving manager PIN').fill('654321');
+  await expect(page).toHaveURL(/\/pos\/receipts\/[0-9a-f-]+$/);
+  await expect(page.locator('.receipt-page .receipt')).toBeVisible();
+  await expect(page.getByLabel(/Sourdough bread —/)).toHaveCount(0);
+  await page.getByRole('link', { name: 'Refund items' }).click();
+  await expect(page).toHaveURL(/\/pos\/receipts\/[0-9a-f-]+\/refund$/);
+  await expect(page.locator('.receipt-page .receipt')).toHaveCount(0);
+  await page.getByLabel(/Sourdough bread —/).fill('1');
+  await page.getByLabel('Saleable: restore stock').check();
+  await page.getByLabel('Return reason').fill('Customer returned unopened item');
+  await page.getByLabel('I confirm these items should be refunded in cash.').check();
+  await page.getByLabel('Approving manager code').fill('OWNER');
+  await page.getByLabel('Approving manager PIN').fill('654321');
   let refundDropped = false;
   await page.route('**/api/pos/refunds', async (route) => {
     if (!refundDropped) {
@@ -162,16 +168,16 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
       await route.abort('failed');
     } else await route.continue();
   });
-  await dialog.getByRole('button', { name: 'Confirm refund', exact: true }).click();
-  await expect(
-    dialog.getByText('A refund confirmation is pending.', { exact: false }),
-  ).toBeVisible();
-  await expect(dialog.getByRole('alert')).toContainText('Cannot reach the server');
+  await page.getByRole('button', { name: 'Confirm refund', exact: true }).click();
+  await expect(page.getByText('A refund confirmation is pending.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('alert')).toContainText('Cannot reach the server');
   await page.unroute('**/api/pos/refunds');
-  await dialog.getByRole('button', { name: 'Recover refund' }).click();
-  await expect(dialog.getByRole('heading', { name: /Refund recorded:/ })).toBeVisible();
+  await page.getByRole('button', { name: 'Recover refund' }).click();
+  await expect(page.getByRole('heading', { name: /Refund recorded:/ })).toBeVisible();
   await page.screenshot({ path: 'test-results/refund-recorded.png', fullPage: true });
-  await dialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
+  await page.getByRole('link', { name: 'Back to receipt' }).click();
+  await expect(page.getByText('Refund history')).toBeVisible();
+  await page.getByRole('link', { name: 'Back to checkout' }).click();
   await page.getByRole('button', { name: 'Close shift', exact: true }).click();
   await dialog.getByLabel('Counted cash').fill('149.90');
   await dialog.getByLabel('Closing notes').fill('Drawer balanced');

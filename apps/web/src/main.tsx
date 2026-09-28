@@ -49,6 +49,7 @@ import { ActionCenterPage } from './action-center';
 import { PriceTagsPage } from './price-tags';
 import { ManagementAccessPage } from './management-access';
 import { SalesPage, ShiftsPage } from './reports';
+import { ReceiptDetailPage } from './refunds';
 function LegacyDocumentsRedirect() {
   React.useEffect(() => {
     const oldId = new URLSearchParams(window.location.search).get('id');
@@ -63,16 +64,19 @@ function Root() {
     queryKey: ['device-environment'],
     queryFn: () => api<{ type: string }>('/auth/device-environment'),
     enabled:
+      !location.pathname.startsWith('/pos/') &&
       location.pathname !== '/pos' &&
       location.pathname !== '/price-tags' &&
       location.pathname !== '/management-access',
   });
   React.useEffect(() => {
     if (location.pathname === '/management-access') return;
+    if (location.pathname.startsWith('/pos/')) return;
     if (environment.data?.type === 'pos') window.location.replace('/pos');
     if (environment.data?.type === 'price_tags') window.location.replace('/price-tags');
   }, [environment.data?.type, location.pathname]);
   if (
+    !location.pathname.startsWith('/pos/') &&
     location.pathname !== '/pos' &&
     location.pathname !== '/price-tags' &&
     location.pathname !== '/management-access' &&
@@ -85,6 +89,7 @@ function Root() {
     <>
       <LanguageSwitcher />
       {location.pathname === '/pos' ||
+      location.pathname.startsWith('/pos/') ||
       location.pathname === '/price-tags' ||
       location.pathname === '/management-access' ? (
         <Outlet />
@@ -124,6 +129,16 @@ const routes = [
     component: DigitalPurchasesPage,
   }),
   createRoute({ getParentRoute: () => root, path: '/pos', component: CheckoutRoute }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/pos/receipts/$id',
+    component: () => <ReceiptDetailPage checkout />,
+  }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/pos/receipts/$id/refund',
+    component: () => <ReceiptDetailPage checkout refund />,
+  }),
   createRoute({ getParentRoute: () => root, path: '/price-tags', component: PriceTagsPage }),
   createRoute({
     getParentRoute: () => root,
@@ -133,6 +148,11 @@ const routes = [
   createRoute({ getParentRoute: () => root, path: '/analytics', component: OwnerDashboardPage }),
   createRoute({ getParentRoute: () => root, path: '/action-center', component: ActionCenterPage }),
   createRoute({ getParentRoute: () => root, path: '/sales', component: SalesPage }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/sales/receipts/$id',
+    component: () => <ReceiptDetailPage checkout={false} />,
+  }),
   createRoute({ getParentRoute: () => root, path: '/shifts', component: ShiftsPage }),
   createRoute({ getParentRoute: () => root, path: '/', component: Overview }),
   createRoute({ getParentRoute: () => root, path: '/products', component: ProductsPage }),

@@ -3008,22 +3008,163 @@ input.shopping-section-title {
   font-size: 12px;
 }
 .employee-qr-unlock {
-  margin-top: 18px;
-  padding-top: 18px;
+  margin-top: 24px;
+  padding-top: 22px;
   border-top: 1px solid var(--border);
 }
-.employee-qr-unlock > p {
-  margin: 0 0 10px;
+.employee-qr-heading {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
 }
-.employee-qr-unlock form {
+.employee-qr-unlock .employee-qr-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 0;
+}
+.employee-qr-input-row {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  align-items: stretch;
   gap: 8px;
 }
-.employee-qr-unlock input {
-  flex: 1 1 170px;
+.employee-qr-input-row input {
+  flex: 1;
   min-width: 0;
+  width: 100%;
+  height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: #25352e;
+}
+.employee-qr-input-row input::placeholder {
+  color: var(--muted);
+}
+.employee-qr-input-row .camera-scan-button {
+  width: 44px;
+  height: 44px;
+}
+.employee-qr-form > .button {
+  min-height: 44px;
+}
+.employee-qr-error {
+  margin-top: 10px;
+  color: #ad3e32;
+  font-size: 12px;
+}
+.receipt-page {
+  max-width: 760px;
+  min-height: 100dvh;
+  margin: 0 auto;
+  padding: 28px 20px 72px;
+}
+.receipt-page-back {
+  display: inline-flex;
+  margin-bottom: 28px;
+}
+.receipt-page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-bottom: 24px;
+}
+.receipt-page-header h1 {
+  font-size: clamp(24px, 4vw, 34px);
+  margin-bottom: 8px;
+}
+.receipt-page-panel {
+  margin-bottom: 20px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+}
+.receipt-page-paper .receipt-wrap {
+  max-width: 440px;
+  margin: 0 auto;
+}
+.receipt-refund-history h2 {
+  font-size: 18px;
+  margin-bottom: 16px;
+}
+.receipt-refund-history details {
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.receipt-refund-history details p {
+  margin-top: 8px;
+}
+.refund-sale-reference {
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+.refund-page-panel form {
+  display: grid;
+  gap: 16px;
+}
+.refund-page-panel fieldset {
+  display: grid;
+  gap: 14px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+.refund-page-panel fieldset > div {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.refund-form-heading h2 {
+  font-size: 18px;
+  margin-bottom: 6px;
+}
+.refund-item-heading {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.refund-item-heading small {
+  color: var(--muted);
+}
+.refund-item .field {
+  margin-bottom: 6px;
+}
+.refund-checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.5;
+}
+.refund-checkbox-row input {
+  flex: none;
+  margin-top: 3px;
+}
+.refund-item .refund-checkbox-row {
+  margin-top: 14px;
+}
+.refund-total-preview {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 8px;
+  background: #eef4ed;
+}
+.refund-total-preview strong {
+  font-size: 18px;
+}
+@media (max-width: 600px) {
+  .receipt-page-panel {
+    padding: 16px;
+  }
 }
 @media print {
   body:has(.product-barcode-print) #root,

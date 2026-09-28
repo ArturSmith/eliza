@@ -31,7 +31,6 @@ export function ReceiptSearch({ context }: { context?: PosContext }) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [filter, setFilter] = useState({ q: '', page: 1, from: '', to: '' });
-  const [id, setId] = useState<string>();
   const base = context ? '/pos' : '/reports';
   const scope = context
     ? `${context.store!.id}:${context.device!.id}:${context.operator!.id}`
@@ -51,11 +50,6 @@ export function ReceiptSearch({ context }: { context?: PosContext }) {
       ),
     enabled: open,
   });
-  const detail = useQuery({
-    queryKey: ['receipt-detail', scope, id],
-    queryFn: () => api<Detail>(base + '/receipt-search/' + id),
-    enabled: open && !!id,
-  });
   return (
     <>
       <Button variant="outline" onClick={() => setOpen(true)}>
@@ -72,7 +66,6 @@ export function ReceiptSearch({ context }: { context?: PosContext }) {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            setId(undefined);
             setFilter({ q, from, to, page: 1 });
           }}
         >
@@ -103,7 +96,12 @@ export function ReceiptSearch({ context }: { context?: PosContext }) {
                     {formatMoney(r.total, r.currency)}
                   </small>
                 </span>
-                <Button variant="ghost" onClick={() => setId(r.id)}>
+                <Button
+                  variant="ghost"
+                  onClick={() =>
+                    window.location.assign((context ? '/pos/receipts/' : '/sales/receipts/') + r.id)
+                  }
+                >
                   {t('Open receipt ')}
                 </Button>
               </div>
@@ -129,54 +127,116 @@ export function ReceiptSearch({ context }: { context?: PosContext }) {
             </Button>
           </>
         )}
-        <ErrorMessage error={detail.error} />
-        {id && detail.isFetching && <p>{t('Loading receipt…')}</p>}
-        {detail.data && (
-          <>
-            <ReceiptView
-              receipt={detail.data.receipt}
-              reprint
-              beforePrint={() =>
-                api(
-                  context
-                    ? '/pos/receipt-search/' + id + '/reprint'
-                    : '/reports/sales/' + id + '/reprint',
-                  {},
-                )
-              }
-            />
-            <h3>{t('Refund history')}</h3>
-            {!detail.data.refunds.length && <p>{t('No refunds recorded.')}</p>}
-            {detail.data.refunds.map((r) => (
-              <details key={r.id}>
-                <summary>
-                  {r.number} · {formatMoney(r.total, detail.data!.receipt.currency)}
-                </summary>
-                <p>
-                  {r.reason} · {t(r.method)} · {r.cashier}
-                  {t(', approved by ')}
-                  {r.approver}
-                </p>
-                {r.lines.map((l, i) => (
-                  <p key={i}>
-                    {l.name}: {l.quantity} ·{' '}
-                    {l.restock ? t('Returned to stock') : t('Not restocked')} ·{' '}
-                    {formatMoney(l.total, detail.data!.receipt.currency)}
-                  </p>
-                ))}
-              </details>
-            ))}
-            {context ? (
-              <RefundForm key={id} context={context} detail={detail.data} />
-            ) : (
-              <p className="muted">
-                {t('Issue refunds from an enrolled checkout register with an open shift. ')}
-              </p>
-            )}
-          </>
-        )}
       </Dialog>
     </>
+  );
+}
+export function ReceiptDetailPage({
+  checkout,
+  refund = false,
+}: {
+  checkout: boolean;
+  refund?: boolean;
+}) {
+  useLanguage();
+  const id = window.location.pathname.split('/')[3];
+  const listPath = checkout ? '/pos' : '/sales';
+  const receiptPath = `${listPath}/receipts/${id}`;
+  const context = useQuery({
+    queryKey: ['receipt-checkout-context'],
+    queryFn: () => api<PosContext>('/pos/enter', {}),
+    enabled: checkout,
+  });
+  const detail = useQuery({
+    queryKey: ['receipt-detail', checkout ? 'checkout' : 'management', id],
+    queryFn: () => api<Detail>((checkout ? '/pos' : '/reports') + '/receipt-search/' + id),
+  });
+  if (detail.isPending || (checkout && context.isPending))
+    return (
+      <main className="receipt-page">
+        <p>{t('Loading receipt…')}</p>
+      </main>
+    );
+  return (
+    <main className="receipt-page">
+      <a className="text-link receipt-page-back" href={refund ? receiptPath : listPath}>
+        ← {refund ? t('Back to receipt') : checkout ? t('Back to checkout') : t('Back to sales')}
+      </a>
+      <ErrorMessage error={detail.error ?? context.error} />
+      {detail.data && (!checkout || context.data) && (
+        <>
+          <header className="receipt-page-header">
+            <div>
+              <p className="eyebrow">{refund ? t('REFUND') : t('RECEIPT')}</p>
+              <h1>{refund ? t('Refund items') : detail.data.receipt.receiptNumber}</h1>
+              <p className="muted">
+                {refund
+                  ? t('Select the returned items and confirm how the customer was refunded.')
+                  : new Date(detail.data.receipt.createdAt).toLocaleString(getLocale(), {
+                      timeZone: detail.data.receipt.timezone,
+                    })}
+              </p>
+            </div>
+            {!refund && checkout && (
+              <a className="button button-primary" href={receiptPath + '/refund'}>
+                {t('Refund items')}
+              </a>
+            )}
+          </header>
+          {refund ? (
+            <section className="receipt-page-panel refund-page-panel">
+              <p className="refund-sale-reference">
+                {t('Receipt')}: <strong>{detail.data.receipt.receiptNumber}</strong> ·{' '}
+                {formatMoney(detail.data.receipt.total, detail.data.receipt.currency)}
+              </p>
+              {context.data && <RefundForm context={context.data} detail={detail.data} />}
+            </section>
+          ) : (
+            <>
+              <section className="receipt-page-panel receipt-page-paper">
+                <ReceiptView
+                  receipt={detail.data.receipt}
+                  reprint
+                  beforePrint={() =>
+                    api(
+                      checkout
+                        ? '/pos/receipt-search/' + id + '/reprint'
+                        : '/reports/sales/' + id + '/reprint',
+                      {},
+                    )
+                  }
+                />
+              </section>
+              <section className="receipt-page-panel receipt-refund-history">
+                <h2>{t('Refund history')}</h2>
+                {!detail.data.refunds.length && (
+                  <p className="muted">{t('No refunds recorded.')}</p>
+                )}
+                {detail.data.refunds.map((r) => (
+                  <details key={r.id}>
+                    <summary>
+                      {r.number} · {formatMoney(r.total, detail.data.receipt.currency)}
+                    </summary>
+                    <p>
+                      {r.reason} · {t(r.method)} · {r.cashier}
+                      {t(', approved by ')}
+                      {r.approver}
+                    </p>
+                    {r.lines.map((l, i) => (
+                      <p key={i}>
+                        {l.name}: {l.quantity} ·{' '}
+                        {l.restock ? t('Returned to stock') : t('Not restocked')} ·{' '}
+                        {formatMoney(l.total, detail.data.receipt.currency)}
+                      </p>
+                    ))}
+                  </details>
+                ))}
+              </section>
+            </>
+          )}
+        </>
+      )}
+    </main>
   );
 }
 function RefundForm({ context, detail }: { context: PosContext; detail: Detail }) {
@@ -282,7 +342,10 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
         void submit();
       }}
     >
-      <h3>{t('Return items')}</h3>
+      <div className="refund-form-heading">
+        <h2>{t('Return items')}</h2>
+        <p className="muted">{t('Enter the quantity returned for each item. Leave 0 for items the customer kept.')}</p>
+      </div>
       <fieldset disabled={!!pending || busy}>
         {detail.receipt.lines.map((l) => {
           const remaining = fromScaled(
@@ -294,7 +357,11 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
             3,
           );
           return (
-            <div key={l.productId}>
+            <div className="refund-item" key={l.productId}>
+              <div className="refund-item-heading">
+                <strong>{l.name}</strong>
+                <small>{t('Sold')}: {l.quantity} {t(l.unit ?? '')}</small>
+              </div>
               <Field
                 label={t('{value0} — {value1} {value2} remaining', {
                   value0: l.name,
@@ -304,11 +371,15 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
               >
                 <input
                   inputMode="decimal"
+                  aria-describedby={'refund-remaining-' + l.productId}
                   value={quantities[l.productId] ?? '0'}
                   onChange={(e) => setQuantities({ ...quantities, [l.productId]: e.target.value })}
                 />
               </Field>
-              <label>
+              <p className="muted" id={'refund-remaining-' + l.productId}>
+                {t('Maximum refundable')}: {remaining} {t(l.unit ?? '')}
+              </p>
+              <label className="refund-checkbox-row">
                 <input
                   type="checkbox"
                   checked={restock[l.productId] ?? false}
@@ -319,16 +390,14 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
             </div>
           );
         })}
-        <p>
-          <strong>
-            {t('Refund amount: ')}
-            {preview}
-          </strong>
-        </p>
+        <div className="refund-total-preview">
+          <span>{t('Refund amount: ')}</span>
+          <strong>{preview}</strong>
+        </div>
         <Field label={t('Return reason')}>
           <input required value={reason} onChange={(e) => setReason(e.target.value)} />
         </Field>
-        <label>
+        <label className="refund-checkbox-row">
           <input
             type="checkbox"
             required

@@ -527,7 +527,6 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   });
   const [weighted, setWeighted] = useState<PosProduct | null>(null);
   const [receipt, setReceipt] = useState<Receipt | null>(null);
-  const [isReprint, setReprint] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const scan = useRef<HTMLInputElement>(null);
   const [method, setMethod] = useState<'cash' | 'card'>('cash');
@@ -594,7 +593,6 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     mutationFn: (body: z.infer<typeof saleSchema>) => api<Receipt>('/pos/sales', body),
     onSuccess: (r) => {
       setReceipt(r);
-      setReprint(false);
       setDraft(fresh());
       setModal(null);
       setTendered('');
@@ -1359,17 +1357,9 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
             </div>
             <Button
               variant="outline"
-              onClick={() => {
-                void api<Receipt>(`/pos/sales/${r.id}/reprint`, {})
-                  .then((value) => {
-                    setReceipt(value);
-                    setReprint(true);
-                    setModal(null);
-                  })
-                  .catch((e) => setMessage(e.message));
-              }}
+              onClick={() => window.location.assign('/pos/receipts/' + r.id)}
             >
-              {t('Reprint ')}
+              {t('Open receipt ')}
             </Button>
           </div>
         ))}
@@ -1380,7 +1370,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         title={t('Sale complete')}
         description={t('Sale, payment, and inventory records have been saved.')}
       >
-        {receipt && <ReceiptView receipt={receipt} reprint={isReprint} />}
+        {receipt && <ReceiptView receipt={receipt} />}
         <Button
           className="full no-print"
           onClick={() => {
