@@ -19,6 +19,8 @@ type Profile = {
   receiptFooter: string;
   defaultTaxRate: string;
   defaultMarkupPercent: string;
+  noSalesThresholdDays: number;
+  longShiftThresholdHours: number;
   version: number;
 };
 export function StoreSettingsPage() {
@@ -46,6 +48,9 @@ export function StoreSettingsPage() {
 function Editor({ profile }: { profile: Profile }) {
   useLanguage();
   const [value, setValue] = useState(profile),
+    [customNoSales, setCustomNoSales] = useState(
+      ![14, 30, 60, 90].includes(profile.noSalesThresholdDays),
+    ),
     [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>();
   function updateTagDesign(patch: Partial<TagDesign>) {
@@ -68,6 +73,8 @@ function Editor({ profile }: { profile: Profile }) {
         <strong>{t('Settings sections')}</strong>
         <a href="#business-details">{t('Business details')}</a>
         <a href="#product-defaults">{t('Product defaults')}</a>
+        <a href="#inventory-alerts">{t('Inventory alerts')}</a>
+        <a href="#shift-alerts">{t('Shift alerts')}</a>
         <a href="#scale-barcodes">{t('Scale barcodes')}</a>
         <a href="#price-tag-design">{t('Price tag design')}</a>
         <a href="#receipt-settings">{t('Receipts')}</a>
@@ -148,6 +155,63 @@ function Editor({ profile }: { profile: Profile }) {
                 'Default tax applies to new products only. Existing product rates and old receipts remain unchanged. ',
               )}
             </p>
+          </section>
+          <section id="inventory-alerts" className="store-settings-section panel">
+            <header>
+              <h2>{t('Inventory alerts')}</h2>
+              <p className="muted">{t('Used by the Action Center to find stock without sales.')}</p>
+            </header>
+            <Field label={t('No sales threshold')}>
+              <select
+                value={customNoSales ? 'custom' : String(value.noSalesThresholdDays)}
+                onChange={(e) => {
+                  if (e.target.value === 'custom') setCustomNoSales(true);
+                  else {
+                    setCustomNoSales(false);
+                    setValue({ ...value, noSalesThresholdDays: Number(e.target.value) });
+                  }
+                }}
+              >
+                {[14, 30, 60, 90].map((days) => (
+                  <option key={days} value={days}>
+                    {days} {t('days')}
+                  </option>
+                ))}
+                <option value="custom">{t('Custom')}</option>
+              </select>
+            </Field>
+            {customNoSales && (
+              <Field label={t('No sales threshold (days)')}>
+                <input
+                  type="number"
+                  min="7"
+                  max="365"
+                  required
+                  value={value.noSalesThresholdDays}
+                  onChange={(e) =>
+                    setValue({ ...value, noSalesThresholdDays: Number(e.target.value) })
+                  }
+                />
+              </Field>
+            )}
+          </section>
+          <section id="shift-alerts" className="store-settings-section panel">
+            <header>
+              <h2>{t('Shift alerts')}</h2>
+              <p className="muted">{t('Flag registers that remain open beyond this period.')}</p>
+            </header>
+            <Field label={t('Long shift threshold (hours)')}>
+              <input
+                type="number"
+                min="1"
+                max="72"
+                required
+                value={value.longShiftThresholdHours}
+                onChange={(e) =>
+                  setValue({ ...value, longShiftThresholdHours: Number(e.target.value) })
+                }
+              />
+            </Field>
           </section>
           <section id="scale-barcodes" className="store-settings-section panel">
             <header>

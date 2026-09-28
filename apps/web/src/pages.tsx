@@ -68,6 +68,12 @@ const navGroups = [
     items: [
       { to: '/sales', label: 'Sales', icon: Receipt, permission: 'sales.read' },
       { to: '/analytics', label: 'Analytics', icon: Activity, permission: 'analytics.view' },
+      {
+        to: '/action-center',
+        label: 'Action Center',
+        icon: ListChecks,
+        permission: 'analytics.view',
+      },
       { to: '/expenses', label: 'Expenses', icon: ScrollText, permission: 'expenses.read' },
       { to: '/shifts', label: 'Shifts', icon: Clock3, permission: 'sales.read' },
     ],

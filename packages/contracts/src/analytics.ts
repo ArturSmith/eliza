@@ -224,6 +224,7 @@ export type PortfolioInput = {
   margin: number | null;
   stock: string;
   daysSinceLastSale: number | null;
+  productAgeDays?: number;
   historyDays: number;
 };
 export type PortfolioThresholds = {
@@ -255,7 +256,9 @@ export function classifyProduct(
   const hasStock = toScaled(input.stock, 3) > 0n;
   if (
     hasStock &&
-    (input.daysSinceLastSale === null || input.daysSinceLastSale >= thresholds.deadDays)
+    (input.daysSinceLastSale === null
+      ? (input.productAgeDays ?? input.historyDays) >= thresholds.deadDays
+      : input.daysSinceLastSale >= thresholds.deadDays)
   )
     return 'dead';
   const velocity = dailyVelocity(input.units, input.historyDays);
@@ -298,7 +301,14 @@ export type InsightFacts = {
   outOfStock: { id: string; label: string; weeklyUnits: string; weeklyRevenue: string }[];
   lowStock: { id: string; label: string; stock: string; minStock: string }[];
   runningOut: { id: string; label: string; days: number }[];
-  deadStock: { count: number; value: string; days: number };
+  deadStock: {
+    count: number;
+    value: string;
+    days: number;
+    units?: string;
+    missingCostProducts?: number;
+    estimated?: boolean;
+  };
   costIncreases: {
     id: string;
     label: string;
@@ -318,6 +328,7 @@ export type InsightFacts = {
   baselineWasteValue: string | null;
   cashDifferences: { id: string; label: string; difference: string }[];
   longOpenShifts: { id: string; label: string; hours: number }[];
+  shiftHours?: number;
   missingCost: number;
   uncountedProducts: number;
   /**
@@ -328,6 +339,7 @@ export type InsightFacts = {
     id: string;
     label: string;
     supplierName: string;
+    productId?: string;
     quotedCost: string;
     paidCost: string;
     percent: number;
@@ -399,6 +411,8 @@ export function buildInsights(facts: InsightFacts): Insight[] {
     });
 
   const unchanged = facts.costIncreases.filter((p) => p.priceUnchanged);
+  const increasedIds = new Set(facts.costIncreases.map((p) => p.id));
+  const nowBelowCost = facts.negativeMargin.filter((p) => increasedIds.has(p.id));
   if (facts.costIncreases.length) {
     const impact = addMoney(
       ...unchanged.map((p) =>
@@ -411,11 +425,9 @@ export function buildInsights(facts: InsightFacts): Insight[] {
     found.push({
       id: 'margin-protection',
       type: 'margin',
-      severity: unchanged.length ? 'important' : 'info',
+      severity: nowBelowCost.length ? 'critical' : unchanged.length ? 'important' : 'info',
       title: `Purchase cost increased on ${facts.costIncreases.length} products`,
-      detail: unchanged.length
-        ? `${unchanged.length} still have unchanged retail prices.`
-        : 'Retail prices have already been reviewed.',
+      detail: `${unchanged.length} still have unchanged retail prices.${nowBelowCost.length ? ` ${nowBelowCost.length} now sell below cost.` : ''}`,
       impact: unchanged.length
         ? { amount: money(impact), label: 'Weekly gross profit at risk', estimate: true }
         : undefined,
@@ -430,7 +442,9 @@ export function buildInsights(facts: InsightFacts): Insight[] {
   // price without the catalogue being updated. Reported neutrally: the cause could
   // equally be a stale record on our side.
   const drifted = (facts.staleQuotes ?? []).filter(
-    (q) => Math.abs(q.percent) >= insightThresholds.quoteDriftPercent,
+    (q) =>
+      Math.abs(q.percent) >= insightThresholds.quoteDriftPercent &&
+      !increasedIds.has(q.productId ?? ''),
   );
   if (drifted.length)
     found.push({
@@ -447,14 +461,15 @@ export function buildInsights(facts: InsightFacts): Insight[] {
       action: { label: 'Review supplier prices', to: '/suppliers' },
     });
 
-  if (facts.negativeMargin.length)
+  const separateNegativeMargin = facts.negativeMargin.filter((p) => !increasedIds.has(p.id));
+  if (separateNegativeMargin.length)
     found.push({
       id: 'negative-margin',
       type: 'margin',
       severity: 'important',
-      title: `${facts.negativeMargin.length} products sell below cost`,
+      title: `${separateNegativeMargin.length} products sell below cost`,
       detail: 'Selling price does not cover the recorded purchase cost.',
-      entities: facts.negativeMargin
+      entities: separateNegativeMargin
         .slice(0, 5)
         .map((p) => ({ id: p.id, label: p.label, note: `${p.margin.toFixed(1)}%` })),
       action: { label: 'Review products', to: '/products' },
@@ -556,8 +571,11 @@ export function buildInsights(facts: InsightFacts): Insight[] {
     found.push({
       id: 'open-shifts',
       type: 'shifts',
-      severity: 'attention',
-      title: `${facts.longOpenShifts.length} shifts have been open over ${insightThresholds.shiftHours} hours`,
+      severity: facts.longOpenShifts.some((s) => s.hours >= 24) ? 'critical' : 'attention',
+      title:
+        facts.longOpenShifts.length === 1
+          ? `${facts.longOpenShifts[0].label} has been open for ${facts.longOpenShifts[0].hours.toFixed(0)} hours`
+          : `${facts.longOpenShifts.length} shifts have been open over ${facts.shiftHours ?? insightThresholds.shiftHours} hours`,
       detail: 'Long-running shifts usually mean a register was never closed.',
       entities: facts.longOpenShifts
         .slice(0, 5)
@@ -571,13 +589,18 @@ export function buildInsights(facts: InsightFacts): Insight[] {
       type: 'inventory',
       severity: 'attention',
       title: `${facts.deadStock.count} products have not sold in ${facts.deadStock.days} days`,
-      detail: 'Stock is on the shelf but not moving.',
-      impact: {
-        amount: money(facts.deadStock.value),
-        label: 'Inventory cost tied up',
-        estimate: false,
-      },
-      action: { label: 'View products', to: '/products' },
+      detail: `${facts.deadStock.units ?? 'Unknown'} units in stock.${facts.deadStock.missingCostProducts ? ` ${facts.deadStock.missingCostProducts} products have missing cost, so the value is incomplete.` : ''}`,
+      impact:
+        toScaled(facts.deadStock.value, 2) > 0n
+          ? {
+              amount: money(facts.deadStock.value),
+              label: facts.deadStock.missingCostProducts
+                ? 'Known inventory cost tied up'
+                : 'Inventory cost tied up',
+              estimate: !!facts.deadStock.estimated,
+            }
+          : undefined,
+      action: { label: 'Review products', to: '/action-center' },
     });
 
   if (facts.missingCost)

@@ -95,22 +95,37 @@ const severityLabel: Record<Severity, string> = {
 
 function Insights({ insights, currency }: { insights: any[]; currency: string }) {
   useLanguage();
-  const [all, setAll] = useState(false);
-  if (!insights.length)
+  const active = insights.filter(
+    (i) =>
+      !['RESOLVED', 'DISMISSED'].includes(i.status) &&
+      !(
+        i.status === 'SNOOZED' &&
+        i.snoozedUntil &&
+        new Date(i.snoozedUntil).getTime() > Date.now()
+      ),
+  );
+  const ranked = [...active].sort(
+    (a, b) =>
+      (({ 'Action now': 0, Today: 1, Review: 2, Opportunities: 3, Setup: 4 })[a.group as string] ??
+        5) -
+      ({ 'Action now': 0, Today: 1, Review: 2, Opportunities: 3, Setup: 4 }[b.group as string] ??
+        5),
+  );
+  if (!active.length)
     return (
       <section className="panel">
         <div className="panel-heading">
-          <h2>{t('Needs attention')}</h2>
+          <h2>{t('Manager Action Center')}</h2>
         </div>
         <p className="panel-padding muted">{t('Nothing needs your attention right now.')}</p>
       </section>
     );
-  const shown = all ? insights : insights.slice(0, 5);
+  const shown = ranked.slice(0, 5);
   return (
     <section className="panel">
       <div className="panel-heading">
-        <h2>{t('Needs attention')}</h2>
-        <p>{t('Grouped by impact. The most serious items come first.')}</p>
+        <h2>{t('Manager Action Center')}</h2>
+        <Link to="/action-center">{t('View all actions')} →</Link>
       </div>
       <ul className="insight-list">
         {shown.map((insight) => (
@@ -139,21 +154,24 @@ function Insights({ insights, currency }: { insights: any[]; currency: string })
                 ))}
               </ul>
             )}
-            {insight.action && (
-              <Link className="insight-action" to={insight.action.to}>
-                {t(insight.action.label)} →
-              </Link>
-            )}
+            {insight.action &&
+              (insight.id === 'dead-stock' ? (
+                <a className="insight-action" href="/action-center?analysis=no-sales">
+                  {t(insight.action.label)} →
+                </a>
+              ) : (
+                <Link className="insight-action" to={insight.action.to}>
+                  {t(insight.action.label)} →
+                </Link>
+              ))}
           </li>
         ))}
       </ul>
-      {insights.length > 5 && (
-        <div className="panel-padding">
-          <Button variant="ghost" onClick={() => setAll(!all)}>
-            {all ? t('Show less') : t('Show all') + ' (' + insights.length + ')'}
-          </Button>
-        </div>
-      )}
+      <div className="panel-padding">
+        <Link to="/action-center" className="insight-action">
+          {t('Open Action Center')} →
+        </Link>
+      </div>
     </section>
   );
 }

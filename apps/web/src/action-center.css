@@ -1,0 +1,123 @@
+.action-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 18px 0;
+}
+.action-tabs button,
+.action-controls button,
+.action-controls select {
+  border: 1px solid var(--border, #dbe2d6);
+  background: white;
+  border-radius: 10px;
+  padding: 9px 12px;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.action-tabs button.active {
+  background: #e9f0e6;
+  border-color: #658c70;
+  font-weight: 700;
+}
+.action-tabs span {
+  margin-left: 5px;
+  color: #6f806f;
+}
+.action-filter {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 16px 0;
+}
+.action-filter label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.action-filter select {
+  border: 1px solid #dbe2d6;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+}
+.action-list {
+  display: grid;
+  gap: 14px;
+}
+.action-card {
+  background: #fff;
+  border: 1px solid #e0e7dd;
+  border-left: 4px solid #b7bda5;
+  border-radius: 12px;
+  padding: 22px;
+}
+.action-card.action-critical {
+  border-left-color: #c65549;
+}
+.action-card.action-important {
+  border-left-color: #d5932a;
+}
+.action-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: start;
+}
+.action-head h2 {
+  font-size: 1.12rem;
+  margin: 8px 0 4px;
+}
+.action-group {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-right: 9px;
+  color: #56715a;
+}
+.action-card p {
+  margin: 8px 0;
+}
+.action-card ul {
+  margin: 12px 0;
+  padding-left: 24px;
+}
+.action-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 15px;
+}
+.action-controls .insight-action {
+  margin-right: auto;
+}
+.action-controls button:hover,
+.action-tabs button:hover {
+  background: #f2f6ef;
+}
+.no-sales-analysis {
+  margin-top: 24px;
+}
+.no-sales-analysis .action-filter {
+  padding: 0 20px;
+}
+.action-table-scroll {
+  overflow: auto;
+}
+.action-table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.action-table-scroll th,
+.action-table-scroll td {
+  text-align: left;
+  padding: 14px;
+  border-top: 1px solid #e8eee6;
+}
+.action-table-scroll small {
+  display: block;
+  color: #7b887b;
+  margin-top: 3px;
+}

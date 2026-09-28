@@ -45,6 +45,7 @@ import { AiAgentPage } from './ai-agent';
 import { DigitalPurchasesPage } from './digital-purchases';
 import { TeamManagementPage } from './team';
 import { OwnerDashboardPage } from './owner-dashboard';
+import { ActionCenterPage } from './action-center';
 import { PriceTagsPage } from './price-tags';
 import { ManagementAccessPage } from './management-access';
 import { SalesPage, ShiftsPage } from './reports';
@@ -130,6 +131,7 @@ const routes = [
     component: ManagementAccessPage,
   }),
   createRoute({ getParentRoute: () => root, path: '/analytics', component: OwnerDashboardPage }),
+  createRoute({ getParentRoute: () => root, path: '/action-center', component: ActionCenterPage }),
   createRoute({ getParentRoute: () => root, path: '/sales', component: SalesPage }),
   createRoute({ getParentRoute: () => root, path: '/shifts', component: ShiftsPage }),
   createRoute({ getParentRoute: () => root, path: '/', component: Overview }),

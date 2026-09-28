@@ -171,6 +171,20 @@ describe('velocity and dead stock', () => {
       }),
     ).not.toBe('dead');
   });
+  it('does not call new unsold stock dead just because the store has old history', () => {
+    const product = {
+      units: '0',
+      revenue: '0',
+      grossProfit: '0',
+      margin: 20,
+      stock: '5',
+      daysSinceLastSale: null,
+      historyDays: 180,
+      productAgeDays: 2,
+    };
+    expect(classifyProduct(product)).not.toBe('dead');
+    expect(classifyProduct({ ...product, productAgeDays: 61 })).toBe('dead');
+  });
   it('respects configured thresholds', () => {
     const input = {
       units: '900',
@@ -349,6 +363,48 @@ describe('insight engine', () => {
     expect(alert.entities![0].note).toBe('+15.0%');
     // Neutral wording: the record could be stale on either side.
     expect(alert.detail).not.toMatch(/overcharg|cheat|fraud/i);
+  });
+  it('raises a 24-hour open register above routine review items', () => {
+    const insights = buildInsights({
+      ...emptyFacts,
+      longOpenShifts: [{ id: 's1', label: 'Register #1 · Ahmed', hours: 24 }],
+      uncountedProducts: 4,
+    });
+    expect(insights[0]).toMatchObject({ id: 'open-shifts', severity: 'critical' });
+    expect(insights[0].title).toContain('24 hours');
+  });
+  it('combines related cost, quote, and negative-margin signals into one action', () => {
+    const insights = buildInsights({
+      ...emptyFacts,
+      costIncreases: [
+        {
+          id: 'p1',
+          label: 'Cola',
+          previousCost: '1.00',
+          currentCost: '1.20',
+          percent: 20,
+          priceUnchanged: true,
+          weeklyUnits: '10',
+        },
+      ],
+      negativeMargin: [{ id: 'p1', label: 'Cola', margin: -5 }],
+      staleQuotes: [
+        {
+          id: 'q1',
+          productId: 'p1',
+          label: 'Cola',
+          supplierName: 'Rizka',
+          quotedCost: '1.00',
+          paidCost: '1.20',
+          percent: 20,
+        },
+      ],
+    });
+    expect(insights.filter((i) => i.type === 'margin')).toHaveLength(1);
+    expect(insights.find((i) => i.id === 'margin-protection')).toMatchObject({
+      severity: 'critical',
+    });
+    expect(insights.find((i) => i.id === 'margin-protection')!.detail).toContain('below cost');
   });
   it('ignores quote drift below the threshold', () => {
     const insights = buildInsights({

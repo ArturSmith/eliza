@@ -1,8 +1,21 @@
-import { Controller, Get, Module, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Module,
+  Query,
+  Req,
+  UseGuards,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { z } from 'zod';
 import { AuthModule } from './auth.js';
 import { AccessGuard, Require, parse, type AuthRequest } from './security.js';
 import { Database } from './database.js';
+import type { Insight } from '@eliza/contracts';
 import {
   calculateLine,
   toScaled,
@@ -40,7 +53,7 @@ const query = z
     period: z.enum(['today', 'week', 'month', 'custom']).default('today'),
     from: date.optional(),
     to: date.optional(),
-    deadDays: z.coerce.number().int().min(7).max(365).default(defaultThresholds.deadDays),
+    deadDays: z.coerce.number().int().min(7).max(365).optional(),
   })
   .refine((v) => v.period !== 'custom' || (v.from && v.to), 'A custom range needs both dates')
   .refine((v) => !v.from || !v.to || v.from <= v.to, 'Start date must not follow end date');
@@ -97,6 +110,14 @@ export class OwnerDashboardController {
   ) {
     const b = parse(query, input);
     const store = req.context.store as Store;
+    const thresholdRow = (
+      await this.database.pool.query(
+        'SELECT no_sales_threshold_days,long_shift_threshold_hours FROM stores WHERE id=$1',
+        [store.id],
+      )
+    ).rows[0];
+    const deadDays = b.deadDays ?? thresholdRow.no_sales_threshold_days;
+    const shiftHours = thresholdRow.long_shift_threshold_hours;
     const margin = req.context.user.permissions.includes('analytics.margin');
     const finances = {
       expenses: req.context.user.permissions.includes('expenses.read'),
@@ -151,14 +172,14 @@ export class OwnerDashboardController {
     ] = await Promise.all([
       this.hourly(store, range, baselines, cutoff),
       this.categories(store, range, primary?.range ?? null, margin),
-      this.products(store, range, margin, b.deadDays, history.days),
-      margin ? this.inventory(store, b.deadDays) : null,
+      this.products(store, range, margin, deadDays, history.days),
+      margin ? this.inventory(store, deadDays) : null,
       this.waste(store, range, primary?.range ?? null, margin),
       this.purchasing(store, range, primary?.range ?? null),
       this.suppliers(store, range),
       this.discounts(store, range, primary?.range ?? null),
       this.refunds(store, range, primary?.range ?? null),
-      this.shifts(store, range),
+      this.shifts(store, range, shiftHours),
       this.registers(store, range),
       this.employees(store, range),
       this.readiness(store),
@@ -180,9 +201,14 @@ export class OwnerDashboardController {
       shifts,
       readiness,
       staleQuotes,
-      deadDays: b.deadDays,
+      deadDays,
+      shiftHours,
     });
-    const insights = buildInsights(facts);
+    const detected = buildInsights(facts);
+    const insights =
+      period === 'today' && margin
+        ? await this.syncInsights(store, detected)
+        : await this.decorateInsights(store, detected);
 
     const drivers: string[] = [];
     if (purchasing.costIncreases.length) drivers.push('supplier cost increases');
@@ -571,13 +597,14 @@ SELECT phase,category,sum(revenue)::text AS revenue,sum(quantity)::text AS units
 )
 SELECT p.id,p.name,p.sku,p.category,p.unit,p.stock::text,p.min_stock::text AS "minStock",
  p.price::text,p.tax_rate::text AS "taxRate",p.active,
+ ((now() AT TIME ZONE $4)::date-(p.created_at AT TIME ZONE $4)::date)::int AS "productAgeDays",
  CASE WHEN $5 THEN p.cost::text END AS cost,
  COALESCE(sold.units,0)::text AS units,COALESCE(sold.revenue,0)::text AS revenue,
  COALESCE(returned.total,0)::text AS refunds,
  COALESCE(week.units,0)::text AS "weeklyUnits",COALESCE(week.revenue,0)::text AS "weeklyRevenue",
  CASE WHEN $5 AND COALESCE(sold.missing,0)=0 THEN COALESCE(sold.cost,0)::text END AS "soldCost",
  CASE WHEN last_sale.sold_at IS NULL THEN NULL
-  ELSE floor(extract(epoch from now()-last_sale.sold_at)/86400)::int END AS "daysSinceLastSale"
+  ELSE ((now() AT TIME ZONE $4)::date-(last_sale.sold_at AT TIME ZONE $4)::date)::int END AS "daysSinceLastSale"
  FROM products p
  LEFT JOIN sold ON sold.product_id=p.id
  LEFT JOIN returned ON returned.product_id=p.id
@@ -624,6 +651,7 @@ SELECT p.id,p.name,p.sku,p.category,p.unit,p.stock::text,p.min_stock::text AS "m
         velocity,
         daysOfStock: daysOfStock(r.stock, velocity),
         daysSinceLastSale: r.daysSinceLastSale,
+        productAgeDays: r.productAgeDays,
         portfolio: classifyProduct(
           {
             units: r.units,
@@ -633,6 +661,7 @@ SELECT p.id,p.name,p.sku,p.category,p.unit,p.stock::text,p.min_stock::text AS "m
             stock: r.stock,
             daysSinceLastSale: r.daysSinceLastSale,
             historyDays,
+            productAgeDays: r.productAgeDays,
           },
           { ...defaultThresholds, deadDays },
         ),
@@ -702,10 +731,11 @@ SELECT p.id,p.name,p.sku,p.category,p.unit,p.stock::text,p.min_stock::text AS "m
  SELECT i.product_id,max(s.created_at) AS sold_at FROM sale_items i
  JOIN sales s ON s.id=i.sale_id AND s.store_id=$1 WHERE i.store_id=$1 GROUP BY i.product_id
 ), stocked AS (
- SELECT p.id,p.stock,p.cost,p.min_stock,p.active,l.sold_at,
- COALESCE((SELECT sum(round(b.quantity*b.unit_cost,2)) FROM stock_batches b WHERE b.product_id=p.id AND b.store_id=$1),0) AS batch_value,
+ SELECT p.id,p.stock,p.cost,p.min_stock,p.active,l.sold_at,p.created_at,
+ COALESCE((SELECT sum(round(b.quantity*b.unit_cost,2)) FROM stock_batches b WHERE b.product_id=p.id AND b.store_id=$1 AND b.quantity>0),0) AS batch_value,
+ EXISTS(SELECT 1 FROM stock_batches b WHERE b.product_id=p.id AND b.store_id=$1 AND b.quantity>0 AND b.unit_cost=0) AS has_missing_batch_cost,
  (p.stock>0) AS holds_stock,
- (l.sold_at IS NULL OR l.sold_at<now()-($2||' days')::interval) AS stale
+ (CASE WHEN l.sold_at IS NULL THEN p.created_at ELSE l.sold_at END) < (($3::date::timestamp AT TIME ZONE $4) - ($2||' days')::interval) AS stale
  FROM products p LEFT JOIN last_sale l ON l.product_id=p.id WHERE p.store_id=$1
 )
 SELECT
@@ -713,12 +743,17 @@ SELECT
  count(*) FILTER(WHERE holds_stock)::text AS "inStock",
  count(*) FILTER(WHERE active AND stock<=0)::text AS "outOfStock",
  count(*) FILTER(WHERE active AND stock>0 AND stock<=min_stock)::text AS "lowStock",
- count(*) FILTER(WHERE holds_stock AND stale)::text AS "deadCount",
- COALESCE(sum(batch_value) FILTER(WHERE holds_stock AND stale),0)::text AS "deadValue",
+ count(*) FILTER(WHERE active AND holds_stock AND stale)::text AS "deadCount",
+ COALESCE(sum(stock) FILTER(WHERE active AND holds_stock AND stale),0)::text AS "deadUnits",
+ count(*) FILTER(WHERE active AND holds_stock AND stale AND has_missing_batch_cost)::text AS "deadMissingCostProducts",
+ COALESCE(sum(batch_value) FILTER(WHERE active AND holds_stock AND stale),0)::text AS "deadValue",
+ (SELECT count(*) FROM stock_batches b JOIN products p ON p.id=b.product_id AND p.store_id=b.store_id
+  LEFT JOIN last_sale l ON l.product_id=p.id WHERE b.store_id=$1 AND p.active AND p.stock>0 AND b.quantity>0
+  AND b.cost_source='legacy_estimate' AND COALESCE(l.sold_at,p.created_at)<(($3::date::timestamp AT TIME ZONE $4)-($2||' days')::interval))::int AS "deadEstimatedBatches",
  count(*) FILTER(WHERE holds_stock AND cost=0)::text AS "missingCost",
  COALESCE(sum(batch_value) FILTER(WHERE holds_stock AND cost=0),0)::text AS "uncostedValue"
  FROM stocked`,
-        [store.id, String(deadDays)],
+        [store.id, String(deadDays), storeToday(new Date(), store.timezone), store.timezone],
       )
     ).rows[0];
     const byCategory = (
@@ -734,7 +769,14 @@ SELECT
       inStock: num(row.inStock),
       outOfStock: num(row.outOfStock),
       lowStock: num(row.lowStock),
-      dead: { count: num(row.deadCount), value: money(row.deadValue), days: deadDays },
+      dead: {
+        count: num(row.deadCount),
+        units: money(row.deadUnits),
+        missingCostProducts: num(row.deadMissingCostProducts),
+        value: money(row.deadValue),
+        days: deadDays,
+        estimated: num(row.deadEstimatedBatches) > 0,
+      },
       // Missing cost means the valuation is understated, so it is stated outright.
       missingCost: num(row.missingCost),
       byCategory,
@@ -1043,7 +1085,7 @@ SELECT COALESCE(s.phase,f.phase) AS phase,
     };
   }
 
-  private async shifts(store: Store, range: DateRange) {
+  private async shifts(store: Store, range: DateRange, thresholdHours: number) {
     const rows = (
       await this.database.pool.query(
         `SELECT h.id,h.status,h.opened_at AS "openedAt",h.closed_at AS "closedAt",
@@ -1070,9 +1112,7 @@ SELECT COALESCE(s.phase,f.phase) AS phase,
       open: open.rows[0].count as number,
       closed: rows.filter((r: any) => r.status === 'closed').length,
       differences: rows.filter((r: any) => r.difference !== null && num(r.difference) !== 0),
-      longOpen: rows.filter(
-        (r: any) => r.status === 'open' && num(r.hours) >= insightThresholds.shiftHours,
-      ),
+      longOpen: rows.filter((r: any) => r.status === 'open' && num(r.hours) >= thresholdHours),
     };
   }
 
@@ -1153,7 +1193,7 @@ SELECT COALESCE(s.phase,f.phase) AS phase,
   private async staleQuotes(store: any) {
     return (
       await this.database.pool.query(
-        `SELECT sp.id,p.name AS label,s.name AS "supplierName",
+        `SELECT sp.id,sp.product_id AS "productId",p.name AS label,s.name AS "supplierName",
          (sp.pack_cost/sp.pack_size)::numeric(14,4)::text AS "quotedCost",
          h.unit_cost::text AS "paidCost",
          ((h.unit_cost-(sp.pack_cost/sp.pack_size))/NULLIF(sp.pack_cost/sp.pack_size,0)*100)::float AS percent
@@ -1212,6 +1252,203 @@ SELECT m.month,COALESCE(sold.revenue,0)::text AS revenue,
     return { days, sales: num(row.sales), firstSale: row.first };
   }
 
+  /** Persist one row per store and detector key; observations never overwrite manager decisions. */
+  private async syncInsights(store: Store, detected: Insight[]) {
+    await this.database.pool.query(
+      `INSERT INTO manager_insight_states(store_id,insight_id,snapshot)
+       SELECT $1,x.id,x.snapshot FROM jsonb_to_recordset($2::jsonb) AS x(id text,snapshot jsonb)
+       ON CONFLICT(store_id,insight_id) DO UPDATE SET
+         snapshot=EXCLUDED.snapshot,last_detected_at=now(),condition_active=true,
+         status=CASE WHEN manager_insight_states.condition_active THEN manager_insight_states.status ELSE 'NEW' END,
+         first_detected_at=CASE WHEN manager_insight_states.condition_active THEN manager_insight_states.first_detected_at ELSE now() END,
+         updated_by=CASE WHEN manager_insight_states.condition_active THEN manager_insight_states.updated_by ELSE NULL END,
+         snoozed_until=CASE WHEN manager_insight_states.condition_active THEN manager_insight_states.snoozed_until ELSE NULL END`,
+      [
+        store.id,
+        JSON.stringify(detected.map((insight) => ({ id: insight.id, snapshot: insight }))),
+      ],
+    );
+    const ids = detected.map((insight) => insight.id);
+    await this.database.pool.query(
+      `UPDATE manager_insight_states SET condition_active=false,
+         status=CASE WHEN status IN ('NEW','SEEN','IN_PROGRESS','SNOOZED') THEN 'RESOLVED' ELSE status END,
+         snoozed_until=NULL,updated_at=now(),updated_by=NULL
+       WHERE store_id=$1 AND condition_active AND NOT (insight_id=ANY($2::text[]))`,
+      [store.id, ids],
+    );
+    await this.database.pool.query(
+      `UPDATE manager_insight_states SET status='NEW',snoozed_until=NULL,updated_at=now()
+       WHERE store_id=$1 AND status='SNOOZED' AND snoozed_until<=now()`,
+      [store.id],
+    );
+    return this.decorateInsights(store, detected);
+  }
+
+  private async decorateInsights(store: Store, detected: Insight[]) {
+    const states = (
+      await this.database.pool.query(
+        `SELECT insight_id,status,snoozed_until,first_detected_at FROM manager_insight_states WHERE store_id=$1`,
+        [store.id],
+      )
+    ).rows;
+    const byId = new Map(states.map((row: any) => [row.insight_id, row]));
+    return detected
+      .map((insight) => {
+        const row: any = byId.get(insight.id);
+        return {
+          ...insight,
+          status: row?.status ?? 'NEW',
+          group: insightGroup(insight),
+          firstDetectedAt: row?.first_detected_at,
+          snoozedUntil: row?.snoozed_until,
+        };
+      })
+      .sort((a, b) => insightPriority(b) - insightPriority(a));
+  }
+
+  @Get('action-center') @Require('analytics.view') async actionCenter(@Req() req: AuthRequest) {
+    await this.dashboard({ period: 'today' }, req);
+    const rows = (
+      await this.database.pool.query(
+        `SELECT insight_id,status,snapshot,snoozed_until,first_detected_at,last_detected_at,updated_at
+       FROM manager_insight_states WHERE store_id=$1 ORDER BY last_detected_at DESC`,
+        [req.context.store.id],
+      )
+    ).rows;
+    const now = Date.now();
+    const canMargin = req.context.user.permissions.includes('analytics.margin');
+    return {
+      currency: req.context.store.currency,
+      thresholdDays: (
+        await this.database.pool.query('SELECT no_sales_threshold_days FROM stores WHERE id=$1', [
+          req.context.store.id,
+        ])
+      ).rows[0].no_sales_threshold_days,
+      insights: rows
+        .filter(
+          (row: any) =>
+            canMargin ||
+            (row.snapshot.type !== 'margin' &&
+              row.snapshot.id !== 'dead-stock' &&
+              row.snapshot.id !== 'missing-cost'),
+        )
+        .map((row: any) => ({
+          ...row.snapshot,
+          id: row.insight_id,
+          status: row.status,
+          group: insightGroup(row.snapshot),
+          firstDetectedAt: row.first_detected_at,
+          lastDetectedAt: row.last_detected_at,
+          updatedAt: row.updated_at,
+          snoozedUntil: row.snoozed_until,
+          active:
+            row.status !== 'RESOLVED' &&
+            row.status !== 'DISMISSED' &&
+            !(
+              row.status === 'SNOOZED' &&
+              row.snoozed_until &&
+              new Date(row.snoozed_until).getTime() > now
+            ),
+        }))
+        .sort((a: any, b: any) => insightPriority(b) - insightPriority(a)),
+    };
+  }
+
+  @Post('action-center/:id/state') @Require('analytics.view') async insightState(
+    @Param('id') id: string,
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const body = parse(
+      z.object({
+        status: z.enum(['SEEN', 'IN_PROGRESS', 'SNOOZED', 'RESOLVED', 'DISMISSED']),
+        snoozedUntil: z.string().datetime().optional(),
+      }),
+      input,
+    );
+    if (
+      body.status === 'SNOOZED' &&
+      (!body.snoozedUntil || new Date(body.snoozedUntil).getTime() <= Date.now())
+    )
+      throw new BadRequestException('Choose a future snooze time.');
+    const row = (
+      await this.database.pool.query(
+        `UPDATE manager_insight_states SET status=$3,snoozed_until=$4,updated_at=now(),updated_by=$5
+       WHERE store_id=$1 AND insight_id=$2 RETURNING insight_id,status`,
+        [
+          req.context.store.id,
+          id,
+          body.status,
+          body.status === 'SNOOZED' ? body.snoozedUntil : null,
+          req.context.user.id,
+        ],
+      )
+    ).rows[0];
+    if (!row) throw new NotFoundException('Insight not found.');
+    return row;
+  }
+
+  @Get('action-center/no-sales') @Require('analytics.view') async noSales(
+    @Query() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(z.object({ days: z.coerce.number().int().min(7).max(365).optional() }), input);
+    const store = req.context.store as Store;
+    const defaultThreshold = (
+      await this.database.pool.query('SELECT no_sales_threshold_days FROM stores WHERE id=$1', [
+        store.id,
+      ])
+    ).rows[0].no_sales_threshold_days;
+    const threshold = b.days ?? defaultThreshold;
+    const canCost = req.context.user.permissions.includes('analytics.margin');
+    const today = storeToday(new Date(), store.timezone);
+    const rows = (
+      await this.database.pool.query(
+        `WITH last_sale AS (
+        SELECT i.product_id,max(s.created_at) AS sold_at FROM sale_items i JOIN sales s ON s.id=i.sale_id AND s.store_id=$1
+        WHERE i.store_id=$1 GROUP BY i.product_id
+      ), batches AS (
+        SELECT product_id,sum(quantity) AS quantity,sum(round(quantity*unit_cost,2)) AS value,
+          bool_or(cost_source='legacy_estimate') AS estimated,bool_or(unit_cost=0) AS missing
+        FROM stock_batches WHERE store_id=$1 AND quantity>0 GROUP BY product_id
+      )
+      SELECT p.id,p.name,p.sku,p.category,p.stock::text AS quantity,p.price::text AS "sellingPrice",
+        l.sold_at AS "lastSaleAt",p.created_at AS "createdAt",b.value::text AS "inventoryValue",round(b.value/nullif(b.quantity,0),2)::text AS "unitCost",
+        b.estimated AS "costEstimated",b.missing AS "costMissing",
+        floor(extract(epoch FROM ($3::date::timestamp AT TIME ZONE $4)-COALESCE(l.sold_at,p.created_at))/86400)::int AS "daysWithoutSale",
+    COALESCE(sp.suppliers,'') AS suppliers
+      FROM products p JOIN batches b ON b.product_id=p.id LEFT JOIN last_sale l ON l.product_id=p.id
+      LEFT JOIN LATERAL (
+        SELECT string_agg(DISTINCT s.name,', ' ORDER BY s.name) AS suppliers
+        FROM supplier_products link JOIN suppliers s ON s.id=link.supplier_id AND s.store_id=link.store_id
+        WHERE link.store_id=$1 AND link.product_id=p.id AND link.active
+      ) sp ON true
+      WHERE p.store_id=$1 AND p.active AND p.stock>0
+        AND COALESCE(l.sold_at,p.created_at)<(($3::date::timestamp AT TIME ZONE $4)-($2||' days')::interval)
+      ORDER BY "daysWithoutSale" DESC,p.name`,
+        [store.id, threshold, today, store.timezone],
+      )
+    ).rows;
+    return {
+      thresholdDays: threshold,
+      defaultThresholdDays: defaultThreshold,
+      today,
+      timezone: store.timezone,
+      currency: store.currency,
+      rows: rows.map((row: any) =>
+        canCost
+          ? row
+          : {
+              ...row,
+              inventoryValue: null,
+              unitCost: null,
+              costEstimated: null,
+              costMissing: null,
+            },
+      ),
+    };
+  }
+
   /** Assembles the measured facts the deterministic rules run against. */
   private facts(store: Store, data: any): InsightFacts {
     const { current, previous, history, products, inventory, waste, purchasing } = data;
@@ -1247,9 +1484,16 @@ SELECT m.month,COALESCE(sold.revenue,0)::text AS revenue,
         .filter((p: any) => p.daysOfStock !== null && num(p.stock) > 0)
         .map((p: any) => ({ id: p.id, label: p.name, days: p.daysOfStock })),
       deadStock: inventory
-        ? { count: inventory.dead.count, value: inventory.dead.value, days: inventory.dead.days }
+        ? {
+            count: inventory.dead.count,
+            units: inventory.dead.units,
+            missingCostProducts: inventory.dead.missingCostProducts,
+            value: inventory.dead.value,
+            days: inventory.dead.days,
+            estimated: inventory.dead.estimated,
+          }
         : { count: 0, value: '0', days: data.deadDays },
-      costIncreases: purchasing.costIncreases.map((p: any) => ({
+      costIncreases: (inventory ? purchasing.costIncreases : []).map((p: any) => ({
         id: p.id,
         label: p.label,
         previousCost: p.previousCost,
@@ -1281,6 +1525,7 @@ SELECT m.month,COALESCE(sold.revenue,0)::text AS revenue,
         label: `${s.register} · ${s.cashier}`,
         difference: s.difference,
       })),
+      shiftHours: data.shiftHours,
       longOpenShifts: data.shifts.longOpen.map((s: any) => ({
         id: s.id,
         label: `${s.register} · ${s.cashier}`,
@@ -1288,9 +1533,54 @@ SELECT m.month,COALESCE(sold.revenue,0)::text AS revenue,
       })),
       missingCost: data.readiness.missingCost,
       uncountedProducts: data.readiness.uncounted,
-      staleQuotes: data.staleQuotes,
+      staleQuotes: inventory ? data.staleQuotes : [],
     };
   }
+}
+
+/** Internal ranking: operational urgency, money at risk, evidence volume and age. */
+function insightPriority(insight: Insight & { firstDetectedAt?: Date | string }) {
+  const severity =
+    { critical: 4000, important: 3000, attention: 2000, info: 1000 }[insight.severity] ?? 0;
+  const operational =
+    insight.type === 'shifts' || insight.type === 'refunds'
+      ? 180
+      : insight.type === 'inventory'
+        ? 120
+        : insight.type === 'data'
+          ? -80
+          : 0;
+  const amount = Number(insight.impact?.amount ?? 0);
+  const financial =
+    Number.isFinite(amount) && amount > 0
+      ? Math.min(250, Math.log10(amount + 1) * 45) * (insight.impact?.estimate ? 0.65 : 1)
+      : 0;
+  const volume = Math.min(100, (insight.entities?.length ?? 0) * 12);
+  const age = insight.firstDetectedAt
+    ? Math.min(
+        60,
+        Math.max(0, (Date.now() - new Date(insight.firstDetectedAt).getTime()) / 86400000) * 2,
+      )
+    : 0;
+  return severity + operational + financial + volume + age;
+}
+
+function insightGroup(insight: Insight): string {
+  if (insight.type === 'data') return 'Setup';
+  if (insight.id === 'dead-stock') return 'Opportunities';
+  if (
+    insight.severity === 'critical' ||
+    insight.id === 'negative-margin' ||
+    insight.id === 'cash-difference'
+  )
+    return 'Action now';
+  if (
+    insight.type === 'inventory' ||
+    insight.type === 'shifts' ||
+    insight.id === 'margin-protection'
+  )
+    return 'Today';
+  return 'Review';
 }
 
 /** Averages a multi-period baseline down to a single comparable period. */
