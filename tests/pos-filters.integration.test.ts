@@ -241,6 +241,26 @@ describe.sequential('checkout catalog filters', () => {
         .status,
     ).toBe(404);
     expect((await register.request('/pos/products?code=PRIVATE')).body).toEqual([]);
+    const inactive = (
+      await manager.request('/products', {
+        ...product,
+        name: 'Inactive item',
+        sku: 'INACTIVE',
+        plu: '9999',
+        barcodes: ['INACTIVE-CODE'],
+      })
+    ).body;
+    expect(
+      (await manager.request('/products/' + inactive.id + '/status', { active: false }, 'PATCH'))
+        .status,
+    ).toBe(200);
+    expect((await register.request('/pos/products?code=INACTIVE-CODE')).body).toEqual([]);
+    expect((await register.request('/pos/product-availability?code=INACTIVE-CODE')).body).toEqual({
+      unavailable: true,
+    });
+    expect((await register.request('/pos/product-availability?code=PRIVATE')).body).toEqual({
+      unavailable: false,
+    });
   });
   it('ranks by sales in the last 30 days and keeps category filters', async () => {
     const response = await register.request(

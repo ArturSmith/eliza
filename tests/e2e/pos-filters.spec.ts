@@ -49,6 +49,22 @@ test('filters, favorites and paginates the checkout catalog', async ({ page }) =
     minStock: '0',
     barcodes: [],
   });
+  const inactive = await post('/products', {
+    name: 'Inactive product',
+    sku: 'INACTIVE',
+    category: 'Food',
+    unit: 'piece',
+    price: '2',
+    cost: '1',
+    taxRate: '0',
+    minStock: '0',
+    barcodes: ['INACTIVE-CODE'],
+  });
+  const deactivated = await page.request.patch('/api/products/' + inactive.id + '/status', {
+    headers: { Origin: 'http://localhost:5174', 'X-Eliza-Request': '1' },
+    data: { active: false },
+  });
+  expect(deactivated.ok(), await deactivated.text()).toBe(true);
   const session = await (await page.request.get('/api/auth/session')).json();
   const roles = await (await page.request.get('/api/team/roles')).json();
   const edited = await page.request.patch('/api/team/' + session.user.id, {
@@ -89,6 +105,19 @@ test('filters, favorites and paginates the checkout catalog', async ({ page }) =
   await page.getByLabel('Scan or search products').fill('BAR24');
   await page.getByLabel('Scan or search products').press('Enter');
   await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('1');
+  await page.getByLabel('Scan or search products').fill('EMPTY');
+  await page.getByLabel('Scan or search products').press('Enter');
+  await expect(page.getByRole('alert')).toContainText('Out of stock: Unavailable');
+  await expect(page.getByLabel('Scan or search products')).toHaveValue('');
+  await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('1');
+  await page.getByLabel('Scan or search products').fill('INACTIVE-CODE');
+  await page.getByLabel('Scan or search products').press('Enter');
+  await expect(page.getByRole('alert')).toContainText('This product is unavailable for sale.');
+  await expect(page.getByLabel('Scan or search products')).toHaveValue('');
+  await page.getByLabel('Scan or search products').fill('NOT-FOUND');
+  await page.getByLabel('Scan or search products').press('Enter');
+  await expect(page.getByRole('alert')).toContainText('Barcode not registered.');
+  await expect(page.getByLabel('Scan or search products')).toHaveValue('');
   await expect(page.locator('.pos-product-card')).toHaveCount(20);
   await page.screenshot({ path: 'test-results/checkout-filters-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });

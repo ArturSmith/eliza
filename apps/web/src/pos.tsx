@@ -474,6 +474,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       setPage(Math.max(1, Math.ceil(catalog.data.total / 20)));
   }, [catalog.data, page]);
   const [message, setMessage] = useState('');
+  const [scanError, setScanError] = useState('');
   const scanSound = useRef<AudioContext | null>(null);
   useEffect(
     () => () => {
@@ -489,7 +490,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       // Checkout still works if this device has no audio output.
     }
   }
-  async function playScanSound() {
+  async function playScanSound(success = true) {
     prepareScanSound();
     const audio = scanSound.current;
     if (!audio) return;
@@ -499,17 +500,20 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       return;
     }
     const start = audio.currentTime;
-    const oscillator = audio.createOscillator();
-    const volume = audio.createGain();
-    oscillator.type = 'square';
-    oscillator.frequency.value = 1200;
-    volume.gain.setValueAtTime(0.0001, start);
-    volume.gain.exponentialRampToValueAtTime(0.035, start + 0.005);
-    volume.gain.setValueAtTime(0.035, start + 0.075);
-    volume.gain.exponentialRampToValueAtTime(0.0001, start + 0.095);
-    oscillator.connect(volume).connect(audio.destination);
-    oscillator.start(start);
-    oscillator.stop(start + 0.1);
+    for (let index = 0; index < (success ? 1 : 2); index++) {
+      const from = start + index * 0.14;
+      const oscillator = audio.createOscillator();
+      const volume = audio.createGain();
+      oscillator.type = 'square';
+      oscillator.frequency.value = success ? 1200 : 360;
+      volume.gain.setValueAtTime(0.0001, from);
+      volume.gain.exponentialRampToValueAtTime(success ? 0.035 : 0.025, from + 0.005);
+      volume.gain.setValueAtTime(success ? 0.035 : 0.025, from + 0.075);
+      volume.gain.exponentialRampToValueAtTime(0.0001, from + 0.095);
+      oscillator.connect(volume).connect(audio.destination);
+      oscillator.start(from);
+      oscillator.stop(from + 0.1);
+    }
   }
 
   const [modal, setModal] = useState<
@@ -619,6 +623,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       return;
     }
     setMessage('');
+    setScanError('');
     setDraft((d) => {
       const index = d.lines.findIndex((l) => l.product.id === product.id);
       if (index >= 0) {
@@ -645,14 +650,35 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     if (['piece', 'pack', 'box'].includes(p.unit)) add(p);
     else setWeighted(p);
   }
+  function rejectScan(error: string) {
+    setMessage('');
+    setScanError(error);
+    void playScanSound(false);
+  }
+  function hasStock(product: PosProduct, amount: string) {
+    const remaining = toScaled(product.stock, 3);
+    if (remaining <= 0n) {
+      rejectScan(t('Out of stock: {value0}. The item was not added.', { value0: product.name }));
+      return false;
+    }
+    const inCart = draft.lines.find((line) => line.product.id === product.id)?.quantity ?? '0';
+    if (toScaled(inCart, 3) + toScaled(amount, 3) > remaining) {
+      rejectScan(t('Not enough stock for {value0}.', { value0: product.name }));
+      return false;
+    }
+    return true;
+  }
   async function scanCode(term: string) {
+    setSearch('');
+    setScanError('');
+    if (!term) return;
     if (noShift) {
-      setMessage('Start your shift before adding items to the cart.');
+      rejectScan('Start your shift before adding items to the cart.');
       return;
     }
     if (frozen) return;
     if (scaleProfile.isPending || scaleProfile.error) {
-      setMessage('Store barcode settings are unavailable. Retry when connected.');
+      rejectScan('Store barcode settings are unavailable. Retry when connected.');
       return;
     }
     try {
@@ -665,34 +691,46 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
           '/pos/products?plu=' + encodeURIComponent(decoded.productCode),
         );
         if (matching.length !== 1) {
-          setMessage('Scale product code is missing or ambiguous. Check the product PLU.');
+          if (!matching.length) {
+            const status = await api<{ unavailable: boolean }>(
+              '/pos/product-availability?plu=' + encodeURIComponent(decoded.productCode),
+            );
+            if (status.unavailable) {
+              rejectScan('This product is unavailable for sale. Ask a manager to activate it.');
+              return;
+            }
+          }
+          rejectScan('Scale product code is missing or ambiguous. Check the product PLU.');
           return;
         }
         if (matching[0].unit !== 'kilogram') {
-          setMessage('Scale labels require a product sold by kilogram.');
+          rejectScan('Scale labels require a product sold by kilogram.');
           return;
         }
         const amount = decoded.quantity ?? scalePriceQuantity(decoded.price!, matching[0].price);
         if (toScaled(amount, 3) > 999999999999n) {
-          setMessage('Scale quantity is too large.');
+          rejectScan('Scale quantity is too large.');
           return;
         }
+        if (!hasStock(matching[0], amount)) return;
         add(matching[0], amount);
         void playScanSound();
         return;
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Invalid scale barcode.');
+      rejectScan(error instanceof Error ? error.message : 'Invalid scale barcode.');
       return;
     }
     let exact: PosProduct[];
     try {
       exact = await api<PosProduct[]>('/pos/products?code=' + encodeURIComponent(term));
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not load product.');
+      rejectScan(error instanceof Error ? error.message : 'Could not load product.');
       return;
     }
     if (exact.length === 1) {
+      if (!hasStock(exact[0], ['piece', 'pack', 'box'].includes(exact[0].unit) ? '1' : '0.001'))
+        return;
       if (['piece', 'pack', 'box'].includes(exact[0].unit)) {
         add(exact[0]);
         void playScanSound();
@@ -701,8 +739,23 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         void playScanSound();
       }
     } else if (exact.length > 1)
-      setMessage('This code matches multiple products. Select the correct product below.');
-    else setMessage('Barcode not registered. Search by product name or ask a manager to add it.');
+      rejectScan('This code matches multiple products. Select the correct product below.');
+    else {
+      try {
+        const status = await api<{ unavailable: boolean }>(
+          '/pos/product-availability?code=' + encodeURIComponent(term),
+        );
+        rejectScan(
+          status.unavailable
+            ? 'This product is unavailable for sale. Ask a manager to activate it.'
+            : 'Barcode not registered. Search by product name or ask a manager to add it.',
+        );
+      } catch (error) {
+        rejectScan(
+          error instanceof Error ? error.message : 'Could not check product availability.',
+        );
+      }
+    }
   }
   function scanItem(e: FormEvent) {
     e.preventDefault();
@@ -844,6 +897,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                 setSearch(e.target.value);
                 setPage(1);
                 setMessage('');
+                setScanError('');
               }}
               disabled={frozen || noShift}
             />
@@ -902,6 +956,11 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
             ))}
           </div>
           <ErrorMessage error={catalog.error ?? favorite.error ?? lock.error} />
+          {scanError && (
+            <p className="pos-scan-error" role="alert">
+              {translateError(scanError)}
+            </p>
+          )}
           {message && (
             <p className="notice" role="status">
               {translateError(message)}

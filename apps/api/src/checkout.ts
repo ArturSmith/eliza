@@ -107,6 +107,32 @@ export class CheckoutController {
       ).rows;
     });
   }
+  @Get('product-availability') productAvailability(
+    @Req() req: Request,
+    @Query('code') code?: string,
+    @Query('plu') plu?: string,
+  ) {
+    if ((code === undefined) === (plu === undefined))
+      throw new BadRequestException('Provide one product code.');
+    if (code !== undefined && (typeof code !== 'string' || !code || code.length > 200))
+      throw new BadRequestException('Invalid product code.');
+    if (plu !== undefined && (typeof plu !== 'string' || !/^[0-9]{1,100}$/.test(plu)))
+      throw new BadRequestException('Invalid PLU.');
+    return this.operations.transaction(async (client) => {
+      const actor = await this.registers.operator(client, req);
+      const result = await client.query(
+        `SELECT EXISTS(
+          SELECT 1 FROM products p WHERE p.store_id=$1 AND NOT p.active
+            AND (($2::text IS NOT NULL AND (p.sku=$2 OR p.plu=$2 OR EXISTS(
+              SELECT 1 FROM barcodes b WHERE b.store_id=p.store_id AND b.product_id=p.id AND b.value=$2
+            ))) OR ($3::text IS NOT NULL AND p.plu ~ '^[0-9]+$'
+              AND ltrim(p.plu,'0')=ltrim($3,'0')))
+        ) AS unavailable`,
+        [actor.storeId, code ?? null, plu ?? null],
+      );
+      return result.rows[0] as { unavailable: boolean };
+    });
+  }
   @Get('catalog') catalog(@Req() req: Request, @Query() input: unknown) {
     const filters = parse(catalogFilters, input);
     return this.operations.transaction(async (client) => {
