@@ -15,7 +15,7 @@ test('creates sections, moves items and renames headings', async ({ page }) => {
   await page.getByLabel('Shopping list name').fill('Grouped list');
   await page.getByRole('button', { name: 'Generate shopping list' }).click();
   await expect(page.getByRole('dialog')).not.toBeVisible();
-  await page.getByRole('button', { name: 'Add section', exact: true }).click();
+  await page.getByRole('button', { name: 'Add group', exact: true }).click();
   await page.getByLabel('Section name', { exact: true }).fill('Cleaning');
   await page.getByLabel('Section name', { exact: true }).press('Enter');
   await page.getByRole('button', { name: 'Select a product', exact: true }).click();

@@ -51,6 +51,7 @@ export class ManagementController {
         roleId: employees.roleId,
         employeeCode: employees.employeeCode,
         hasPin: sql<boolean>`${employees.pinHash} IS NOT NULL`,
+        hasQr: sql<boolean>`EXISTS (SELECT 1 FROM employee_qr_credentials ec WHERE ec.employee_id=${employees.id})`,
         roleIds: sql<
           string[]
         >`ARRAY(SELECT er.role_id::text FROM employee_roles er WHERE er.employee_id=${employees.id} ORDER BY CASE WHEN er.role_id=${employees.roleId} THEN 0 ELSE 1 END,er.role_id)`,

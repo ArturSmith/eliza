@@ -13,6 +13,7 @@ import { t, useLanguage } from './i18n';
 import { Button } from './components/ui/button';
 import { ErrorMessage } from './forms';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
+import { EmployeeQrUnlock } from './employee-qr-unlock';
 import { Ean13Barcode } from './ean13-barcode';
 import './price-tags.css';
 
@@ -257,6 +258,10 @@ export function PriceTagsPage() {
             {t('Unlock Price Tags')}
           </Button>
         </form>
+        <EmployeeQrUnlock
+          disabled={login.isPending}
+          onUnlock={(qrCredential) => login.mutate({ qrCredential })}
+        />
         {!value.employees.length && (
           <p>{t('No General employees are assigned. Ask a manager to assign the role in Team.')}</p>
         )}

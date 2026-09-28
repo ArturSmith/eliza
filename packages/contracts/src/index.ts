@@ -191,6 +191,7 @@ export type Employee = {
   roleId: string;
   employeeCode: string;
   hasPin: boolean;
+  hasQr: boolean;
   roleIds: string[];
   roles: string[];
   active: boolean;
@@ -237,7 +238,11 @@ export const pinLoginSchema = z.object({
     .transform((v) => v.toUpperCase()),
   pin: pinSchema,
 });
-export const approvalSchema = pinLoginSchema;
+export const qrCredentialSchema = z.object({
+  qrCredential: z.string().regex(/^ELIZA-STAFF:[0-9a-f]{64}$/),
+});
+export const employeeUnlockSchema = z.union([pinLoginSchema, qrCredentialSchema]);
+export const approvalSchema = employeeUnlockSchema;
 export const startShiftSchema = z.object({ requestId: z.uuid(), openingCash: money });
 export const closeShiftSchema = z.object({
   requestId: z.uuid(),
@@ -717,11 +722,24 @@ export const shoppingListCreateSchema = z.object({
   requestId: z.uuid(),
   name: short,
   notes: z.string().trim().max(1000).default(''),
+  pieceStockLimit: nonnegativeQuantity
+    .refine(
+      (value) => toScaled(value, 3) % 1000n === 0n,
+      'Piece stock limit must be a whole number',
+    )
+    .optional(),
+  kilogramStockLimit: nonnegativeQuantity.optional(),
 });
 export const shoppingListSaveSchema = shoppingListCreateSchema.extend({
   sections: z
-    .array(z.object({ id: z.uuid(), name: z.string().trim().min(1).max(120) }))
-    .max(100)
+    .array(
+      z.object({
+        id: z.uuid(),
+        name: z.string().trim().min(1).max(120),
+        category: short.optional(),
+      }),
+    )
+    .max(500)
     .refine((rows) => new Set(rows.map((row) => row.id)).size === rows.length, 'Duplicate sections')
     .default([]),
   version: z.number().int().positive(),
@@ -792,6 +810,7 @@ export type ShoppingListLine = {
   productId: string | null;
   label: string;
   name: string;
+  category: string;
   sku: string;
   unit: string;
   active: boolean;
@@ -812,7 +831,7 @@ export type ShoppingListLine = {
   purchaseStatus: string | null;
 };
 export type ShoppingList = {
-  sections: { id: string; name: string }[];
+  sections: { id: string; name: string; category?: string }[];
   id: string;
   name: string;
   notes: string;

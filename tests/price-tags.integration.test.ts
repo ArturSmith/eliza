@@ -66,30 +66,24 @@ describe.sequential('Price Tags station', () => {
     const session = (await manager.request('/auth/session')).body;
     const roles = (await manager.request('/team/roles')).body;
     const cashierRole = roles.find((role: { name: string }) => role.name === 'Cashier');
-    expect(
-      (
-        await manager.request('/team', {
-          name: 'Alex',
-          employeeCode: 'ALEX',
-          roleId: cashierRole.id,
-          pin: '123456',
-          roleIds: [
-            cashierRole.id,
-            roles.find((role: { name: string }) => role.name === 'General employee').id,
-          ],
-        })
-      ).status,
-    ).toBe(201);
-    expect(
-      (
-        await manager.request('/team', {
-          name: 'Sam',
-          employeeCode: 'SAM',
-          roleId: cashierRole.id,
-          pin: '654321',
-        })
-      ).status,
-    ).toBe(201);
+    const alex = await manager.request('/team', {
+      name: 'Alex',
+      employeeCode: 'ALEX',
+      roleId: cashierRole.id,
+      pin: '123456',
+      roleIds: [
+        cashierRole.id,
+        roles.find((role: { name: string }) => role.name === 'General employee').id,
+      ],
+    });
+    expect(alex.status).toBe(201);
+    const sam = await manager.request('/team', {
+      name: 'Sam',
+      employeeCode: 'SAM',
+      roleId: cashierRole.id,
+      pin: '654321',
+    });
+    expect(sam.status).toBe(201);
     const product = await manager.request('/products', {
       name: 'Milk',
       sku: 'MILK',
@@ -162,7 +156,10 @@ describe.sequential('Price Tags station', () => {
       (await manager.request('/price-tags/login', { employeeCode: 'SAM', pin: '654321' })).status,
     ).toBe(401);
     expect(
-      (await manager.request('/price-tags/login', { employeeCode: 'ALEX', pin: '123456' })).status,
+      (await manager.request('/price-tags/login', { qrCredential: sam.body.qrCredential })).status,
+    ).toBe(401);
+    expect(
+      (await manager.request('/price-tags/login', { qrCredential: alex.body.qrCredential })).status,
     ).toBe(200);
     const products = await manager.request('/price-tags/products');
     expect(products.status).toBe(200);

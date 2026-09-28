@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { encodeScaleBarcode, pinLoginSchema, scaleBarcodeSchema } from '@eliza/contracts';
+import { encodeScaleBarcode, employeeUnlockSchema, scaleBarcodeSchema } from '@eliza/contracts';
 import { Database } from './database.js';
 import { cookie, hash, parse, token, verifyPassword } from './security.js';
 import { cookieOptions } from './register.js';
@@ -76,7 +76,7 @@ export class PriceTagsController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const body = parse(pinLoginSchema, input);
+    const body = parse(employeeUnlockSchema, input);
     const device = await this.station(req);
     const client = await this.database.pool.connect();
     try {
@@ -91,14 +91,20 @@ export class PriceTagsController {
         throw new ForbiddenException('Too many incorrect PINs. Try again in five minutes.');
       const employee = (
         await client.query(
-          "SELECT e.id,e.name,e.pin_hash,e.active,EXISTS (SELECT 1 FROM employee_roles er JOIN roles r ON r.id=er.role_id AND r.store_id=er.store_id WHERE er.employee_id=e.id AND er.store_id=e.store_id AND r.name='General employee') AS general_employee FROM employees e WHERE e.store_id=$1 AND e.employee_code=$2",
-          [device.store_id, body.employeeCode],
+          "SELECT e.id,e.name,e.pin_hash,e.active,EXISTS (SELECT 1 FROM employee_roles er JOIN roles r ON r.id=er.role_id AND r.store_id=er.store_id WHERE er.employee_id=e.id AND er.store_id=e.store_id AND r.name='General employee') AS general_employee FROM employees e WHERE e.store_id=$1 AND (CASE WHEN $3::text IS NULL THEN e.employee_code=$2 ELSE EXISTS(SELECT 1 FROM employee_qr_credentials ec WHERE ec.employee_id=e.id AND ec.store_id=e.store_id AND ec.token_hash=$3) END)",
+          [
+            device.store_id,
+            'pin' in body ? body.employeeCode : null,
+            'qrCredential' in body ? hash(body.qrCredential) : null,
+          ],
         )
       ).rows[0];
-      const valid = await verifyPassword(
-        body.pin,
-        employee?.pin_hash ?? `${'0'.repeat(32)}:${'0'.repeat(128)}`,
-      );
+      const valid =
+        'qrCredential' in body ||
+        (await verifyPassword(
+          body.pin,
+          employee?.pin_hash ?? `${'0'.repeat(32)}:${'0'.repeat(128)}`,
+        ));
       if (!employee?.active || !employee.general_employee || !valid) {
         const failures = attempt.locked_until ? 1 : attempt.failures + 1;
         await client.query(

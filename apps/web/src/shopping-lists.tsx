@@ -23,6 +23,7 @@ type Offer = SupplierProduct & { cheapest: boolean; premiumPercent: number | nul
 type CatalogItem = Pick<
   ShoppingListLine,
   | 'name'
+  | 'category'
   | 'sku'
   | 'unit'
   | 'active'
@@ -110,9 +111,7 @@ export function ShoppingListsPage() {
         open={creating}
         onOpenChange={setCreating}
         title={t('New shopping list')}
-        description={t(
-          'Includes active products at or below their low-stock threshold, up to 500 items.',
-        )}
+        description={t('Choose stock limits for products to include, up to 500 items.')}
       >
         {creating && (
           <CreateShoppingList
@@ -132,11 +131,25 @@ function CreateShoppingList({ done }: { done: (id: string) => void }) {
     t('Shopping list') + ' ' + new Date().toISOString().slice(0, 10),
   );
   const [notes, setNotes] = useState('');
-  const [pending, setPending] = useState<{ requestId: string; name: string; notes: string }>();
+  const [pieceStockLimit, setPieceStockLimit] = useState('');
+  const [kilogramStockLimit, setKilogramStockLimit] = useState('');
+  const [pending, setPending] = useState<{
+    requestId: string;
+    name: string;
+    notes: string;
+    pieceStockLimit?: string;
+    kilogramStockLimit?: string;
+  }>();
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>();
   async function save() {
-    const body = pending ?? { requestId: crypto.randomUUID(), name, notes };
+    const body = pending ?? {
+      requestId: crypto.randomUUID(),
+      name,
+      notes,
+      ...(pieceStockLimit !== '' ? { pieceStockLimit } : {}),
+      ...(kilogramStockLimit !== '' ? { kilogramStockLimit } : {}),
+    };
     setPending(body);
     setBusy(true);
     setError(undefined);
@@ -165,10 +178,38 @@ function CreateShoppingList({ done }: { done: (id: string) => void }) {
         <Field label={t('Notes')}>
           <textarea maxLength={1000} value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
+        <div className="shopping-stock-limits">
+          <Field
+            label={t('Include pieces at or below')}
+            hint={t('Leave blank to use each product’s minimum stock.')}
+          >
+            <input
+              type="number"
+              min="0"
+              step="1"
+              inputMode="numeric"
+              value={pieceStockLimit}
+              onChange={(e) => setPieceStockLimit(e.target.value)}
+            />
+          </Field>
+          <Field
+            label={t('Include kilograms at or below')}
+            hint={t('Leave blank to use each product’s minimum stock.')}
+          >
+            <input
+              type="number"
+              min="0"
+              step="0.001"
+              inputMode="decimal"
+              value={kilogramStockLimit}
+              onChange={(e) => setKilogramStockLimit(e.target.value)}
+            />
+          </Field>
+        </div>
       </fieldset>
       <p className="muted" style={{ margin: '16px 0' }}>
         {t(
-          'Initial targets are twice minimum stock, at least one selling unit. Saved targets are reused. Review targets and quantities before ordering.',
+          'Initial targets are twice the chosen limit or product minimum, at least one selling unit. Higher saved targets are reused. Review quantities before ordering.',
         )}
       </p>
       <ErrorMessage error={error} />
@@ -363,11 +404,17 @@ function ShoppingEditor({ list, onDeleted }: { list: ShoppingList; onDeleted: ()
     if (!p) return;
     const target = p.preferredTarget ?? initialReorderTarget(p.minStock, p.unit);
     const supplier = suppliers.data?.find((s) => s.id === p.preferredSupplierId);
+    let sectionId = sections.find((section) => section.category === p.category)?.id ?? null;
+    if (!sectionId && p.category && sections.length < 500) {
+      sectionId = crypto.randomUUID();
+      setSections((rows) => [...rows, { id: sectionId!, name: p.category, category: p.category }]);
+    }
     setLines((rows) => [
       ...rows,
       {
         ...p,
         id: crypto.randomUUID(),
+        sectionId,
         label: '',
         target,
         quantity: suggestedOrderQuantity(target, p.stock, p.incoming, p.drafts, p.unit),
@@ -392,6 +439,7 @@ function ShoppingEditor({ list, onDeleted }: { list: ShoppingList; onDeleted: ()
         productId: null,
         label,
         name: label,
+        category: '',
         sku: '',
         unit: 'piece',
         active: true,
@@ -461,295 +509,290 @@ function ShoppingEditor({ list, onDeleted }: { list: ShoppingList; onDeleted: ()
             <Button onClick={() => void send(pending.path, {})}>{t('Retry same change')}</Button>
           </div>
         )}
-        {canWrite && (
-          <Button
-            className="no-print shopping-section-add"
-            type="button"
-            variant="outline"
-            disabled={locked || sections.length >= 100}
-            onClick={() => {
-              const id = crypto.randomUUID();
-              setSections((rows) => [...rows, { id, name: t('New section') }]);
-              setEditingSection(id);
-              setDirty(true);
-            }}
-          >
-            {t('Add section')}
-          </Button>
-        )}
         {!outstanding.length && !converted.length && !sections.length ? (
           <p className="notice">
             {t('Nothing on this list yet. Add a product or a free-text item.')}
           </p>
         ) : (
           <div className="shopping-sections">
-            {[{ id: '', name: t('Unsectioned') }, ...sections].map((section) => (
-              <section
-                key={section.id}
-                data-shopping-section={section.id}
-                className={
-                  'shopping-section' +
-                  (draggedItem ? ' shopping-drop-target' : '') +
-                  (dropSection === section.id ? ' shopping-drop-active' : '')
-                }
-                onDragOver={(event) => {
-                  if (locked || !draggedItem) return;
-                  event.preventDefault();
-                  event.dataTransfer.dropEffect = 'move';
-                  setDropSection(section.id);
-                }}
-                onDragLeave={(event) => {
-                  if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+            {[{ id: '', name: t('Unsectioned') }, ...sections]
+              .filter(
+                (section) => section.id || draggedItem || lines.some((line) => !line.sectionId),
+              )
+              .map((section) => (
+                <section
+                  key={section.id}
+                  data-shopping-section={section.id}
+                  className={
+                    'shopping-section' +
+                    (draggedItem ? ' shopping-drop-target' : '') +
+                    (dropSection === section.id ? ' shopping-drop-active' : '')
+                  }
+                  onDragOver={(event) => {
+                    if (locked || !draggedItem) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = 'move';
+                    setDropSection(section.id);
+                  }}
+                  onDragLeave={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget as Node | null))
+                      setDropSection(null);
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (
+                      !locked &&
+                      draggedItem &&
+                      outstanding.some((line) => line.id === draggedItem)
+                    )
+                      change(draggedItem, { sectionId: section.id || null });
+                    setDraggedItem(null);
                     setDropSection(null);
-                }}
-                onDrop={(event) => {
-                  event.preventDefault();
-                  if (!locked && draggedItem && outstanding.some((line) => line.id === draggedItem))
-                    change(draggedItem, { sectionId: section.id || null });
-                  setDraggedItem(null);
-                  setDropSection(null);
-                }}
-              >
-                <div className="shopping-section-heading">
-                  {section.id &&
-                    (editingSection === section.id ? (
-                      <input
-                        autoFocus
-                        className="shopping-section-title"
-                        aria-label={t('Section name')}
-                        maxLength={120}
+                  }}
+                >
+                  <div className="shopping-section-heading">
+                    {section.id &&
+                      (editingSection === section.id ? (
+                        <input
+                          autoFocus
+                          className="shopping-section-title"
+                          aria-label={t('Section name')}
+                          maxLength={120}
+                          disabled={locked}
+                          value={section.name}
+                          onChange={(e) => {
+                            setSections((rows) =>
+                              rows.map((row) =>
+                                row.id === section.id ? { ...row, name: e.target.value } : row,
+                              ),
+                            );
+                            setDirty(true);
+                          }}
+                          onBlur={() => {
+                            setSections((rows) =>
+                              rows.map((row) =>
+                                row.id === section.id
+                                  ? { ...row, name: row.name.trim() || t('New section') }
+                                  : row,
+                              ),
+                            );
+                            setEditingSection(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              e.currentTarget.blur();
+                            }
+                          }}
+                        />
+                      ) : (
+                        <h3>
+                          <button
+                            type="button"
+                            className="shopping-section-title"
+                            disabled={locked}
+                            onClick={() => setEditingSection(section.id)}
+                          >
+                            {section.name}
+                          </button>
+                        </h3>
+                      ))}
+                    {!section.id &&
+                      sections.length > 0 &&
+                      (draggedItem || lines.some((line) => !line.sectionId)) && (
+                        <h3>{section.name}</h3>
+                      )}
+                    {section.id && canWrite && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="no-print"
                         disabled={locked}
-                        value={section.name}
-                        onChange={(e) => {
-                          setSections((rows) =>
-                            rows.map((row) =>
-                              row.id === section.id ? { ...row, name: e.target.value } : row,
-                            ),
-                          );
-                          setDirty(true);
-                        }}
-                        onBlur={() => {
-                          setSections((rows) =>
-                            rows.map((row) =>
-                              row.id === section.id
-                                ? { ...row, name: row.name.trim() || t('New section') }
-                                : row,
+                        onClick={() => {
+                          setSections((rows) => rows.filter((row) => row.id !== section.id));
+                          setLines((rows) =>
+                            rows.map((line) =>
+                              line.sectionId === section.id ? { ...line, sectionId: null } : line,
                             ),
                           );
                           setEditingSection(null);
+                          setDirty(true);
                         }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            e.currentTarget.blur();
-                          }
-                        }}
-                      />
-                    ) : (
-                      <h3>
-                        <button
-                          type="button"
-                          className="shopping-section-title"
-                          disabled={locked}
-                          onClick={() => setEditingSection(section.id)}
-                        >
-                          {section.name}
-                        </button>
-                      </h3>
-                    ))}
-                  {!section.id &&
-                    sections.length > 0 &&
-                    (draggedItem || lines.some((line) => !line.sectionId)) && (
-                      <h3>{section.name}</h3>
-                    )}
-                  {section.id && canWrite && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="no-print"
-                      disabled={locked}
-                      onClick={() => {
-                        setSections((rows) => rows.filter((row) => row.id !== section.id));
-                        setLines((rows) =>
-                          rows.map((line) =>
-                            line.sectionId === section.id ? { ...line, sectionId: null } : line,
-                          ),
-                        );
-                        setEditingSection(null);
-                        setDirty(true);
-                      }}
-                    >
-                      {t('Remove section')}
-                    </Button>
-                  )}
-                </div>
-                <ol className="shopping-lines">
-                  {outstanding
-                    .filter((line) => (line.sectionId ?? '') === section.id)
-                    .map((line) => (
-                      <li
-                        key={line.id}
-                        className={
-                          'shopping-line' +
-                          (draggedItem === line.id ? ' shopping-line-dragging' : '')
-                        }
                       >
-                        <div
+                        {t('Remove section')}
+                      </Button>
+                    )}
+                  </div>
+                  <ol className="shopping-lines">
+                    {outstanding
+                      .filter((line) => (line.sectionId ?? '') === section.id)
+                      .map((line) => (
+                        <li
+                          key={line.id}
                           className={
-                            'shopping-line-main' +
-                            (!locked && sections.length ? ' shopping-draggable' : '')
+                            'shopping-line' +
+                            (draggedItem === line.id ? ' shopping-line-dragging' : '')
                           }
-                          onPointerDown={(event) => {
-                            if (locked || !sections.length || event.button !== 0) return;
-                            pointerDrag.current = {
-                              id: line.id,
-                              x: event.clientX,
-                              y: event.clientY,
-                              active: false,
-                            };
-                            event.currentTarget.setPointerCapture(event.pointerId);
-                          }}
-                          onPointerMove={(event) => {
-                            const drag = pointerDrag.current;
-                            if (!drag) return;
-                            if (
-                              !drag.active &&
-                              Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 5
-                            )
-                              return;
-                            drag.active = true;
-                            setDraggedItem(drag.id);
-                            const target = document
-                              .elementFromPoint(event.clientX, event.clientY)
-                              ?.closest<HTMLElement>('[data-shopping-section]');
-                            setDropSection(target?.dataset.shoppingSection ?? null);
-                            if (event.clientY < 64) window.scrollBy(0, -16);
-                            else if (event.clientY > window.innerHeight - 64)
-                              window.scrollBy(0, 16);
-                          }}
-                          onPointerUp={(event) => {
-                            const drag = pointerDrag.current;
-                            const target = document
-                              .elementFromPoint(event.clientX, event.clientY)
-                              ?.closest<HTMLElement>('[data-shopping-section]');
-                            if (!locked && drag?.active && target)
-                              change(drag.id, {
-                                sectionId: target.dataset.shoppingSection || null,
-                              });
-                            pointerDrag.current = null;
-                            setDraggedItem(null);
-                            setDropSection(null);
-                          }}
-                          onPointerCancel={() => {
-                            pointerDrag.current = null;
-                            setDraggedItem(null);
-                            setDropSection(null);
-                          }}
                         >
-                          {canWrite && sections.length > 0 && (
-                            <span
-                              className="shopping-drag-handle no-print"
-                              title={t('Drag to another section')}
-                            >
-                              <GripVertical size={18} aria-hidden="true" />
-                            </span>
-                          )}
-                          <span className="shopping-line-name">{line.name}</span>
-                          {!line.productId && (
-                            <span className="badge badge-gray no-print">{t('Free text')}</span>
-                          )}
-                          {line.productId && !line.active && (
-                            <span className="badge badge-gray">{t('Inactive')}</span>
-                          )}
-                          {line.supplierName && (
-                            <span className="muted shopping-line-supplier print-only">
-                              {line.supplierName}
-                            </span>
-                          )}
-                        </div>
-                        <div className="shopping-line-side">
-                          {canWrite && line.productId && (
-                            <SupplierPicker
-                              line={line}
-                              offers={offersFor(line.productId)}
-                              suppliers={suppliers.data ?? []}
-                              currency={session.store.currency}
-                              disabled={locked}
-                              onPick={(supplierId) => {
-                                const offer = offersFor(line.productId).find(
-                                  (o) => o.supplierId === supplierId,
-                                );
-                                const supplier = suppliers.data?.find((s) => s.id === supplierId);
-                                change(line.id, {
-                                  supplierId: supplierId || null,
-                                  supplierName: supplier?.name ?? null,
-                                  supplierActive: supplier?.active ?? null,
-                                  // Adopt the quoted price so the draft order carries
-                                  // the price this supplier actually offered.
-                                  ...(offer ? { unitCost: offer.unitCost ?? line.unitCost } : {}),
+                          <div
+                            className={
+                              'shopping-line-main' +
+                              (!locked && sections.length ? ' shopping-draggable' : '')
+                            }
+                            onPointerDown={(event) => {
+                              if (locked || !sections.length || event.button !== 0) return;
+                              pointerDrag.current = {
+                                id: line.id,
+                                x: event.clientX,
+                                y: event.clientY,
+                                active: false,
+                              };
+                              event.currentTarget.setPointerCapture(event.pointerId);
+                            }}
+                            onPointerMove={(event) => {
+                              const drag = pointerDrag.current;
+                              if (!drag) return;
+                              if (
+                                !drag.active &&
+                                Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 5
+                              )
+                                return;
+                              drag.active = true;
+                              setDraggedItem(drag.id);
+                              const target = document
+                                .elementFromPoint(event.clientX, event.clientY)
+                                ?.closest<HTMLElement>('[data-shopping-section]');
+                              setDropSection(target?.dataset.shoppingSection ?? null);
+                              if (event.clientY < 64) window.scrollBy(0, -16);
+                              else if (event.clientY > window.innerHeight - 64)
+                                window.scrollBy(0, 16);
+                            }}
+                            onPointerUp={(event) => {
+                              const drag = pointerDrag.current;
+                              const target = document
+                                .elementFromPoint(event.clientX, event.clientY)
+                                ?.closest<HTMLElement>('[data-shopping-section]');
+                              if (!locked && drag?.active && target)
+                                change(drag.id, {
+                                  sectionId: target.dataset.shoppingSection || null,
                                 });
-                              }}
-                            />
-                          )}
-                          <input
-                            className="shopping-qty"
-                            aria-label={t('Quantity to buy')}
-                            inputMode="decimal"
-                            disabled={locked}
-                            value={line.quantity}
-                            onChange={(e) => change(line.id, { quantity: e.target.value })}
-                          />
-                          <span className="muted shopping-line-unit">{t(line.unit)}</span>
-                          {canWrite && line.productId && line.supplierId && line.supplierActive && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="no-print"
-                              disabled={locked || dirty || Number(line.quantity) <= 0}
-                              title={dirty ? t('Save the list before ordering.') : undefined}
-                              onClick={() => void send('/convert', { lineIds: [line.id] })}
-                            >
-                              {t('Order from supplier')}
-                            </Button>
-                          )}
-                          {canWrite && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="no-print"
+                              pointerDrag.current = null;
+                              setDraggedItem(null);
+                              setDropSection(null);
+                            }}
+                            onPointerCancel={() => {
+                              pointerDrag.current = null;
+                              setDraggedItem(null);
+                              setDropSection(null);
+                            }}
+                          >
+                            {canWrite && sections.length > 0 && (
+                              <span
+                                className="shopping-drag-handle no-print"
+                                title={t('Drag to another section')}
+                              >
+                                <GripVertical size={18} aria-hidden="true" />
+                              </span>
+                            )}
+                            <span className="shopping-line-name">{line.name}</span>
+                            {!line.productId && (
+                              <span className="badge badge-gray no-print">{t('Free text')}</span>
+                            )}
+                            {line.productId && !line.active && (
+                              <span className="badge badge-gray">{t('Inactive')}</span>
+                            )}
+                            {line.supplierName && (
+                              <span className="muted shopping-line-supplier print-only">
+                                {line.supplierName}
+                              </span>
+                            )}
+                          </div>
+                          <div className="shopping-line-side">
+                            {canWrite && line.productId && (
+                              <SupplierPicker
+                                line={line}
+                                offers={offersFor(line.productId)}
+                                suppliers={suppliers.data ?? []}
+                                currency={session.store.currency}
+                                disabled={locked}
+                                onPick={(supplierId) => {
+                                  const offer = offersFor(line.productId).find(
+                                    (o) => o.supplierId === supplierId,
+                                  );
+                                  const supplier = suppliers.data?.find((s) => s.id === supplierId);
+                                  change(line.id, {
+                                    supplierId: supplierId || null,
+                                    supplierName: supplier?.name ?? null,
+                                    supplierActive: supplier?.active ?? null,
+                                    // Adopt the quoted price so the draft order carries
+                                    // the price this supplier actually offered.
+                                    ...(offer ? { unitCost: offer.unitCost ?? line.unitCost } : {}),
+                                  });
+                                }}
+                              />
+                            )}
+                            <input
+                              className="shopping-qty"
+                              aria-label={t('Quantity to buy')}
+                              inputMode="decimal"
                               disabled={locked}
-                              onClick={() => remove(line.id)}
-                            >
-                              {t('Remove')}
-                            </Button>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  {converted
-                    .filter((line) => (line.sectionId ?? '') === section.id)
-                    .map((line) => (
-                      <li key={line.id} className="shopping-line shopping-line-done">
-                        <div className="shopping-line-main">
-                          <span className="shopping-line-name">{line.name}</span>
-                          <a className="muted" href={'/purchases?order=' + line.purchaseId}>
-                            {line.purchaseNumber}
-                          </a>
-                        </div>
-                        <div className="shopping-line-side">
-                          <span>
-                            {Number(line.quantity)} {t(line.unit)}
-                          </span>
-                          <span className="badge badge-green">{t('Ordered')}</span>
-                        </div>
-                      </li>
-                    ))}
-                </ol>
-              </section>
-            ))}
+                              value={line.quantity}
+                              onChange={(e) => change(line.id, { quantity: e.target.value })}
+                            />
+                            <span className="muted shopping-line-unit">{t(line.unit)}</span>
+                            {canWrite &&
+                              line.productId &&
+                              line.supplierId &&
+                              line.supplierActive && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="no-print"
+                                  disabled={locked || dirty || Number(line.quantity) <= 0}
+                                  title={dirty ? t('Save the list before ordering.') : undefined}
+                                  onClick={() => void send('/convert', { lineIds: [line.id] })}
+                                >
+                                  {t('Order from supplier')}
+                                </Button>
+                              )}
+                            {canWrite && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="no-print"
+                                disabled={locked}
+                                onClick={() => remove(line.id)}
+                              >
+                                {t('Remove')}
+                              </Button>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    {converted
+                      .filter((line) => (line.sectionId ?? '') === section.id)
+                      .map((line) => (
+                        <li key={line.id} className="shopping-line shopping-line-done">
+                          <div className="shopping-line-main">
+                            <span className="shopping-line-name">{line.name}</span>
+                            <a className="muted" href={'/purchases?order=' + line.purchaseId}>
+                              {line.purchaseNumber}
+                            </a>
+                          </div>
+                          <div className="shopping-line-side">
+                            <span>
+                              {Number(line.quantity)} {t(line.unit)}
+                            </span>
+                            <span className="badge badge-green">{t('Ordered')}</span>
+                          </div>
+                        </li>
+                      ))}
+                  </ol>
+                </section>
+              ))}
           </div>
         )}
         {canWrite && lines.length < 500 && (
@@ -799,6 +842,22 @@ function ShoppingEditor({ list, onDeleted }: { list: ShoppingList; onDeleted: ()
               )}
             />
           </div>
+        )}
+        {canWrite && (
+          <Button
+            className="no-print shopping-section-add"
+            type="button"
+            variant="outline"
+            disabled={locked || sections.length >= 500}
+            onClick={() => {
+              const id = crypto.randomUUID();
+              setSections((rows) => [...rows, { id, name: t('New section') }]);
+              setEditingSection(id);
+              setDirty(true);
+            }}
+          >
+            {t('Add group')}
+          </Button>
         )}
         {notes && <p className="shopping-list-notes">{notes}</p>}
         {canWrite && (

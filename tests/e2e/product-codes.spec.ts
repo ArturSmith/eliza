@@ -60,6 +60,9 @@ test('generates product codes without translating names', async ({ page }) => {
     page.getByRole('dialog').getByRole('img', { name: `Barcode ${original.barcodes[0]}` }),
   ).toBeVisible();
   await expect(
+    page.getByRole('dialog').locator('.product-barcode-print svg rect').first(),
+  ).toBeVisible();
+  await expect(
     page.getByRole('dialog').getByRole('button', { name: 'Print barcode' }),
   ).toBeEnabled();
   await page.evaluate(() => {

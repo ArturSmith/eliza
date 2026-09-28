@@ -31,6 +31,8 @@ const manager = new Client(),
   register = new Client(),
   second = new Client();
 let cashierId: string,
+  cashierQr: string,
+  ownerQr: string,
   ownerId: string,
   cashierRole: string,
   ownerRole: string,
@@ -121,8 +123,13 @@ describe.sequential('register, shifts and checkout', () => {
     });
     expect(created.status).toBe(201);
     cashierId = created.body.id;
+    cashierQr = created.body.qrCredential;
+    ownerQr = (await manager.request(`/team/${ownerId}/qr`, {})).body.qrCredential;
+    expect(cashierQr).toMatch(/^ELIZA-STAFF:[0-9a-f]{64}$/);
     const staff = (await manager.request('/employees')).body;
     expect(staff.find((e: any) => e.id === cashierId).hasPin).toBe(true);
+    expect(staff.find((e: any) => e.id === cashierId).hasQr).toBe(true);
+    expect(JSON.stringify(staff)).not.toContain(cashierQr);
     expect(JSON.stringify(staff)).not.toMatch(/123456|pinHash|pin_hash|passwordHash/);
   });
   it('requires enrollment and ends management access in a cashier browser', async () => {
@@ -130,6 +137,12 @@ describe.sequential('register, shifts and checkout', () => {
     deviceId = await enroll(register, 'Register 01');
     expect((await register.request('/auth/session')).status).toBe(401);
     expect((await unlock()).status).toBe(200);
+    expect((await register.request('/pos/lock', {})).status).toBe(200);
+    expect(
+      (await register.request('/pos/login', { qrCredential: 'ELIZA-STAFF:' + '0'.repeat(64) }))
+        .status,
+    ).toBe(401);
+    expect((await register.request('/pos/login', { qrCredential: cashierQr })).status).toBe(200);
     expect((await register.request('/employees')).status).toBe(401);
     expect((await register.request('/pos/context')).body.operator.name).toBe('Anna');
   });
@@ -305,7 +318,7 @@ describe.sequential('register, shifts and checkout', () => {
     ).toBe(401);
     const r = await register.request('/pos/sales', {
       ...payload,
-      approval: { employeeCode: 'OWNER', pin: '654321' },
+      approval: { qrCredential: ownerQr },
     });
     expect(r.status).toBe(201);
     expect(r.body.total).toBe('92.00');

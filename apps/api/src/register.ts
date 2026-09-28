@@ -17,7 +17,7 @@ import {
 import type { Request, Response } from 'express';
 import type { PoolClient } from 'pg';
 import { z } from 'zod';
-import { pinLoginSchema, type PosContext, type Permission } from '@eliza/contracts';
+import { employeeUnlockSchema, type PosContext, type Permission } from '@eliza/contracts';
 import { Database } from './database.js';
 import { AuthModule } from './auth.js';
 import {
@@ -100,7 +100,7 @@ export class RegisterService {
     client: PoolClient,
     deviceId: string,
     storeId: string,
-    credentials: { employeeCode: string; pin: string },
+    credentials: { employeeCode: string; pin: string } | { qrCredential: string },
     permission: Permission,
   ) {
     await client.query('INSERT INTO pin_attempts(device_id) VALUES($1) ON CONFLICT DO NOTHING', [
@@ -113,14 +113,20 @@ export class RegisterService {
       return new HttpException('Too many incorrect PINs. Try again in five minutes.', 429);
     const employee = (
       await client.query(
-        "SELECT e.*,(SELECT COALESCE(jsonb_agg(DISTINCT p.value),'[]'::jsonb) FROM employee_roles er JOIN roles rr ON rr.id=er.role_id AND rr.store_id=er.store_id CROSS JOIN LATERAL jsonb_array_elements_text(rr.permissions) p(value) WHERE er.employee_id=e.id AND er.store_id=e.store_id) AS permissions FROM employees e JOIN roles r ON e.role_id=r.id AND e.store_id=r.store_id WHERE e.store_id=$1 AND e.employee_code=$2 FOR SHARE OF e,r",
-        [storeId, credentials.employeeCode],
+        "SELECT e.*,(SELECT COALESCE(jsonb_agg(DISTINCT p.value),'[]'::jsonb) FROM employee_roles er JOIN roles rr ON rr.id=er.role_id AND rr.store_id=er.store_id CROSS JOIN LATERAL jsonb_array_elements_text(rr.permissions) p(value) WHERE er.employee_id=e.id AND er.store_id=e.store_id) AS permissions FROM employees e JOIN roles r ON e.role_id=r.id AND e.store_id=r.store_id WHERE e.store_id=$1 AND (CASE WHEN $3::text IS NULL THEN e.employee_code=$2 ELSE EXISTS(SELECT 1 FROM employee_qr_credentials ec WHERE ec.employee_id=e.id AND ec.store_id=e.store_id AND ec.token_hash=$3) END) FOR SHARE OF e,r",
+        [
+          storeId,
+          'pin' in credentials ? credentials.employeeCode : null,
+          'qrCredential' in credentials ? hash(credentials.qrCredential) : null,
+        ],
       )
     ).rows[0];
-    const valid = await verifyPassword(
-      credentials.pin,
-      employee?.pin_hash ?? `${'0'.repeat(32)}:${'0'.repeat(128)}`,
-    );
+    const valid =
+      'qrCredential' in credentials ||
+      (await verifyPassword(
+        credentials.pin,
+        employee?.pin_hash ?? `${'0'.repeat(32)}:${'0'.repeat(128)}`,
+      ));
     if (!employee || !employee.active || !valid || !employee.permissions.includes(permission)) {
       const failures = attempt.locked_until ? 1 : attempt.failures + 1;
       await client.query(
@@ -225,7 +231,7 @@ export class RegisterService {
     return result;
   }
   async login(input: unknown, req: Request, res: Response) {
-    const credentials = parse(pinLoginSchema, input);
+    const credentials = parse(employeeUnlockSchema, input);
     const secret = token();
     const result = await this.operations.transaction(async (client) => {
       const device = await this.device(client, req);
@@ -260,6 +266,7 @@ export class RegisterService {
       );
       return { ok: true };
     });
+    if (result instanceof HttpException) throw result;
     await this.endManagement(req, res);
     res.cookie('eliza_pos_session', secret, { ...cookieOptions, maxAge: 12 * 3600_000 });
     return result;

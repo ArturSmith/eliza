@@ -1,4 +1,4 @@
-import { PurchaseDocument, type DocumentDraftLine } from './purchase-document';
+import type { DocumentDraftLine } from './purchase-document';
 import { readDocumentHandoff } from './document-purchase';
 import { countText, t, useLanguage, getLocale } from './i18n';
 import { useState, useEffect, useId, type ReactNode } from 'react';
@@ -868,7 +868,6 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
       >
     | undefined
   >();
-  const [scanned, setScanned] = useState(false);
   const [addingProduct, setAddingProduct] = useState<number | null>(null);
   const [scanLine, setScanLine] = useState<number | null>(null);
   const [barcode, setBarcode] = useState('');
@@ -903,7 +902,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
   const [expectedDate, setDate] = useState(order?.expected_date?.slice(0, 10) ?? '');
   const [notes, setNotes] = useState(order?.notes ?? '');
   const [reviewed, setReviewed] = useState(false);
-  const hasScan = !!handoff || scanned;
+  const hasScan = !!handoff;
   const [lines, setLines] = useState<DocumentDraftLine[]>(
     handoff?.lines ??
       order?.lines.map((l) => ({
@@ -1054,46 +1053,6 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
           mutation.mutate();
         }}
       >
-        {!order && (
-          <PurchaseDocument
-            supplierId={supplierId}
-            products={availableProducts}
-            suppliers={availableSuppliers}
-            onApply={(scannedLines, scannedDocument) => {
-              setLines(scannedLines);
-              setReference(scannedDocument.supplierReference);
-              setDocumentDate(scannedDocument.documentDate);
-              setDocumentDetails({
-                buyerName: scannedDocument.buyerName,
-                buyerDetails: scannedDocument.buyerDetails,
-                driverName: scannedDocument.driverName,
-                driverPhone: scannedDocument.driverPhone,
-                goodsNumber: scannedDocument.goodsNumber,
-                buyerTaxNumber: scannedDocument.buyerTaxNumber,
-                grossWeight: scannedDocument.grossWeight,
-                documentVat: scannedDocument.documentVat,
-                returnAmount: scannedDocument.returnAmount,
-                documentComment: scannedDocument.documentComment,
-              });
-              setScanned(true);
-              setReviewed(false);
-            }}
-            onAddSupplier={(prefill) => {
-              const codeTaken = availableSuppliers.some(
-                (supplier) => supplier.code.toLowerCase() === prefill.code.toLowerCase(),
-              );
-              setSupplierPrefill({
-                ...prefill,
-                code:
-                  prefill.code && !codeTaken
-                    ? prefill.code
-                    : 'SUP-' + crypto.randomUUID().slice(0, 8).toUpperCase(),
-              });
-              setAddingSupplier(true);
-            }}
-            onSelectSupplier={setSupplier}
-          />
-        )}
         <SearchSelect
           label={t('Supplier')}
           placeholder={t('Select a supplier')}

@@ -10,7 +10,7 @@ export async function shoppingProducts(c: PoolClient, store: string, ids: string
       FROM purchase_lines l JOIN purchases o ON o.id=l.purchase_id
       WHERE o.store_id=$1 AND o.status IN ('draft','ordered','partially_received') GROUP BY l.product_id
     )
-    SELECT p.id AS "productId",p.name,p.sku,p.unit,p.active,p.stock,p.min_stock AS "minStock",
+    SELECT p.id AS "productId",p.name,p.sku,p.category,p.unit,p.active,p.stock,p.min_stock AS "minStock",
       p.cost AS "unitCost",p.tax_rate AS "taxRate",
       COALESCE(s.incoming,'0') AS incoming,COALESCE(s.drafts,'0') AS drafts,
       r.target_stock AS "preferredTarget",r.supplier_id AS "preferredSupplierId"

@@ -396,7 +396,6 @@ export function Overview() {
   const session = useSession().data!;
   const products = useProducts();
   const canAdjust = useCan('inventory.adjust');
-  const canWrite = useCan('catalog.write');
   const canAudit = useCan('audit.read');
   const [adjust, setAdjust] = useState(false);
   if (products.isPending) return <Loading />;
@@ -424,51 +423,6 @@ export function Overview() {
         }
       />
       <TodayOperations />
-      <section className="welcome-banner">
-        <div>
-          <Badge>{t('LET’S GET YOU READY')}</Badge>
-          <h2>
-            {t('Good days start with ')}
-            <br />
-            {t('a well-stocked store. ')}
-          </h2>
-          <p>
-            {t('Bring your products together and keep every ')}
-            <br className="desktop-br" /> {t(' stock change accounted for. ')}
-          </p>
-          <div className="banner-actions">
-            {canWrite && <AddProduct />}
-            <Button variant="ghost" asChild>
-              <Link to="/inventory">
-                {t('View inventory ')}
-                <ArrowRight size={16} />
-              </Link>
-            </Button>
-          </div>
-        </div>
-        <div className="banner-art" aria-hidden="true">
-          <div className="art-circle" />
-          <div className="art-card art-back">
-            <Boxes size={24} />
-            <span>{t('Everything in its place')}</span>
-            <i />
-            <i />
-            <i />
-          </div>
-          <div className="art-card art-front">
-            <span className="art-check">
-              <Check size={19} />
-            </span>
-            <strong>{t('Ready for a fresh start')}</strong>
-            <span>{t('One product at a time.')}</span>
-            <div className="art-lines">
-              <i />
-              <i />
-            </div>
-          </div>
-          <div className="floating-plus">+</div>
-        </div>
-      </section>
       <div className="metrics">
         <Metric
           label={t('Active products')}

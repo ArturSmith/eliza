@@ -5,17 +5,11 @@ import { t, useLanguage } from './i18n';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 
-export function ProductBarcode({
-  product,
-  onClose,
-}: {
-  product: Product | null;
-  onClose: () => void;
-}) {
+function BarcodeContent({ product }: { product: Product }) {
   useLanguage();
   const svg = useRef<SVGSVGElement>(null);
   const [invalid, setInvalid] = useState(false);
-  const code = product?.barcodes[0];
+  const code = product.barcodes[0];
   useEffect(() => {
     if (!code || !svg.current) return;
     try {
@@ -36,20 +30,35 @@ export function ProductBarcode({
     }
   }, [code]);
   return (
-    <Dialog
-      open={!!product}
-      onOpenChange={(open) => !open && onClose()}
-      title={t('Barcode for {value0}', { value0: product?.name ?? '' })}
-      description={t('Print this barcode and attach it to the product.')}
-    >
+    <>
       <div className="product-barcode-print">
-        <strong>{product?.name}</strong>
+        <strong>{product.name}</strong>
         <svg ref={svg} aria-label={t('Barcode {value0}', { value0: code ?? '' })} />
         {invalid && <p>{t('Barcode image unavailable for this code.')}</p>}
       </div>
       <Button disabled={!code || invalid} onClick={() => window.print()}>
         {t('Print barcode')}
       </Button>
+    </>
+  );
+}
+
+export function ProductBarcode({
+  product,
+  onClose,
+}: {
+  product: Product | null;
+  onClose: () => void;
+}) {
+  useLanguage();
+  return (
+    <Dialog
+      open={!!product}
+      onOpenChange={(open) => !open && onClose()}
+      title={t('Barcode for {value0}', { value0: product?.name ?? '' })}
+      description={t('Print this barcode and attach it to the product.')}
+    >
+      {product && <BarcodeContent key={product.id} product={product} />}
     </Dialog>
   );
 }

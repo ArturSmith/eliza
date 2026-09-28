@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   initialReorderTarget,
   suggestedOrderQuantity,
+  shoppingListCreateSchema,
   shoppingListSaveSchema,
 } from '../packages/contracts/src/index';
 describe('reorder planning', () => {
@@ -32,5 +33,20 @@ describe('reorder planning', () => {
       ],
     };
     expect(shoppingListSaveSchema.safeParse(body).success).toBe(false);
+  });
+  it('accepts separate piece and kilogram limits and rejects fractional pieces', () => {
+    const body = {
+      requestId: crypto.randomUUID(),
+      name: 'List',
+      pieceStockLimit: '4',
+      kilogramStockLimit: '1.250',
+    };
+    expect(shoppingListCreateSchema.safeParse(body).success).toBe(true);
+    expect(shoppingListCreateSchema.safeParse({ ...body, pieceStockLimit: '4.5' }).success).toBe(
+      false,
+    );
+    expect(shoppingListCreateSchema.safeParse({ ...body, kilogramStockLimit: '-1' }).success).toBe(
+      false,
+    );
   });
 });

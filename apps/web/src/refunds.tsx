@@ -6,6 +6,7 @@ import { api, ApiError, refresh } from './api';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { Field, ErrorMessage } from './forms';
+import { CameraBarcodeScanner } from './camera-barcode-scanner';
 import { formatMoney, ReceiptView } from './receipts';
 type Refund = {
   id: string;
@@ -193,7 +194,8 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
   const [reason, setReason] = useState(''),
     [confirmed, setConfirmed] = useState(false),
     [code, setCode] = useState(''),
-    [pin, setPin] = useState('');
+    [pin, setPin] = useState(''),
+    [qrCredential, setQrCredential] = useState('');
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(),
     [result, setResult] = useState<Refund>();
@@ -235,7 +237,11 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
       setPending(payload);
       const r = await api<Refund>('/pos/refunds', {
         ...payload,
-        ...(code && pin ? { approval: { employeeCode: code, pin } } : {}),
+        ...(qrCredential
+          ? { approval: { qrCredential } }
+          : code && pin
+            ? { approval: { employeeCode: code, pin } }
+            : {}),
       });
       sessionStorage.removeItem(key);
       setPending(undefined);
@@ -348,6 +354,15 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
               onChange={(e) => setPin(e.target.value)}
             />
           </Field>
+          <Field label={t('Or scan manager QR')}>
+            <input
+              type="password"
+              autoComplete="off"
+              value={qrCredential}
+              onChange={(event) => setQrCredential(event.target.value)}
+            />
+          </Field>
+          <CameraBarcodeScanner onScan={setQrCredential} />
         </>
       )}
       <ErrorMessage error={error} />

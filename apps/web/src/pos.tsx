@@ -1,5 +1,6 @@
 import { t, useLanguage, translateError } from './i18n';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
+import { EmployeeQrUnlock } from './employee-qr-unlock';
 import { ReceiptSearch } from './refunds';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -81,14 +82,20 @@ function loadDraft(key: string): Draft {
 }
 // Kept mounted at all times: inserting these inputs while the cashier was still
 // typing an amount moved the caret into the manager code field mid-entry.
-function approvalFields(active = true) {
+function ApprovalFields({ active }: { active: boolean }) {
+  const [qrCredential, setQrCredential] = useState('');
   return (
     <div className="approval-fields" hidden={!active}>
       <div className="notice">
         {t('Manager approval keeps this sale assigned to the current cashier. ')}
       </div>
       <Field label={t('Manager employee code')}>
-        <input name="employeeCode" autoComplete="off" required={active} disabled={!active} />
+        <input
+          name="employeeCode"
+          autoComplete="off"
+          required={active && !qrCredential}
+          disabled={!active}
+        />
       </Field>
       <Field label={t('Manager PIN')}>
         <input
@@ -96,19 +103,32 @@ function approvalFields(active = true) {
           type="password"
           inputMode="numeric"
           pattern="[0-9]{6}"
-          required={active}
+          required={active && !qrCredential}
           disabled={!active}
           maxLength={6}
           autoComplete="off"
         />
       </Field>
+      <Field label={t('Or scan manager QR')}>
+        <input
+          name="qrCredential"
+          type="password"
+          autoComplete="off"
+          value={qrCredential}
+          onChange={(event) => setQrCredential(event.target.value)}
+          disabled={!active}
+        />
+      </Field>
+      <CameraBarcodeScanner disabled={!active} onScan={setQrCredential} />
     </div>
   );
 }
 function approvalFrom(data: FormData) {
-  return data.get('employeeCode')
-    ? { employeeCode: String(data.get('employeeCode')), pin: String(data.get('pin')) }
-    : undefined;
+  return data.get('qrCredential')
+    ? { qrCredential: String(data.get('qrCredential')) }
+    : data.get('employeeCode')
+      ? { employeeCode: String(data.get('employeeCode')), pin: String(data.get('pin')) }
+      : undefined;
 }
 export function PosPage() {
   useLanguage();
@@ -198,7 +218,7 @@ export function PosPage() {
           </div>
           <h1>{t('Ready for your shift?')}</h1>
           <p className="muted">
-            {t('Use your employee code and six-digit PIN to unlock this register.')}
+            {t('Use your employee code and PIN, or scan your employee QR code.')}
           </p>
           <form
             onSubmit={(e) => {
@@ -238,6 +258,10 @@ export function PosPage() {
               <ArrowRight size={16} />
             </Button>
           </form>
+          <EmployeeQrUnlock
+            disabled={login.isPending}
+            onUnlock={(qrCredential) => login.mutate({ qrCredential })}
+          />
           {!value.employees?.length && (
             <p className="notice">
               {t('No employees have a PIN yet. Set one in Team using management login. ')}
@@ -355,7 +379,7 @@ function ShiftForm({
           <Field label={t('Closing notes')}>
             <textarea name="notes" maxLength={500} rows={2} />
           </Field>
-          {approvalFields(needsApproval)}
+          <ApprovalFields active={needsApproval} />
           <p className="muted">
             {t(
               'Closing makes this shift’s totals permanent. Finish or hold your cart before closing. ',
@@ -1193,7 +1217,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                 </strong>
               </p>
             )}
-          {approvalFields(needsApproval)}
+          <ApprovalFields active={needsApproval} />
           <ErrorMessage error={checkout.error} />
           <ErrorMessage error={message || storageError} />
           <Button className="full" disabled={checkout.isPending}>

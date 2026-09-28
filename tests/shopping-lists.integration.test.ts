@@ -373,4 +373,103 @@ describe.sequential('shopping-list planning and conversion', () => {
       current.version,
     );
   });
+  it('groups generated products by category and applies separate stock limits', async () => {
+    const entries = [
+      { name: 'Limited piece', sku: 'LIMIT-PIECE', category: 'Snacks', unit: 'piece', stock: '3' },
+      {
+        name: 'Above piece limit',
+        sku: 'ABOVE-PIECE',
+        category: 'Snacks',
+        unit: 'piece',
+        stock: '8',
+      },
+      {
+        name: 'Limited weight',
+        sku: 'LIMIT-WEIGHT',
+        category: 'Produce',
+        unit: 'kilogram',
+        stock: '1.250',
+      },
+    ];
+    const ids = new Map<string, string>();
+    for (const entry of entries) {
+      const created = await manager.request('/products', {
+        name: entry.name,
+        sku: entry.sku,
+        category: entry.category,
+        unit: entry.unit,
+        price: '10',
+        cost: '5',
+        taxRate: '0',
+        minStock: '0',
+        barcodes: [],
+      });
+      expect(created.status).toBe(201);
+      ids.set(entry.sku, created.body.id);
+      expect(
+        (
+          await manager.request('/inventory/adjustments', {
+            requestId: requestId(),
+            productId: created.body.id,
+            quantity: entry.stock,
+            reason: 'opening_balance',
+          })
+        ).status,
+      ).toBe(201);
+    }
+    const result = await manager.request('/shopping-lists', {
+      requestId: requestId(),
+      name: 'Thresholds',
+      pieceStockLimit: '3',
+      kilogramStockLimit: '1.5',
+    });
+    expect(result.status).toBe(201);
+    const created = result.body;
+    const piece = created.lines.find((line: any) => line.productId === ids.get('LIMIT-PIECE'));
+    const weight = created.lines.find((line: any) => line.productId === ids.get('LIMIT-WEIGHT'));
+    expect(piece).toMatchObject({ category: 'Snacks', target: '6.000', quantity: '3.000' });
+    expect(weight).toMatchObject({ category: 'Produce', target: '3.000', quantity: '1.750' });
+    expect(created.lines.some((line: any) => line.productId === ids.get('ABOVE-PIECE'))).toBe(
+      false,
+    );
+    expect(created.sections.find((section: any) => section.category === 'Snacks').id).toBe(
+      piece.sectionId,
+    );
+    expect(created.sections.find((section: any) => section.category === 'Produce').id).toBe(
+      weight.sectionId,
+    );
+    expect((await manager.request('/shopping-lists/' + created.id)).body.sections).toEqual(
+      created.sections,
+    );
+    const customGroup = { id: requestId(), name: 'Weekend order' };
+    const saved = await manager.request('/shopping-lists/' + created.id, {
+      requestId: requestId(),
+      version: created.version,
+      name: created.name,
+      notes: '',
+      sections: [...created.sections, customGroup],
+      lines: editLines(created).map((line: any) => ({
+        ...line,
+        sectionId:
+          line.productId === ids.get('LIMIT-PIECE')
+            ? customGroup.id
+            : created.lines.find((savedLine: any) => savedLine.productId === line.productId)
+                .sectionId,
+      })),
+    });
+    expect(saved.status).toBe(201);
+    expect(
+      saved.body.lines.find((line: any) => line.productId === ids.get('LIMIT-PIECE')).sectionId,
+    ).toBe(customGroup.id);
+    expect(saved.body.sections).toContainEqual(customGroup);
+    expect(
+      (
+        await manager.request('/shopping-lists', {
+          requestId: requestId(),
+          name: 'Invalid',
+          pieceStockLimit: '3.5',
+        })
+      ).status,
+    ).toBe(400);
+  });
 });

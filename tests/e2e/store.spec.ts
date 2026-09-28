@@ -25,7 +25,7 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await dialog.getByLabel('Tax rate (%)').fill('15');
   await dialog.getByRole('button', { name: 'Create product' }).click();
   await expect(page.getByRole('cell', { name: 'Sourdough bread BREAD-01' })).toBeVisible();
-  await expect(page.getByRole('cell', { name: 'PLU 1', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^04\d{11}$/ }).first()).toBeVisible();
   await page.getByRole('button', { name: 'Edit Sourdough bread' }).click();
   await dialog.getByLabel('Barcodes (optional)').fill('7090123456789');
   await dialog.getByRole('button', { name: 'Save changes' }).click();
@@ -78,10 +78,18 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await dialog.getByRole('button', { name: 'Save employee' }).click();
   await expect(dialog).not.toBeVisible();
   await page.getByRole('button', { name: 'Add employee' }).click();
+  await dialog.getByRole('button', { name: 'Generate employee code' }).click();
+  await expect(dialog.getByRole('textbox', { name: 'Employee code' })).toHaveValue(
+    /^EMP-[A-Z0-9]{5}$/,
+  );
   await dialog.getByLabel('Employee name').fill('Anna Cashier');
-  await dialog.getByLabel('Employee code').fill('ANNA');
+  await dialog.getByLabel('Employee code', { exact: true }).fill('ANNA');
   await dialog.getByLabel('Register PIN').fill('123456');
   await dialog.getByRole('button', { name: 'Save employee' }).click();
+  await expect(
+    page.getByRole('dialog', { name: 'Employee QR credential' }).locator('.employee-qr-print svg'),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Close dialog' }).click();
   await expect(page.getByRole('cell', { name: 'Anna Cashier PIN-only account' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Checkout', exact: true })).toHaveCount(0);
   await page.getByRole('link', { name: 'Devices', exact: true }).click();

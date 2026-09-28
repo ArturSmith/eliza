@@ -16,7 +16,15 @@ import { z } from 'zod';
 import { employeeSchema, pinSchema } from '@eliza/contracts';
 import { AuthModule } from './auth.js';
 import { Database } from './database.js';
-import { AccessGuard, type AuthRequest, Require, parse, passwordHash, token } from './security.js';
+import {
+  AccessGuard,
+  type AuthRequest,
+  Require,
+  parse,
+  passwordHash,
+  token,
+  hash,
+} from './security.js';
 import { Operations, audit } from './operations.js';
 @Controller('team')
 @UseGuards(AccessGuard)
@@ -41,6 +49,7 @@ export class TeamController {
       );
     const pin = await passwordHash(body.pin),
       password = await passwordHash(body.password || token());
+    const qrCredential = 'ELIZA-STAFF:' + token();
     const { user, store, device } = req.context;
     return this.operations.transaction(async (client) => {
       const roleIds = [...new Set(body.roleIds?.length ? body.roleIds : [body.roleId])];
@@ -80,6 +89,10 @@ export class TeamController {
         'INSERT INTO employee_roles(employee_id,role_id,store_id) SELECT $1,unnest($2::uuid[]),$3',
         [employee.id, roleIds, store.id],
       );
+      await client.query(
+        'INSERT INTO employee_qr_credentials(employee_id,store_id,token_hash) VALUES($1,$2,$3)',
+        [employee.id, store.id, hash(qrCredential)],
+      );
       await audit(
         client,
         { storeId: store.id, employeeId: user.id, deviceId: device.id },
@@ -87,7 +100,34 @@ export class TeamController {
         employee.id,
         { name: body.name, employeeCode: body.employeeCode, roleId: body.roleId },
       );
-      return employee;
+      return { id: employee.id, qrCredential };
+    });
+  }
+  @Post(':id/qr') @Require('team.manage') async issueQr(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthRequest,
+  ) {
+    const { user, store, device } = req.context;
+    const qrCredential = 'ELIZA-STAFF:' + token();
+    return this.operations.transaction(async (client) => {
+      const employee = (
+        await client.query('SELECT id FROM employees WHERE id=$1 AND store_id=$2', [id, store.id])
+      ).rows[0];
+      if (!employee) throw new NotFoundException('Employee not found.');
+      const issued = await client.query(
+        'INSERT INTO employee_qr_credentials(employee_id,store_id,token_hash) VALUES($1,$2,$3) ON CONFLICT (employee_id) DO NOTHING RETURNING employee_id',
+        [id, store.id, hash(qrCredential)],
+      );
+      if (!issued.rowCount)
+        throw new BadRequestException('This employee already has a QR credential.');
+      await audit(
+        client,
+        { storeId: store.id, employeeId: user.id, deviceId: device.id },
+        'Employee QR issued',
+        id,
+        {},
+      );
+      return { qrCredential };
     });
   }
   @Patch(':id') @Require('team.manage') async update(

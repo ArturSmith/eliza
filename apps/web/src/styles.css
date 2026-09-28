@@ -864,10 +864,21 @@ footer {
 .search-box input {
   border: 0;
   background: transparent;
-  width: 100%;
+  flex: 1;
+  width: 0;
   padding: 12px 0;
   font-size: 12px;
   min-width: 0;
+}
+.search-box > .camera-scan-button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: transparent;
+  color: #617461;
+}
+.search-box > .camera-scan-button:hover {
+  background: #f1f6ef;
 }
 .search-box input:focus {
   outline: none;
@@ -2641,7 +2652,17 @@ select {
 }
 
 .shopping-section-add {
-  margin-bottom: 20px;
+  margin: 16px 0 20px;
+}
+.shopping-stock-limits {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (max-width: 600px) {
+  .shopping-stock-limits {
+    grid-template-columns: 1fr;
+  }
 }
 .shopping-section + .shopping-section {
   margin-top: 24px;
@@ -2964,6 +2985,46 @@ input.shopping-section-title {
   max-width: 100%;
   height: auto;
 }
+.employee-code-control {
+  display: flex;
+  gap: 8px;
+}
+.employee-code-control input {
+  flex: 1;
+  min-width: 0;
+}
+.employee-qr-print {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  text-align: center;
+  background: #fff;
+}
+.employee-qr-print p {
+  max-width: 280px;
+  margin: 0;
+  font-size: 12px;
+}
+.employee-qr-unlock {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+.employee-qr-unlock > p {
+  margin: 0 0 10px;
+}
+.employee-qr-unlock form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.employee-qr-unlock input {
+  flex: 1 1 170px;
+  min-width: 0;
+}
 @media print {
   body:has(.product-barcode-print) #root,
   body:has(.product-barcode-print) .dialog-overlay,
@@ -2983,6 +3044,27 @@ input.shopping-section-title {
   }
   .product-barcode-print {
     width: 80mm;
+    margin: 0;
+    padding: 5mm;
+  }
+  body:has(.employee-qr-print) #root,
+  body:has(.employee-qr-print) .dialog-overlay,
+  body:has(.employee-qr-print) .dialog-content > :not(.employee-qr-print) {
+    display: none !important;
+  }
+  body:has(.employee-qr-print) .dialog-content {
+    position: static;
+    transform: none;
+    width: auto;
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+    border: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+  .employee-qr-print {
+    width: 85mm;
     margin: 0;
     padding: 5mm;
   }

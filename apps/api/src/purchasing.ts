@@ -154,6 +154,7 @@ export class PurchasingController {
           ? { ...products.get(line.productId), ...line }
           : {
               name: line.label,
+              category: '',
               sku: '',
               unit: 'piece',
               active: true,
@@ -196,22 +197,42 @@ export class PurchasingController {
     const b = parse(shoppingListCreateSchema, input);
     return this.run(req, b.requestId, 'shopping-create', b, async (c) => {
       const store = req.context.store.id;
-      const products = (await shoppingProducts(c, store)).filter(
-        (p) => p.active && toScaled(p.stock, 3) <= toScaled(p.minStock, 3),
-      );
+      const products = (await shoppingProducts(c, store)).filter((p) => {
+        const limit =
+          p.unit === 'piece'
+            ? b.pieceStockLimit
+            : p.unit === 'kilogram'
+              ? b.kilogramStockLimit
+              : undefined;
+        return p.active && toScaled(p.stock, 3) <= toScaled(limit ?? p.minStock, 3);
+      });
       if (products.length > 500)
         throw new BadRequestException('A shopping list supports up to 500 products.');
+      const sections = [...new Set(products.map((p) => p.category as string))]
+        .sort((a, b) => a.localeCompare(b))
+        .map((category) => ({ id: randomUUID(), name: category, category }));
       const list = (
         await c.query(
-          'INSERT INTO shopping_lists(store_id,name,notes) VALUES($1,$2,$3) RETURNING id',
-          [store, b.name, b.notes],
+          'INSERT INTO shopping_lists(store_id,name,notes,sections) VALUES($1,$2,$3,$4::jsonb) RETURNING id',
+          [store, b.name, b.notes, JSON.stringify(sections)],
         )
       ).rows[0];
       for (const [index, p] of products.entries()) {
-        const target = p.preferredTarget ?? initialReorderTarget(p.minStock, p.unit);
+        const limit =
+          p.unit === 'piece'
+            ? b.pieceStockLimit
+            : p.unit === 'kilogram'
+              ? b.kilogramStockLimit
+              : undefined;
+        const suggestedTarget = initialReorderTarget(limit ?? p.minStock, p.unit);
+        const target =
+          p.preferredTarget &&
+          (!limit || toScaled(p.preferredTarget, 3) >= toScaled(suggestedTarget, 3))
+            ? p.preferredTarget
+            : suggestedTarget;
         const quantity = suggestedOrderQuantity(target, p.stock, p.incoming, p.drafts, p.unit);
         await c.query(
-          'INSERT INTO shopping_list_lines(store_id,list_id,product_id,target_stock,quantity,unit_cost,tax_rate,supplier_id,position) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+          'INSERT INTO shopping_list_lines(store_id,list_id,product_id,target_stock,quantity,unit_cost,tax_rate,supplier_id,position,section_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
           [
             store,
             list.id,
@@ -222,6 +243,7 @@ export class PurchasingController {
             p.taxRate,
             p.preferredSupplierId,
             index,
+            sections.find((section) => section.category === p.category)?.id ?? null,
           ],
         );
       }

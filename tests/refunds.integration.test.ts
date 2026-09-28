@@ -98,6 +98,7 @@ afterAll(async () => {
 });
 
 let refundBody: any;
+let ownerQr: string;
 describe.sequential('receipt search and refunds', () => {
   it('sets up an approved cashier sale', async () => {
     expect((await manager.request('/auth/setup', account)).status).toBe(201);
@@ -113,6 +114,7 @@ describe.sequential('receipt search and refunds', () => {
       },
       'PATCH',
     );
+    ownerQr = (await manager.request('/team/' + session.user.id + '/qr', {})).body.qrCredential;
     const roles = (await manager.request('/team/roles')).body;
     await manager.request('/team', {
       name: 'Anna',
@@ -172,7 +174,7 @@ describe.sequential('receipt search and refunds', () => {
     expect((await db.pool.query('SELECT failures FROM pin_attempts')).rows[0].failures).toBe(1);
   });
   it('commits one refund for concurrent retries and restores stock and cash correctly', async () => {
-    refundBody.approval = { employeeCode: 'OWNER', pin: '654321' };
+    refundBody.approval = { qrCredential: ownerQr };
     const results = await Promise.all([
       register.request('/pos/refunds', refundBody),
       register.request('/pos/refunds', refundBody),

@@ -2,7 +2,8 @@ import './team-roles.css';
 import { t, useLanguage } from './i18n';
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Plus, Pencil, KeyRound, Users } from 'lucide-react';
+import { Plus, Pencil, KeyRound, Users, RefreshCw } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import type { Employee, Role } from '@eliza/contracts';
 import { api, refresh, useEmployees, useSession } from './api';
 import { Field, ErrorMessage } from './forms';
@@ -20,14 +21,45 @@ export function TeamManagementPage() {
   });
   const [open, setOpen] = useState(false);
   const [employee, setEmployee] = useState<Employee | null>(null);
+  const [employeeCode, setEmployeeCode] = useState('');
+  const [issuedQr, setIssuedQr] = useState<{ name: string; credential: string } | null>(null);
   const mutation = useMutation({
     mutationFn: (body: unknown) =>
-      api(employee ? `/team/${employee.id}` : '/team', body, employee ? 'PATCH' : 'POST'),
-    onSuccess: () => {
+      api<{ id?: string; qrCredential?: string }>(
+        employee ? `/team/${employee.id}` : '/team',
+        body,
+        employee ? 'PATCH' : 'POST',
+      ),
+    onSuccess: (result, body) => {
       void refresh();
       setOpen(false);
+      if (result.qrCredential)
+        setIssuedQr({
+          name: String((body as { name: string }).name),
+          credential: result.qrCredential,
+        });
     },
   });
+  const issueQr = useMutation({
+    mutationFn: (person: Employee) => api<{ qrCredential: string }>(`/team/${person.id}/qr`, {}),
+    onSuccess: (result, person) => {
+      void refresh();
+      setIssuedQr({ name: person.name, credential: result.qrCredential });
+    },
+  });
+  function generateEmployeeCode() {
+    let next = '';
+    do {
+      const bytes = crypto.getRandomValues(new Uint8Array(5));
+      next =
+        'EMP-' +
+        [...bytes]
+          .map((byte) => (byte % 36).toString(36))
+          .join('')
+          .toUpperCase();
+    } while (query.data?.some((person) => person.employeeCode === next));
+    setEmployeeCode(next);
+  }
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
@@ -57,12 +89,13 @@ export function TeamManagementPage() {
         <div>
           <div className="eyebrow">{t('YOUR PEOPLE')}</div>
           <h1>{t('Team')}</h1>
-          <p className="muted">{t('Set up employee access and fast, six-digit register PINs.')}</p>
+          <p className="muted">{t('Set up employee roles, PINs, and printable QR access.')}</p>
         </div>
         {canManage && (
           <Button
             onClick={() => {
               setEmployee(null);
+              setEmployeeCode('');
               mutation.reset();
               setOpen(true);
             }}
@@ -75,10 +108,10 @@ export function TeamManagementPage() {
       <div className="notice inventory-notice">
         <KeyRound size={20} />
         <div>
-          <strong>{t('PINs are for enrolled registers.')}</strong>
+          <strong>{t('PINs and QR codes are for assigned devices.')}</strong>
           <span>
             {t(
-              'Back-office access requires an email and password. Set your own PIN here before using checkout. ',
+              'Back-office access requires an email and password. Device access uses a PIN or employee QR code.',
             )}
           </span>
         </div>
@@ -114,7 +147,10 @@ export function TeamManagementPage() {
                       ))}
                     </div>
                   </td>
-                  <td>{e.hasPin ? t('Set') : t('Not set')}</td>
+                  <td>
+                    {e.hasPin ? t('Set') : t('Not set')}
+                    <small>{e.hasQr ? t('QR issued') : t('No QR')}</small>
+                  </td>
                   <td>
                     <span className={`badge badge-${e.active ? 'green' : 'gray'}`}>
                       {e.active ? t('Active') : t('Inactive')}
@@ -126,6 +162,7 @@ export function TeamManagementPage() {
                         variant="ghost"
                         onClick={() => {
                           setEmployee(e);
+                          setEmployeeCode(e.employeeCode);
                           mutation.reset();
                           setOpen(true);
                         }}
@@ -134,6 +171,15 @@ export function TeamManagementPage() {
                         <Pencil size={15} />
                         {t('Edit access ')}
                       </Button>
+                      {!e.hasQr && (
+                        <Button
+                          variant="ghost"
+                          onClick={() => issueQr.mutate(e)}
+                          disabled={issueQr.isPending}
+                        >
+                          {t('Issue QR')}
+                        </Button>
+                      )}
                     </td>
                   )}
                 </tr>
@@ -156,15 +202,31 @@ export function TeamManagementPage() {
             <input name="name" defaultValue={employee?.name} required maxLength={120} />
           </Field>
           <div className="form-grid">
-            <Field label={t('Employee code')}>
-              <input
-                name="employeeCode"
-                defaultValue={employee?.employeeCode}
-                required
-                maxLength={20}
-                placeholder={t('e.g. ANNA')}
-              />
-            </Field>
+            <div className="field">
+              <label htmlFor="team-employee-code">{t('Employee code')}</label>
+              <span className="employee-code-control">
+                <input
+                  id="team-employee-code"
+                  name="employeeCode"
+                  value={employeeCode}
+                  onChange={(event) => setEmployeeCode(event.target.value)}
+                  required
+                  maxLength={20}
+                  placeholder={t('e.g. ANNA')}
+                />
+                {!employee && (
+                  <button
+                    type="button"
+                    className="button button-outline button-icon"
+                    aria-label={t('Generate employee code')}
+                    title={t('Generate employee code')}
+                    onClick={generateEmployeeCode}
+                  >
+                    <RefreshCw size={17} />
+                  </button>
+                )}
+              </span>
+            </div>
           </div>
           <fieldset className="field">
             <legend>{t('Roles')}</legend>
@@ -248,6 +310,22 @@ export function TeamManagementPage() {
             </Button>
           </div>
         </form>
+      </Dialog>
+      <ErrorMessage error={issueQr.error} />
+      <Dialog
+        open={!!issuedQr}
+        onOpenChange={(value) => !value && setIssuedQr(null)}
+        title={t('Employee QR credential')}
+        description={t('Print this private code now. It cannot be viewed again.')}
+      >
+        {issuedQr && (
+          <div className="employee-qr-print">
+            <strong>{issuedQr.name}</strong>
+            <QRCodeSVG value={issuedQr.credential} size={220} includeMargin />
+            <p>{t('Keep this QR private. Anyone holding it can sign in as this employee.')}</p>
+          </div>
+        )}
+        <Button onClick={() => window.print()}>{t('Print employee QR')}</Button>
       </Dialog>
     </>
   );
