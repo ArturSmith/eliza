@@ -413,6 +413,8 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   useLanguage();
   const storageKey = `eliza-cart:${context.store!.id}:${context.device!.id}:${context.operator!.id}:${context.shift?.id ?? 'unopened'}`;
   const [draft, setDraft] = useState(() => loadDraft(storageKey));
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
   const [storageError, setStorageError] = useState<unknown>(null);
   const [held, setHeld] = useState<Draft[]>(() => {
     try {
@@ -616,30 +618,40 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     return () => window.clearTimeout(timer);
   }, [noShift, modal, receipt, weighted, frozen]);
   function add(product: PosProduct, amount = '1') {
-    if (frozen) return;
+    if (frozen) return false;
     if (noShift) {
       setWeighted(null);
       setMessage('Start your shift before adding items to the cart.');
-      return;
+      return false;
     }
+    if (!hasStock(product, amount)) return false;
     setMessage('');
     setScanError('');
-    setDraft((d) => {
-      const index = d.lines.findIndex((l) => l.product.id === product.id);
-      if (index >= 0) {
-        const lines = d.lines.map((l, i) =>
-          i === index
-            ? { ...l, quantity: fromScaled(toScaled(l.quantity, 3) + toScaled(amount, 3), 3) }
-            : l,
-        );
-        return { ...d, lines };
-      }
-      const { image: _image, source: _source, ...cartProduct } = product;
-      return { ...d, lines: [...d.lines, { product: cartProduct, quantity: amount }] };
-    });
+    const current = draftRef.current;
+    const index = current.lines.findIndex((l) => l.product.id === product.id);
+    const next =
+      index >= 0
+        ? {
+            ...current,
+            lines: current.lines.map((l, i) =>
+              i === index
+                ? { ...l, quantity: fromScaled(toScaled(l.quantity, 3) + toScaled(amount, 3), 3) }
+                : l,
+            ),
+          }
+        : (() => {
+            const { image: _image, source: _source, ...cartProduct } = product;
+            return {
+              ...current,
+              lines: [...current.lines, { product: cartProduct, quantity: amount }],
+            };
+          })();
+    draftRef.current = next;
+    setDraft(next);
     setSearch('');
     setWeighted(null);
     setTimeout(() => scan.current?.focus(), 0);
+    return true;
   }
   function choose(p: PosProduct) {
     if (frozen) return;
@@ -661,7 +673,8 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       rejectScan(t('Out of stock: {value0}. The item was not added.', { value0: product.name }));
       return false;
     }
-    const inCart = draft.lines.find((line) => line.product.id === product.id)?.quantity ?? '0';
+    const inCart =
+      draftRef.current.lines.find((line) => line.product.id === product.id)?.quantity ?? '0';
     if (toScaled(inCart, 3) + toScaled(amount, 3) > remaining) {
       rejectScan(t('Not enough stock for {value0}.', { value0: product.name }));
       return false;
@@ -712,9 +725,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
           rejectScan('Scale quantity is too large.');
           return;
         }
-        if (!hasStock(matching[0], amount)) return;
-        add(matching[0], amount);
-        void playScanSound();
+        if (add(matching[0], amount)) void playScanSound();
         return;
       }
     } catch (error) {
@@ -729,12 +740,10 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       return;
     }
     if (exact.length === 1) {
-      if (!hasStock(exact[0], ['piece', 'pack', 'box'].includes(exact[0].unit) ? '1' : '0.001'))
-        return;
       if (['piece', 'pack', 'box'].includes(exact[0].unit)) {
-        add(exact[0]);
-        void playScanSound();
+        if (add(exact[0])) void playScanSound();
       } else {
+        if (!hasStock(exact[0], '0.001')) return;
         choose(exact[0]);
         void playScanSound();
       }
@@ -1067,14 +1076,19 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                   currency={currency}
                   discount={draft.pending?.discountPercent ?? '0'}
                   disabled={frozen}
-                  onChange={(value) =>
+                  onChange={(value) => {
+                    if (toScaled(value, 3) > toScaled(l.product.stock, 3)) {
+                      rejectScan(t('Not enough stock for {value0}.', { value0: l.product.name }));
+                      return false;
+                    }
                     setDraft((d) => ({
                       ...d,
                       lines: d.lines.map((i) =>
                         i.product.id === l.product.id ? { ...i, quantity: value } : i,
                       ),
-                    }))
-                  }
+                    }));
+                    return true;
+                  }}
                   onRemove={() =>
                     setDraft((d) => ({
                       ...d,
@@ -1415,7 +1429,7 @@ function CartLine({
   currency: string;
   discount: string;
   disabled: boolean;
-  onChange: (value: string) => void;
+  onChange: (value: string) => boolean;
   onRemove: () => void;
 }) {
   useLanguage();
@@ -1446,9 +1460,12 @@ function CartLine({
           disabled={disabled}
           onChange={(e) => setQuantityInput(e.target.value)}
           onBlur={() => {
-            if (/^\d{1,9}(\.\d{1,3})?$/.test(quantityInput) && toScaled(quantityInput, 3) > 0n)
-              onChange(quantityInput);
-            else setQuantityInput(line.quantity);
+            if (
+              !/^\d{1,9}(\.\d{1,3})?$/.test(quantityInput) ||
+              toScaled(quantityInput, 3) <= 0n ||
+              !onChange(quantityInput)
+            )
+              setQuantityInput(line.quantity);
           }}
         />
         <span>{t(line.product.unit ?? '')}</span>

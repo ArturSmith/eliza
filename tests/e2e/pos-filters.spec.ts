@@ -34,7 +34,7 @@ test('filters, favorites and paginates the checkout catalog', async ({ page }) =
     await post('/inventory/adjustments', {
       requestId: crypto.randomUUID(),
       productId: product.id,
-      quantity: '10',
+      quantity: i === 24 ? '2' : '10',
       reason: 'opening_balance',
     });
   }
@@ -106,13 +106,31 @@ test('filters, favorites and paginates the checkout catalog', async ({ page }) =
   await page.getByLabel('Scan or search products').press('Enter');
   await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('1');
   await page.evaluate(() => {
-    const input = document.querySelector<HTMLInputElement>('[aria-label="Scan or search products"]');
+    const input = document.querySelector<HTMLInputElement>(
+      '[aria-label="Scan or search products"]',
+    );
     if (!input) throw new Error('Checkout barcode input missing');
     // Simulate a scanner submitting while its last input has not reached React state.
     input.value = 'BAR24';
     input.closest('form')?.requestSubmit();
   });
   await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('2.000');
+  await page.getByLabel('Scan or search products').fill('BAR24');
+  await page.getByLabel('Scan or search products').press('Enter');
+  await expect(page.getByRole('alert')).toContainText('Not enough stock for Product 24.');
+  await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('2.000');
+  await page.getByLabel('Scan or search products').fill('Product 24');
+  await page
+    .locator('.pos-product-card')
+    .filter({ hasText: 'Product 24' })
+    .locator('.pos-product')
+    .click();
+  await expect(page.getByRole('alert')).toContainText('Not enough stock for Product 24.');
+  await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('2.000');
+  await page.getByLabel('Quantity for Product 24').fill('3');
+  await page.getByLabel('Quantity for Product 24').blur();
+  await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('2.000');
+  await expect(page.getByRole('alert')).toContainText('Not enough stock for Product 24.');
   await page.getByLabel('Scan or search products').fill('EMPTY');
   await page.getByLabel('Scan or search products').press('Enter');
   await expect(page.getByRole('alert')).toContainText('Out of stock: Unavailable');
