@@ -760,7 +760,9 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   function scanItem(e: FormEvent) {
     e.preventDefault();
     prepareScanSound();
-    void scanCode(search.trim());
+    // A hardware scanner can submit before React has rendered its last input change.
+    // Read the submitted field itself so the final barcode digit is never dropped.
+    void scanCode(scan.current?.value.trim() ?? '');
   }
   function submitPayment(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
