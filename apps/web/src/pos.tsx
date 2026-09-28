@@ -75,7 +75,11 @@ function loadDraft(key: string): Draft {
   try {
     const value = JSON.parse(sessionStorage.getItem(key) ?? 'null');
     const parsed = draftSchema.safeParse(value);
-    return parsed.success ? parsed.data : fresh();
+    return parsed.success
+      ? parsed.data.pending
+        ? parsed.data
+        : { ...parsed.data, discount: '0' }
+      : fresh();
   } catch {
     return fresh();
   }
@@ -415,7 +419,8 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       return z
         .array(draftSchema)
         .max(10)
-        .parse(JSON.parse(sessionStorage.getItem(`${storageKey}:held`) ?? '[]'));
+        .parse(JSON.parse(sessionStorage.getItem(`${storageKey}:held`) ?? '[]'))
+        .map((cart) => ({ ...cart, discount: '0' }));
     } catch {
       return [];
     }
@@ -479,29 +484,32 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   function prepareScanSound() {
     try {
       scanSound.current ??= new AudioContext();
-      void scanSound.current.resume();
+      void scanSound.current.resume().catch(() => {});
     } catch {
       // Checkout still works if this device has no audio output.
     }
   }
-  function playScanSound() {
+  async function playScanSound() {
     prepareScanSound();
     const audio = scanSound.current;
     if (!audio) return;
-    const start = audio.currentTime;
-    for (const [index, frequency] of [880, 1320].entries()) {
-      const oscillator = audio.createOscillator();
-      const volume = audio.createGain();
-      const from = start + index * 0.09;
-      oscillator.type = 'sine';
-      oscillator.frequency.value = frequency;
-      volume.gain.setValueAtTime(0.0001, from);
-      volume.gain.exponentialRampToValueAtTime(0.12, from + 0.01);
-      volume.gain.exponentialRampToValueAtTime(0.0001, from + 0.08);
-      oscillator.connect(volume).connect(audio.destination);
-      oscillator.start(from);
-      oscillator.stop(from + 0.09);
+    try {
+      if (audio.state === 'suspended') await audio.resume();
+    } catch {
+      return;
     }
+    const start = audio.currentTime;
+    const oscillator = audio.createOscillator();
+    const volume = audio.createGain();
+    oscillator.type = 'square';
+    oscillator.frequency.value = 1200;
+    volume.gain.setValueAtTime(0.0001, start);
+    volume.gain.exponentialRampToValueAtTime(0.035, start + 0.005);
+    volume.gain.setValueAtTime(0.035, start + 0.075);
+    volume.gain.exponentialRampToValueAtTime(0.0001, start + 0.095);
+    oscillator.connect(volume).connect(audio.destination);
+    oscillator.start(start);
+    oscillator.stop(start + 0.1);
   }
 
   const [modal, setModal] = useState<
@@ -556,7 +564,12 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   }, []);
   const totals = draft.lines.reduce(
     (s, l) => {
-      const a = calculateLine(l.product.price, l.quantity, l.product.taxRate, draft.discount);
+      const a = calculateLine(
+        l.product.price,
+        l.quantity,
+        l.product.taxRate,
+        draft.pending?.discountPercent ?? '0',
+      );
       return {
         subtotal: s.subtotal + toScaled(a.gross, 2),
         discount: s.discount + toScaled(a.discount, 2),
@@ -569,7 +582,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   const currency = context.store!.currency;
   const total = fromScaled(totals.total, 2);
   const needsApproval =
-    toScaled(draft.discount, 2) > 1000n &&
+    toScaled(draft.pending?.discountPercent ?? '0', 2) > 1000n &&
     !context.operator!.permissions.includes('discount.approve');
   const checkout = useMutation({
     mutationFn: (body: z.infer<typeof saleSchema>) => api<Receipt>('/pos/sales', body),
@@ -583,7 +596,12 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     },
     onError: (error) => {
       if (error instanceof ApiError && [400, 409].includes(error.status))
-        setDraft((d) => ({ ...d, pending: undefined, requestId: crypto.randomUUID() }));
+        setDraft((d) => ({
+          ...d,
+          discount: '0',
+          pending: undefined,
+          requestId: crypto.randomUUID(),
+        }));
     },
   });
   const frozen = !!draft.pending || checkout.isPending;
@@ -660,7 +678,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
           return;
         }
         add(matching[0], amount);
-        playScanSound();
+        void playScanSound();
         return;
       }
     } catch (error) {
@@ -677,15 +695,19 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     if (exact.length === 1) {
       if (['piece', 'pack', 'box'].includes(exact[0].unit)) {
         add(exact[0]);
-        playScanSound();
-      } else choose(exact[0]);
+        void playScanSound();
+      } else {
+        choose(exact[0]);
+        void playScanSound();
+      }
     } else if (exact.length > 1)
       setMessage('This code matches multiple products. Select the correct product below.');
     else setMessage('Barcode not registered. Search by product name or ask a manager to add it.');
   }
   function scanItem(e: FormEvent) {
     e.preventDefault();
-    scanCode(search.trim());
+    prepareScanSound();
+    void scanCode(search.trim());
   }
   function submitPayment(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -699,7 +721,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         expectedPrice: l.product.price,
         expectedTaxRate: l.product.taxRate,
       })),
-      discountPercent: draft.discount,
+      discountPercent: '0',
       payment: { method, tendered: method === 'card' ? total : tendered },
     };
     const parsed = saleSchema.safeParse({ ...payload, approval: approvalFrom(data) });
@@ -982,7 +1004,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                   key={l.product.id}
                   line={l}
                   currency={currency}
-                  discount={draft.discount}
+                  discount={draft.pending?.discountPercent ?? '0'}
                   disabled={frozen}
                   onChange={(value) =>
                     setDraft((d) => ({
@@ -1027,27 +1049,17 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                 {held.length})
               </Button>
             </div>
-            <Field label={t('Sale discount (%)')}>
-              <input
-                inputMode="decimal"
-                value={draft.discount}
-                disabled={frozen}
-                onChange={(e) => {
-                  const value = e.target.value || '0';
-                  if (money.safeParse(value).success && toScaled(value, 2) <= 10000n)
-                    setDraft((d) => ({ ...d, discount: value }));
-                }}
-              />
-            </Field>
             <dl className="cart-summary">
               <div>
                 <dt>{t('Subtotal')}</dt>
                 <dd>{formatMoney(fromScaled(totals.subtotal, 2), currency)}</dd>
               </div>
-              <div>
-                <dt>{t('Discount')}</dt>
-                <dd>−{formatMoney(fromScaled(totals.discount, 2), currency)}</dd>
-              </div>
+              {totals.discount > 0n && (
+                <div>
+                  <dt>{t('Discount')}</dt>
+                  <dd>−{formatMoney(fromScaled(totals.discount, 2), currency)}</dd>
+                </div>
+              )}
               <div>
                 <dt>{t('Included tax')}</dt>
                 <dd>{formatMoney(fromScaled(totals.tax, 2), currency)}</dd>

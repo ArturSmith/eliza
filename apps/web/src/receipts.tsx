@@ -81,13 +81,15 @@ export function ReceiptView({
             <dt>{t('Subtotal')}</dt>
             <dd>{formatMoney(receipt.subtotal, receipt.currency)}</dd>
           </div>
-          <div>
-            <dt>
-              {t('Discount (')}
-              {Number(receipt.discountPercent)}%)
-            </dt>
-            <dd>−{formatMoney(receipt.discount, receipt.currency)}</dd>
-          </div>
+          {Number(receipt.discount) > 0 && (
+            <div>
+              <dt>
+                {t('Discount (')}
+                {Number(receipt.discountPercent)}%)
+              </dt>
+              <dd>−{formatMoney(receipt.discount, receipt.currency)}</dd>
+            </div>
+          )}
           <div>
             <dt>{t('Included tax')}</dt>
             <dd>{formatMoney(receipt.tax, receipt.currency)}</dd>

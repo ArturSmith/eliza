@@ -20,8 +20,8 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await dialog.getByLabel('Product name').fill('Sourdough bread');
   await dialog.getByLabel('SKU', { exact: true }).fill('BREAD-01');
   await dialog.getByLabel('Category', { exact: true }).fill('Bakery');
-  await dialog.getByLabel('Selling price').fill('49.90');
   await dialog.getByLabel('Purchase cost').fill('18.50');
+  await dialog.getByLabel('Selling price').fill('49.90');
   await dialog.getByLabel('Tax rate (%)').fill('15');
   await dialog.getByRole('button', { name: 'Create product' }).click();
   await expect(page.getByRole('cell', { name: 'Sourdough bread BREAD-01' })).toBeVisible();
@@ -114,17 +114,14 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.getByRole('button', { name: 'Hold', exact: true }).click();
   await page.getByRole('button', { name: 'Held carts (1)' }).click();
   await dialog.getByRole('button', { name: 'Resume' }).click();
-  await page.getByLabel('Sale discount (%)').fill('20');
+  await expect(page.getByLabel('Sale discount (%)')).toHaveCount(0);
   await page.screenshot({ path: 'test-results/checkout-desktop.png', fullPage: true });
   await page.getByRole('button', { name: 'Take payment', exact: true }).click();
   await dialog.getByLabel('Cash tendered').fill('50');
-  await dialog.getByLabel('Manager employee code').fill('OWNER');
-  await dialog.getByLabel('Manager PIN').fill('654321');
   await dialog.getByRole('button', { name: 'Complete sale', exact: true }).click();
   await expect(dialog.getByRole('heading', { name: 'Sale complete' })).toBeVisible();
-  await expect(dialog.locator('.receipt')).toContainText('NOK 39.92');
+  await expect(dialog.locator('.receipt')).toContainText('NOK 49.90');
   await expect(dialog.locator('.receipt')).toContainText('Anna Cashier');
-  await expect(dialog.locator('.receipt')).toContainText('Approved by Alex Morgan');
   await page.screenshot({ path: 'test-results/checkout-receipt.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Next customer' }).click();
   // Lose a successful response: retrying after reload must recover the same sale.
@@ -176,7 +173,7 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.screenshot({ path: 'test-results/refund-recorded.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await page.getByRole('button', { name: 'Close shift', exact: true }).click();
-  await dialog.getByLabel('Counted cash').fill('139.92');
+  await dialog.getByLabel('Counted cash').fill('149.90');
   await dialog.getByLabel('Closing notes').fill('Drawer balanced');
   await dialog.getByRole('button', { name: 'Close shift', exact: true }).click();
   await expect(page.getByText('No open shift', { exact: true })).toBeVisible();
@@ -207,9 +204,9 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await expect(page.getByRole('region', { name: 'Sales summary' })).toHaveCount(0);
   await page.getByRole('link', { name: 'Analytics', exact: true }).click();
   const summary = page.getByRole('region', { name: 'Sales summary' });
-  await expect(summary).toContainText('NOK 89.82');
+  await expect(summary).toContainText('NOK 99.80');
   await expect(page.getByRole('region', { name: 'Gross profit', exact: true })).toContainText(
-    'NOK 16.21',
+    'NOK 24.89',
   );
   await summary.getByLabel('Group sales by').selectOption('month');
   await summary.getByRole('button', { name: 'Apply filters' }).click();
@@ -225,7 +222,7 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
     await summary.getByLabel('Group sales by').selectOption(group);
     await summary.getByRole('button', { name: 'Apply filters' }).click();
     await expect(summary.getByRole('columnheader', { name: heading, exact: true })).toBeVisible();
-    await expect(summary).toContainText('NOK 89.82');
+    await expect(summary).toContainText('NOK 99.80');
   }
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -240,7 +237,7 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await summary.getByLabel('Group sales by').selectOption('product');
   await summary.getByRole('button', { name: 'Apply filters' }).click();
   await expect(summary.getByRole('region', { name: 'Sales over time', exact: true })).toBeVisible();
-  await expect(summary).toContainText('NOK 89.82');
+  await expect(summary).toContainText('NOK 99.80');
   await expect(summary).toContainText('Average per matching receipt');
   await summary.getByLabel('Product filter').selectOption('');
   await summary.getByLabel('Shift filter').selectOption('');
@@ -253,7 +250,7 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.screenshot({ path: 'test-results/sales-summary.png', fullPage: true });
   await page.getByRole('link', { name: 'Suppliers', exact: true }).click();
   await page.getByRole('button', { name: 'Add supplier', exact: true }).click();
-  await dialog.getByLabel('Supplier code').fill('BAKERY');
+  await dialog.getByRole('textbox', { name: 'Supplier code' }).fill('BAKERY');
   await dialog.getByLabel('Supplier name').fill('Local Bakery');
   await dialog.getByRole('button', { name: 'Save supplier' }).click();
   await expect(page.getByRole('cell', { name: 'Local Bakery BAKERY' })).toBeVisible();
@@ -361,7 +358,7 @@ test('purchase dialog creates suppliers and products and finds barcodes without 
   await draft.getByRole('button', { name: 'Select a supplier', exact: true }).click();
   await page.getByRole('button', { name: 'Add new supplier', exact: true }).click();
   const supplier = page.getByRole('dialog', { name: 'Add supplier', exact: true });
-  await supplier.getByLabel('Supplier code').fill('FRESH');
+  await supplier.getByRole('textbox', { name: 'Supplier code' }).fill('FRESH');
   await supplier.getByLabel('Supplier name').fill('Fresh deliveries');
   await supplier.getByRole('button', { name: 'Save supplier' }).click();
   await expect(supplier).not.toBeVisible();
@@ -379,8 +376,8 @@ test('purchase dialog creates suppliers and products and finds barcodes without 
   await product.getByLabel('Product name').fill('Orange juice');
   await product.getByLabel('SKU', { exact: true }).fill('JUICE-01');
   await product.getByLabel('Category', { exact: true }).fill('Drinks');
-  await product.getByLabel('Selling price').fill('35');
   await product.getByLabel('Purchase cost').fill('20');
+  await product.getByLabel('Selling price').fill('35');
   await product.getByLabel('Barcodes (optional)').fill('7090123456796');
   await product.getByRole('button', { name: 'Create product' }).click();
   await expect(product).not.toBeVisible();
