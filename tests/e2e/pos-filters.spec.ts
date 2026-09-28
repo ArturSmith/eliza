@@ -66,6 +66,7 @@ test('filters, favorites and paginates the checkout catalog', async ({ page }) =
   await post('/pos/login', { employeeCode: 'OWNER', pin: '654321' });
   await post('/pos/shifts', { openingCash: '0', requestId: crypto.randomUUID() });
   await page.goto('/pos');
+  await expect(page.getByLabel('Scan or search products')).toBeFocused();
 
   await expect(page.locator('.pos-product-card')).toHaveCount(20);
   await expect(page.getByText('Unavailable', { exact: true })).toHaveCount(0);
@@ -78,6 +79,7 @@ test('filters, favorites and paginates the checkout catalog', async ({ page }) =
   await page.getByRole('button', { name: 'Favorites', exact: true }).click();
   await expect(page.locator('.pos-product-card')).toHaveCount(1);
   await page.reload();
+  await expect(page.getByLabel('Scan or search products')).toBeFocused();
   await page.getByRole('button', { name: 'Favorites', exact: true }).click();
   await expect(page.locator('.pos-product-card')).toHaveCount(1);
   await page.getByRole('button', { name: 'All products', exact: true }).click();

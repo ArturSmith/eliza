@@ -97,22 +97,42 @@ describe.sequential('foundation against real PostgreSQL', () => {
     const stored = await database.pool.query('SELECT password_hash FROM employees');
     expect(stored.rows[0].password_hash).not.toContain(owner.password);
   });
-  it('creates barcode and barcode-free products', async () => {
+  it('preserves supplied barcodes and generates unique scannable codes when omitted', async () => {
     const result = await request('/products', product);
     expect(result.status).toBe(201);
     productId = result.body.id;
     expect(result.body.stock).toBe('0.000');
+    const generated = await request('/products', {
+      ...product,
+      name: 'Bread',
+      sku: 'BREAD',
+      plu: '',
+      barcodes: [],
+    });
+    expect(generated.status).toBe(201);
+    const code = generated.body.barcodes[0];
+    expect(code).toMatch(/^04\d{11}$/);
+    const digits = [...code].map(Number);
     expect(
-      (
-        await request('/products', {
-          ...product,
-          name: 'Bread',
-          sku: 'BREAD',
-          plu: '',
-          barcodes: [],
-        })
-      ).status,
-    ).toBe(201);
+      (digits.slice(0, 12).reduce((sum, digit, i) => sum + digit * (i % 2 ? 3 : 1), 0) +
+        digits[12]) %
+        10,
+    ).toBe(0);
+    const another = await request('/products', {
+      ...product,
+      name: 'Butter',
+      sku: 'BUTTER',
+      plu: '',
+      barcodes: [],
+    });
+    expect(another.body.barcodes[0]).not.toBe(code);
+    const edited = await request(
+      `/products/${generated.body.id}`,
+      { ...product, name: 'Bread', sku: 'BREAD', plu: '', barcodes: [] },
+      ownerCookie,
+      'PATCH',
+    );
+    expect(edited.body.barcodes).toHaveLength(1);
   });
   it('saves, preserves, and removes product photos and rejects unsafe image inputs', async () => {
     const image = 'data:image/jpeg;base64,/9j/2Q==';

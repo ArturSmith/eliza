@@ -82,7 +82,7 @@ export class CatalogController {
       ])
     ).rows[0];
     const {
-      barcodes: values,
+      barcodes: providedCodes,
       plu: enteredPlu,
       autoPlu,
       autoSku,
@@ -117,6 +117,14 @@ export class CatalogController {
           );
       }
       if (autoSku) body.sku = productSku(body.name, plu);
+      const values = providedCodes.length
+        ? providedCodes
+        : [
+            String(
+              (await tx.execute(sql`SELECT next_internal_product_barcode(${store.id}) AS value`))
+                .rows[0].value,
+            ),
+          ];
       const [product] = await tx
         .insert(products)
         .values({ ...body, plu: plu || null, storeId: store.id })
@@ -142,7 +150,7 @@ export class CatalogController {
     @Body() input: unknown,
     @Req() req: AuthRequest,
   ) {
-    const { barcodes: values, plu, ...body } = parse(productSchema, input);
+    const { barcodes: providedCodes, plu, ...body } = parse(productSchema, input);
     const { store, user, device } = req.context;
     return this.database.db.transaction(async (tx) => {
       await tx.execute(
@@ -162,6 +170,14 @@ export class CatalogController {
         .select({ value: barcodes.value })
         .from(barcodes)
         .where(eq(barcodes.productId, id));
+      const values = providedCodes.length
+        ? providedCodes
+        : [
+            String(
+              (await tx.execute(sql`SELECT next_internal_product_barcode(${store.id}) AS value`))
+                .rows[0].value,
+            ),
+          ];
       const [product] = await tx
         .update(products)
         .set({ ...body, plu: plu || null })

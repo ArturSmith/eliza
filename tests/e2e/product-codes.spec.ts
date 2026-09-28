@@ -43,6 +43,8 @@ test('generates product codes without translating names', async ({ page }) => {
   const results = await Promise.all([post('/products', payload), post('/products', payload)]);
   expect(results.map((p: any) => p.plu).sort()).toEqual(['1', '2']);
   expect(results.every((p: any) => p.sku === 'Яблоки-' + p.plu)).toBe(true);
+  expect(results.every((p: any) => /^04\d{11}$/.test(p.barcodes[0]))).toBe(true);
+  expect(results[0].barcodes[0]).not.toBe(results[1].barcodes[0]);
   const original = results[0];
   const edit = await page.request.patch('/api/products/' + original.id, {
     headers: { Origin: 'http://localhost:5174', 'X-Eliza-Request': '1' },
@@ -53,21 +55,63 @@ test('generates product codes without translating names', async ({ page }) => {
   expect(updated.sku).toBe(original.sku);
   expect(updated.plu).toBe(original.plu);
   await page.reload();
+  await page.getByRole('button', { name: original.barcodes[0] }).click();
+  await expect(
+    page.getByRole('dialog').getByRole('img', { name: `Barcode ${original.barcodes[0]}` }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('dialog').getByRole('button', { name: 'Print barcode' }),
+  ).toBeEnabled();
+  await page.evaluate(() => {
+    (window as any).__printed = false;
+    window.print = () => {
+      (window as any).__printed = true;
+    };
+  });
+  await page.getByRole('dialog').getByRole('button', { name: 'Print barcode' }).click();
+  expect(await page.evaluate(() => (window as any).__printed)).toBe(true);
+  await page.getByRole('button', { name: 'Close dialog' }).click();
   await page.getByRole('button', { name: 'Delete Renamed apples' }).click();
   await expect(page.getByRole('heading', { name: 'Delete product?' })).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete product' }).click();
   await expect(page.getByRole('cell', { name: /Renamed apples/ })).toHaveCount(0);
-  await expect.poll(async () => (await page.request.get('/api/products').then((r) => r.json())).some((p: any) => p.id === original.id)).toBe(false);
+  await expect
+    .poll(async () =>
+      (await page.request.get('/api/products').then((r) => r.json())).some(
+        (p: any) => p.id === original.id,
+      ),
+    )
+    .toBe(false);
   const remaining = results[1];
-  await post('/inventory/adjustments', { productId: remaining.id, quantity: '1', reason: 'count_correction', notes: 'Deletion guard test', requestId: crypto.randomUUID() });
-  const stocked = await page.request.delete('/api/products/' + remaining.id, { headers: { Origin: 'http://localhost:5174', 'X-Eliza-Request': '1' } });
+  await post('/inventory/adjustments', {
+    productId: remaining.id,
+    quantity: '1',
+    reason: 'count_correction',
+    notes: 'Deletion guard test',
+    requestId: crypto.randomUUID(),
+  });
+  const stocked = await page.request.delete('/api/products/' + remaining.id, {
+    headers: { Origin: 'http://localhost:5174', 'X-Eliza-Request': '1' },
+  });
   expect(stocked.status()).toBe(409);
   expect((await stocked.json()).message).toContain('stock on hand');
-  await post('/inventory/adjustments', { productId: remaining.id, quantity: '-1', reason: 'count_correction', notes: 'Deletion guard test', requestId: crypto.randomUUID() });
-  const blocked = await page.request.delete('/api/products/' + remaining.id, { headers: { Origin: 'http://localhost:5174', 'X-Eliza-Request': '1' } });
+  await post('/inventory/adjustments', {
+    productId: remaining.id,
+    quantity: '-1',
+    reason: 'count_correction',
+    notes: 'Deletion guard test',
+    requestId: crypto.randomUUID(),
+  });
+  const blocked = await page.request.delete('/api/products/' + remaining.id, {
+    headers: { Origin: 'http://localhost:5174', 'X-Eliza-Request': '1' },
+  });
   expect(blocked.status()).toBe(409);
   expect((await blocked.json()).message).toContain('Deactivate it instead');
-  expect((await page.request.get('/api/products').then((r) => r.json())).some((p: any) => p.id === remaining.id)).toBe(true);
+  expect(
+    (await page.request.get('/api/products').then((r) => r.json())).some(
+      (p: any) => p.id === remaining.id,
+    ),
+  ).toBe(true);
 
   expect(errors).toEqual([]);
 });

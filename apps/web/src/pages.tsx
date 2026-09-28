@@ -55,6 +55,7 @@ import { TodayOperations } from './owner-dashboard';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
+import { ProductBarcode } from './product-barcode';
 const navGroups = [
   {
     label: 'Workspace',
@@ -714,6 +715,7 @@ export function ProductsPage() {
   const [offersFor, setOffersFor] = useState<Product | null>(null);
   const [status, setStatus] = useState<Product | null>(null);
   const [remove, setRemove] = useState<Product | null>(null);
+  const [barcodeFor, setBarcodeFor] = useState<Product | null>(null);
   const removal = useMutation({
     mutationFn: (product: Product) => api('/products/' + product.id, undefined, 'DELETE'),
     onSuccess: () => {
@@ -741,7 +743,7 @@ export function ProductsPage() {
       <PageHeading
         eyebrow={t('YOUR CATALOG')}
         title={t('Products')}
-        description={t('Every item has a place. With or without a barcode.')}
+        description={t('Every product has a barcode for scanning and printing.')}
         action={canWrite && <AddProduct />}
       />
       <section className="panel">
@@ -823,7 +825,9 @@ export function ProductsPage() {
                       <small>{t(p.unit ?? '')}</small>
                     </td>
                     <td className="code-cell">
-                      {p.barcodes[0] ?? (p.plu ? `PLU ${p.plu}` : t('No barcode'))}
+                      <button className="product-barcode-link" onClick={() => setBarcodeFor(p)}>
+                        {p.barcodes[0] ?? t('View barcode')}
+                      </button>
                       {p.barcodes.length > 1 && (
                         <small>
                           +{p.barcodes.length - 1} {t(' more')}
@@ -887,13 +891,14 @@ export function ProductsPage() {
               description={
                 query.data?.length
                   ? t('Try a different name, barcode, or category.')
-                  : t('Add an item with a name, price, and SKU. A barcode is optional.')
+                  : t('Add an item with a name, price, and SKU. A barcode will be generated.')
               }
               action={canWrite && !query.data?.length ? <AddProduct /> : undefined}
             />
           )
         )}
       </section>
+      <ProductBarcode product={barcodeFor} onClose={() => setBarcodeFor(null)} />
       <Dialog
         open={!!edit}
         onOpenChange={(v) => !v && setEdit(null)}

@@ -564,6 +564,11 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   });
   const frozen = !!draft.pending || checkout.isPending;
   const noShift = !context.shift;
+  useEffect(() => {
+    if (noShift || modal || receipt || weighted || frozen) return;
+    const timer = window.setTimeout(() => scan.current?.focus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [noShift, modal, receipt, weighted, frozen]);
   function add(product: PosProduct, amount = '1') {
     if (frozen) return;
     if (noShift) {
@@ -782,7 +787,6 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
             <Barcode size={22} />
             <input
               ref={scan}
-              autoFocus
               aria-label={t('Scan or search products')}
               placeholder={
                 noShift

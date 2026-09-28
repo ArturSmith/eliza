@@ -600,7 +600,7 @@ export function ProductForm({
       </div>
       <Field
         label={t('Barcodes (optional)')}
-        hint={t('Add one per line, or separate with commas. Products can have no barcode.')}
+        hint={t('Add one per line, or separate with commas. Leave blank to generate a barcode.')}
       >
         <div className="barcode-input-with-camera">
           <textarea

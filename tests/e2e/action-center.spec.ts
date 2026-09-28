@@ -26,6 +26,11 @@ test('manager can open the Action Center, review an alert, and inspect no-sales 
     },
   });
   expect(response.status()).toBe(201);
+  await page.goto('/');
+  await expect(page.getByRole('heading', { name: /Manager Action Center/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'View all actions' })).toBeVisible();
+  await page.goto('/analytics');
+  await expect(page.getByRole('heading', { name: /Manager Action Center/ })).toHaveCount(0);
   await page.goto('/action-center');
   await expect(page.getByRole('heading', { name: 'Manager Action Center' })).toBeVisible();
   await expect(page.getByRole('button', { name: /Setup/ })).toBeVisible();

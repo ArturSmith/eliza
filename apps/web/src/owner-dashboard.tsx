@@ -93,7 +93,7 @@ const severityLabel: Record<Severity, string> = {
   info: 'Info',
 };
 
-function Insights({ insights, currency }: { insights: any[]; currency: string }) {
+function Insights({ insights }: { insights: any[] }) {
   useLanguage();
   const active = insights.filter(
     (i) =>
@@ -111,67 +111,32 @@ function Insights({ insights, currency }: { insights: any[]; currency: string })
       ({ 'Action now': 0, Today: 1, Review: 2, Opportunities: 3, Setup: 4 }[b.group as string] ??
         5),
   );
-  if (!active.length)
-    return (
-      <section className="panel">
-        <div className="panel-heading">
-          <h2>{t('Manager Action Center')}</h2>
-        </div>
-        <p className="panel-padding muted">{t('Nothing needs your attention right now.')}</p>
-      </section>
-    );
-  const shown = ranked.slice(0, 5);
+  const shown = ranked.slice(0, 3);
   return (
-    <section className="panel">
+    <section className="panel overview-actions">
       <div className="panel-heading">
-        <h2>{t('Manager Action Center')}</h2>
+        <h2>
+          {t('Manager Action Center')}{' '}
+          <span className="overview-actions-count">{active.length}</span>
+        </h2>
         <Link to="/action-center">{t('View all actions')} →</Link>
       </div>
-      <ul className="insight-list">
-        {shown.map((insight) => (
-          <li key={insight.id} className={'insight insight-' + insight.severity}>
-            <div className="insight-head">
-              <span className={'badge badge-' + insight.severity}>
-                {t(severityLabel[insight.severity as Severity])}
-              </span>
-              <strong>{dashboardText(insight.title)}</strong>
-            </div>
-            <p className="muted">{dashboardText(insight.detail)}</p>
-            {insight.impact && (
-              <p className="insight-impact">
-                {t(insight.impact.label)}:{' '}
-                <strong>{formatMoney(insight.impact.amount, currency)}</strong>
-                {insight.impact.estimate && <span className="muted"> ({t('estimated')})</span>}
-              </p>
-            )}
-            {!!insight.entities?.length && (
-              <ul className="insight-entities">
-                {insight.entities.map((e: any) => (
-                  <li key={e.id}>
-                    {e.label}
-                    {e.note && <span className="muted"> · {dashboardText(e.note)}</span>}
-                  </li>
-                ))}
-              </ul>
-            )}
-            {insight.action &&
-              (insight.id === 'dead-stock' ? (
-                <a className="insight-action" href="/action-center?analysis=no-sales">
-                  {t(insight.action.label)} →
-                </a>
-              ) : (
-                <Link className="insight-action" to={insight.action.to}>
-                  {t(insight.action.label)} →
-                </Link>
-              ))}
-          </li>
-        ))}
-      </ul>
-      <div className="panel-padding">
-        <Link to="/action-center" className="insight-action">
-          {t('Open Action Center')} →
-        </Link>
-      </div>
+      {!active.length ? (
+        <p className="panel-padding muted">{t('Nothing needs your attention right now.')}</p>
+      ) : (
+        <ul className="insight-list">
+          {shown.map((insight) => (
+            <li key={insight.id} className={'insight insight-' + insight.severity}>
+              <div className="insight-head">
+                <span className={'badge badge-' + insight.severity}>
+                  {t(severityLabel[insight.severity as Severity])}
+                </span>
+                <strong>{dashboardText(insight.title)}</strong>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
@@ -431,6 +396,7 @@ export function TodayOperations() {
         </div>
         <HourlySales rows={today.hourly} currency={currency} />
       </section>
+      <Insights insights={today.insights ?? []} />
     </div>
   );
 }
@@ -556,8 +522,6 @@ export function OwnerDashboardPage() {
               </div>
             </section>
           )}
-
-          <Insights insights={data.insights} currency={currency} />
 
           {period === 'today' && <HourlySales rows={data.hourly} currency={currency} />}
 

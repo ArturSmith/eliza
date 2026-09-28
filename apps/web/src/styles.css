@@ -2914,6 +2914,80 @@ input.shopping-section-title {
   justify-self: start;
 }
 
+.overview-actions {
+  margin-top: 16px;
+}
+.overview-actions .panel-heading {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+.overview-actions-count {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #eef1ec;
+  color: var(--muted);
+  font-size: 12px;
+  vertical-align: middle;
+}
+.overview-actions .insight {
+  padding: 9px 16px;
+}
+.overview-actions .insight-head {
+  flex-wrap: nowrap;
+}
+.overview-actions .insight-head strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-barcode-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: var(--green);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.product-barcode-print {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+  background: #fff;
+}
+.product-barcode-print svg {
+  max-width: 100%;
+  height: auto;
+}
+@media print {
+  body:has(.product-barcode-print) #root,
+  body:has(.product-barcode-print) .dialog-overlay,
+  body:has(.product-barcode-print) .dialog-content > :not(.product-barcode-print) {
+    display: none !important;
+  }
+  body:has(.product-barcode-print) .dialog-content {
+    position: static;
+    transform: none;
+    width: auto;
+    max-width: none;
+    max-height: none;
+    overflow: visible;
+    border: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+  .product-barcode-print {
+    width: 80mm;
+    margin: 0;
+    padding: 5mm;
+  }
+}
+
 .hour-line-chart {
   position: relative;
 }

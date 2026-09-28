@@ -1781,5 +1781,14 @@
   "Action Center": "Центр задач",
   "Manager Action Center": "Центр задач управляющего",
   "Open Action Center": "Открыть центр задач",
-  "Used by the Action Center to find stock without sales.": "Используется центром задач для поиска товаров без продаж."
+  "Used by the Action Center to find stock without sales.": "Используется центром задач для поиска товаров без продаж.",
+  "Every product has a barcode for scanning and printing.": "У каждого товара есть штрихкод для сканирования и печати.",
+  "Add an item with a name, price, and SKU. A barcode will be generated.": "Укажите название, цену и артикул товара. Штрихкод будет создан автоматически.",
+  "Leave blank to generate a barcode.": "Оставьте пустым для автоматического создания штрихкода.",
+  "Add one per line, or separate with commas. Leave blank to generate a barcode.": "Укажите по одному штрихкоду в строке или разделите их запятыми. Оставьте пустым для автоматического создания.",
+  "View barcode": "Показать штрихкод",
+  "Barcode for {value0}": "Штрихкод товара {value0}",
+  "Print this barcode and attach it to the product.": "Распечатайте штрихкод и прикрепите его к товару.",
+  "Barcode image unavailable for this code.": "Не удалось создать изображение этого штрихкода.",
+  "Print barcode": "Печать штрихкода"
 }

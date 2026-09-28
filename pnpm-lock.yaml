@@ -102,6 +102,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      jsbarcode:
+        specifier: ^3.12.3
+        version: 3.12.3
       lucide-react:
         specifier: ^0.544.0
         version: 0.544.0(react@19.2.8)
@@ -121,6 +124,9 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.1.13
         version: 4.3.3(vite@7.3.6(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.32.0))
+      '@types/jsbarcode':
+        specifier: ^3.11.4
+        version: 3.11.4
       '@types/react':
         specifier: ^19.1.13
         version: 19.2.18
@@ -1129,6 +1135,9 @@ packages:
   '@types/http-errors@2.0.5':
     resolution: {integrity: sha512-r8Tayk8HJnX0FztbZN7oVqGccWgw98T/0neJphO91KkmOzug1KkofZURD4UaD5uH8AqcFLfdPErnBod0u71/qg==}
 
+  '@types/jsbarcode@3.11.4':
+    resolution: {integrity: sha512-VBcpTAnEMH0Gbh8JpV14CgOtJjCYjsvR2FoDRyoYPE0gUxtApf8N4c+HKEOyz/iiIZkMzqrzBA3XX7+KgKxxsA==}
+
   '@types/node@24.13.3':
     resolution: {integrity: sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
 
@@ -1644,6 +1653,9 @@ packages:
   js-yaml@5.3.0:
     resolution: {integrity: sha512-muutsYr+e2+d3rTgUGslq5rxbBlUy3cJ61IsHag2QNDQV+7zXWjkUpmALIajhrlLlrgRUiymj6U3zUr/TMK84Q==}
     hasBin: true
+
+  jsbarcode@3.12.3:
+    resolution: {integrity: sha512-CuHU9hC6dPsHF5oVFMo8NW76uQVjH4L22CsP4hW+dNnGywJHC/B0ThA1CTDVLnxKLrrpYdicBLnd2xsgTfRnvg==}
 
   jsesc@3.1.0:
     resolution: {integrity: sha512-/sM3dO2FOzXjKQhJuo0Q173wf2KOo8t4I8vHy6lF9poUp7bKT0/NHE8fPX23PwfhnykfqnC2xRxOnVw5XuGIaA==}
@@ -3108,6 +3120,10 @@ snapshots:
 
   '@types/http-errors@2.0.5': {}
 
+  '@types/jsbarcode@3.11.4':
+    dependencies:
+      '@types/node': 24.13.3
+
   '@types/node@24.13.3':
     dependencies:
       undici-types: 7.18.2
@@ -3575,6 +3591,8 @@ snapshots:
   js-yaml@5.3.0:
     dependencies:
       argparse: 2.0.1
+
+  jsbarcode@3.12.3: {}
 
   jsesc@3.1.0: {}
 
