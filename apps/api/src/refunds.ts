@@ -62,7 +62,7 @@ async function detail(c: PoolClient, id: string, store: string) {
   if (!sale) throw new NotFoundException('Receipt not found.');
   const returned = (
     await c.query(
-      'SELECT product_id AS "productId",sum(quantity)::text AS quantity FROM refund_lines WHERE sale_id=$1 AND store_id=$2 GROUP BY product_id',
+      'SELECT product_id AS "productId",sale_item_id AS "saleItemId",sum(quantity)::text AS quantity FROM refund_lines WHERE sale_id=$1 AND store_id=$2 GROUP BY product_id,sale_item_id',
       [id, store],
     )
   ).rows;
@@ -112,6 +112,7 @@ const refundSchema = z.object({
     .array(
       z.object({
         productId: z.uuid(),
+        saleItemId: z.uuid().optional(),
         quantity: z
           .string()
           .regex(/^\d{1,9}(\.\d{1,3})?$/)
@@ -121,7 +122,7 @@ const refundSchema = z.object({
     )
     .min(1)
     .max(100)
-    .refine((v) => new Set(v.map((l) => l.productId)).size === v.length),
+    .refine((v) => new Set(v.map((l) => l.saleItemId ?? l.productId)).size === v.length),
 });
 @Controller('pos')
 class RefundController {
@@ -205,8 +206,13 @@ class RefundController {
       let total = 0n,
         tax = 0n;
       const lines = [];
+      const nextBalances = new Map<string, bigint>();
       for (const entry of [...b.lines].sort((x, y) => x.productId.localeCompare(y.productId))) {
-        const line = original.lines.find((l) => l.productId === entry.productId);
+        const line = original.lines.find((l) =>
+          entry.saleItemId
+            ? l.saleItemId === entry.saleItemId && l.productId === entry.productId
+            : l.productId === entry.productId,
+        );
         if (!line) throw new BadRequestException('This product is not on the original receipt.');
         const qty = toScaled(entry.quantity, 3),
           sold = toScaled(line.quantity, 3);
@@ -214,8 +220,8 @@ class RefundController {
           throw new BadRequestException('Use a whole-number return quantity.');
         const prior = (
           await c.query(
-            'SELECT COALESCE(sum(quantity),0)::text AS quantity FROM refund_lines WHERE sale_id=$1 AND product_id=$2',
-            [b.saleId, entry.productId],
+            'SELECT COALESCE(sum(quantity),0)::text AS quantity FROM refund_lines WHERE sale_id=$1 AND product_id=$2 AND ($3::uuid IS NULL OR sale_item_id=$3)',
+            [b.saleId, entry.productId, entry.saleItemId ?? null],
           )
         ).rows[0];
         const before = toScaled(prior.quantity, 3),
@@ -240,6 +246,10 @@ class RefundController {
           ])
         ).rows[0];
         if (!product) throw new NotFoundException('Product not found.');
+        const balance =
+          (nextBalances.get(entry.productId) ?? toScaled(product.stock, 3)) +
+          (entry.restock ? qty : 0n);
+        nextBalances.set(entry.productId, balance);
         lines.push({
           ...entry,
           name: line.name,
@@ -247,7 +257,7 @@ class RefundController {
           unit: line.unit,
           total: fromScaled(value, 2),
           tax: fromScaled(taxValue, 2),
-          balance: fromScaled(toScaled(product.stock, 3) + (entry.restock ? qty : 0n), 3),
+          balance: fromScaled(balance, 3),
         });
       }
       if (b.method === 'cash') {
@@ -318,9 +328,10 @@ class RefundController {
           refundLineId,
           l.quantity,
           l.restock,
+          l.saleItemId,
         );
         await c.query(
-          'INSERT INTO refund_lines(id,store_id,refund_id,sale_id,product_id,quantity,restock,total,tax,restored_cost) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+          'INSERT INTO refund_lines(id,store_id,refund_id,sale_id,product_id,quantity,restock,total,tax,restored_cost,sale_item_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
           [
             refundLineId,
             a.storeId,
@@ -332,6 +343,7 @@ class RefundController {
             l.total,
             l.tax,
             restoredCost,
+            l.saleItemId ?? null,
           ],
         );
         if (l.restock) {

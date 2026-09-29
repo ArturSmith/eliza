@@ -132,82 +132,297 @@ describe.sequential('manager price actions', () => {
       await register.request('/pos/shifts', { requestId: crypto.randomUUID(), openingCash: '0' })
     ).body.id;
   });
-  it('limits a relabelled barcode to selected stock and preserves batch cost', async () => {
-    const details = await manager.request(`/products/${productId}/pricing`);
-    expect(details.status).toBe(200);
-    expect(details.body.batches).toHaveLength(2);
-    expect(
-      (
-        await manager.request(`/products/${productId}/pricing/limited`, {
-          requestId: crypto.randomUUID(),
-          quantity: 11,
-          price: '50.00',
-        })
-      ).status,
-    ).toBe(409);
+  it('creates unique one-use markdown labels without changing physical stock', async () => {
+    const failed = await manager.request(`/products/${productId}/pricing/limited`, {
+      requestId: crypto.randomUUID(),
+      quantity: 11,
+      price: '50.00',
+      reason: 'EXPIRING_SOON',
+    });
+    expect(failed.status).toBe(409);
     const request = {
       requestId: crypto.randomUUID(),
       quantity: 4,
       price: '50.00',
+      reason: 'EXPIRING_SOON',
     };
     const created = await manager.request(`/products/${productId}/pricing/limited`, request);
     expect(created.status).toBe(201);
-    const [offer, secondOffer] = created.body.labels;
-    expect(created.body.labels).toHaveLength(2);
-    expect(offer.quantity).toBe(3);
-    expect(secondOffer.quantity).toBe(1);
-    expect(
-      (
-        await db.pool.query('SELECT origin_batch_id FROM stock_batches WHERE product_id=$1', [
-          offer.id,
-        ])
-      ).rows[0].origin_batch_id,
-    ).toBe(shortBatchId);
-    expect(
-      (
-        await db.pool.query('SELECT unit_cost FROM stock_batches WHERE product_id=$1', [
-          secondOffer.id,
-        ])
-      ).rows[0].unit_cost,
-    ).toBe('59.00');
+    const labels = created.body.labels as { id: string; barcode: string }[];
+    expect(labels).toHaveLength(4);
+    expect(new Set(labels.map((l) => l.barcode)).size).toBe(4);
+    expect(labels.every((l) => /^05\d{11}$/.test(l.barcode))).toBe(true);
     expect((await manager.request(`/products/${productId}/pricing/limited`, request)).body).toEqual(
       created.body,
     );
+    const batches = (
+      await db.pool.query('SELECT batch_id FROM markdown_units WHERE markdown_id=$1 ORDER BY id', [
+        created.body.markdownId,
+      ])
+    ).rows;
+    expect(batches.filter((b) => b.batch_id === shortBatchId)).toHaveLength(3);
+    expect(
+      (await db.pool.query('SELECT stock::text FROM products WHERE id=$1', [productId])).rows[0]
+        .stock,
+    ).toBe('10.000');
+    expect(
+      (await register.request('/pos/catalog')).body.products.find(
+        (p: { id: string }) => p.id === productId,
+      ).stock,
+    ).toBe('6.000');
     expect(
       (
         await manager.request('/inventory/adjustments', {
-          productId: offer.id,
-          quantity: '1',
+          productId,
+          quantity: '-7',
           reason: 'count_correction',
           requestId: crypto.randomUUID(),
         })
       ).status,
-    ).toBe(400);
-    expect(offer.barcode).toMatch(/^04\d{11}$/);
-    expect((await register.request(`/pos/products?code=${offer.barcode}`)).body).toMatchObject([
-      { id: offer.id, price: '50.00', regularPrice: '70.00', stock: '3.000' },
+    ).toBe(409);
+    const label = labels[0];
+    const scan = await register.request(`/pos/products?code=${label.barcode}`);
+    expect(scan.body).toMatchObject([
+      {
+        id: productId,
+        price: '50.00',
+        regularPrice: '70.00',
+        stock: '1.000',
+        markdownUnitId: label.id,
+      },
     ]);
-    const remaining = await db.pool.query('SELECT stock FROM products WHERE id=$1', [productId]);
-    expect(remaining.rows[0].stock).toBe('6.000');
+    expect(
+      (await register.request(`/pos/catalog?search=${label.barcode}`)).body.products,
+    ).toMatchObject([{ markdownUnitId: label.id, price: '50.00' }]);
     const first = await register.request(
       '/pos/sales',
       sale(
         [
           { productId, quantity: '1', expectedPrice: '70.00', expectedTaxRate: '0.00' },
-          { productId: offer.id, quantity: '1', expectedPrice: '50.00', expectedTaxRate: '0.00' },
-        ],
+          {
+            productId,
+            quantity: '1',
+            expectedPrice: '50.00',
+            expectedTaxRate: '0.00',
+            markdownUnitId: label.id,
+          },
+        ] as any,
         '120.00',
       ),
     );
     expect(first.status).toBe(201);
     expect(first.body).toMatchObject({ subtotal: '140.00', discount: '20.00', total: '120.00' });
-    const costs = (
-      await db.pool.query('SELECT product_id,cost_total FROM sale_items WHERE sale_id=$1', [
-        first.body.id,
+    const line = (
+      await db.pool.query(
+        'SELECT id,cost_total::text,pricing_source,base_unit_price::text FROM sale_items WHERE markdown_unit_id=$1',
+        [label.id],
+      )
+    ).rows[0];
+    expect(line).toMatchObject({ pricing_source: 'MARKDOWN', base_unit_price: '70.00' });
+    expect(['59.00', '60.00']).toContain(line.cost_total);
+    const repeat = await register.request(
+      '/pos/sales',
+      sale(
+        [
+          {
+            productId,
+            quantity: '1',
+            expectedPrice: '50.00',
+            expectedTaxRate: '0.00',
+            markdownUnitId: label.id,
+          },
+        ] as any,
+        '50.00',
+      ),
+    );
+    expect(repeat.status).toBe(409);
+    expect((await register.request(`/pos/products?code=${label.barcode}`)).status).toBe(409);
+    const refund = await register.request('/pos/refunds', {
+      requestId: crypto.randomUUID(),
+      saleId: first.body.id,
+      reason: 'Returned markdown yogurt',
+      method: 'card',
+      confirmed: true,
+      lines: [{ productId, saleItemId: line.id, quantity: '1', restock: true }],
+    });
+    expect(refund.status).toBe(201);
+    expect(refund.body.total).toBe('50.00');
+    const restored = (
+      await db.pool.query('SELECT restored_cost::text FROM refund_lines WHERE sale_item_id=$1', [
+        line.id,
       ])
-    ).rows;
-    expect(costs.find((item) => item.product_id === offer.id).cost_total).toBe('60.00');
-    expect(costs.find((item) => item.product_id === productId).cost_total).toBe('59.00');
+    ).rows[0];
+    expect(restored.restored_cost).toBe(line.cost_total);
+    expect(
+      (await db.pool.query('SELECT status FROM markdown_units WHERE id=$1', [label.id])).rows[0]
+        .status,
+    ).toBe('SOLD');
+    const remaining = labels.find((l) => l.id !== label.id)!;
+    const replaced = await manager.request(
+      `/products/${productId}/pricing/markdowns/${remaining.id}/replace`,
+      {},
+    );
+    expect(replaced.status).toBe(201);
+    expect(replaced.body.label.barcode).not.toBe(remaining.barcode);
+    expect((await register.request(`/pos/products?code=${remaining.barcode}`)).status).toBe(409);
+    const cancelled = await manager.request(
+      `/products/${productId}/pricing/markdowns/${replaced.body.label.id}/cancel`,
+      {},
+    );
+    expect(cancelled.status).toBe(201);
+  });
+  it('applies non-stacking category and product promotions and snapshots margin', async () => {
+    const category = (await manager.request('/promotions/categories')).body.find(
+      (c: { name: string }) => c.name === 'Dairy',
+    );
+    expect(category?.id).toBeTruthy();
+    const categoryPromo = await manager.request('/promotions', {
+      name: 'Dairy week',
+      discountType: 'PERCENTAGE',
+      discountValue: '20.00',
+      categoryIds: [category.id],
+      productIds: [],
+    });
+    expect(categoryPromo.status).toBe(201);
+    const productPromo = await manager.request('/promotions', {
+      name: 'Yogurt fixed',
+      discountType: 'FIXED_PRICE',
+      discountValue: '60.00',
+      categoryIds: [],
+      productIds: [productId],
+    });
+    expect(productPromo.status).toBe(201);
+    expect((await register.request('/pos/products?code=709000000009')).body[0]).toMatchObject({
+      price: '56.00',
+      regularPrice: '70.00',
+      priceSource: 'CATEGORY_PROMOTION',
+    });
+    const paid = await register.request(
+      '/pos/sales',
+      sale(
+        [{ productId, quantity: '1', expectedPrice: '56.00', expectedTaxRate: '0.00' }],
+        '56.00',
+      ),
+    );
+    expect(paid.status).toBe(201);
+    expect(paid.body).toMatchObject({ subtotal: '70.00', discount: '14.00', total: '56.00' });
+    const snapshot = (
+      await db.pool.query(
+        'SELECT pricing_source,promotion_id,price::text,total::text,cost_total::text FROM sale_items WHERE sale_id=$1',
+        [paid.body.id],
+      )
+    ).rows[0];
+    expect(snapshot).toMatchObject({
+      pricing_source: 'CATEGORY_PROMOTION',
+      promotion_id: categoryPromo.body.id,
+      price: '56.00',
+      total: '56.00',
+    });
+    expect(['59.00', '60.00']).toContain(snapshot.cost_total);
+    const cancelled = await manager.request(`/promotions/${categoryPromo.body.id}/cancel`, {});
+    expect(cancelled.status).toBe(201);
+    expect((await register.request('/pos/products?code=709000000009')).body[0]).toMatchObject({
+      price: '60.00',
+      priceSource: 'PRODUCT_PROMOTION',
+    });
+    const stale = await register.request(
+      '/pos/sales',
+      sale(
+        [{ productId, quantity: '1', expectedPrice: '56.00', expectedTaxRate: '0.00' }],
+        '56.00',
+      ),
+    );
+    expect(stale.status).toBe(409);
+    const range = `from=${today}&to=${today}&productId=${productId}`;
+    const profit = await manager.request(`/reports/gross-profit?${range}`);
+    expect(profit.status).toBe(200);
+    expect(Number(profit.body.netRevenue)).toBeGreaterThan(0);
+    expect(Number(profit.body.costOfGoodsSold)).toBeGreaterThan(0);
+    const sourceReport = await manager.request('/reports/pricing-sources?period=today');
+    expect(sourceReport.status).toBe(200);
+    expect(
+      sourceReport.body.find((row: { source: string }) => row.source === 'CATEGORY_PROMOTION'),
+    ).toMatchObject({
+      revenue: '56.00',
+      discount: '14.00',
+      grossProfit: String(56 - Number(snapshot.cost_total) - 0) + '.00',
+    });
+  });
+  it('applies category rules to later products and never raises a cheap item price', async () => {
+    const store = (await db.pool.query('SELECT store_id FROM products WHERE id=$1', [productId]))
+      .rows[0].store_id;
+    const category = (await manager.request('/promotions/categories')).body.find(
+      (c: { name: string }) => c.name === 'Dairy',
+    );
+    const fixed = await manager.request('/promotions', {
+      name: 'Dairy fixed',
+      discountType: 'FIXED_PRICE',
+      discountValue: '40.00',
+      categoryIds: [category.id],
+      productIds: [],
+    });
+    expect(fixed.status).toBe(201);
+    const percent = await manager.request('/promotions', {
+      name: 'Dairy ten percent',
+      discountType: 'PERCENTAGE',
+      discountValue: '10.00',
+      categoryIds: [category.id],
+      productIds: [],
+    });
+    expect(percent.status).toBe(201);
+    const future = await manager.request('/promotions', {
+      name: 'Tomorrow',
+      discountType: 'FIXED_PRICE',
+      discountValue: '1.00',
+      categoryIds: [],
+      productIds: [productId],
+      startsAt: new Date(Date.now() + 86400000).toISOString(),
+    });
+    expect(future.status).toBe(201);
+    const cheap = await manager.request('/products', {
+      name: 'Milk',
+      sku: 'MILK-PRICING',
+      category: 'Dairy',
+      unit: 'piece',
+      price: '10.00',
+      cost: '3.00',
+      taxRate: '0',
+      minStock: '0',
+      plu: '',
+      barcodes: ['709000000010'],
+    });
+    expect(cheap.status).toBe(201);
+    await db.pool.query(
+      `INSERT INTO stock_batches(store_id,product_id,quantity,unit_cost,cost_source)
+       VALUES($1,$2,2,3,'adjustment')`,
+      [store, cheap.body.id],
+    );
+    await db.pool.query('UPDATE products SET stock=2 WHERE id=$1', [cheap.body.id]);
+    expect((await register.request('/pos/products?code=709000000010')).body[0]).toMatchObject({
+      price: '9.00',
+      priceSource: 'CATEGORY_PROMOTION',
+    });
+    expect((await register.request('/pos/products?code=709000000009')).body[0]).toMatchObject({
+      price: '40.00',
+      priceSource: 'CATEGORY_PROMOTION',
+    });
+    const tie = await manager.request('/promotions', {
+      name: 'Yogurt tie',
+      discountType: 'FIXED_PRICE',
+      discountValue: '40.00',
+      categoryIds: [],
+      productIds: [productId],
+    });
+    expect(tie.status).toBe(201);
+    expect((await register.request('/pos/products?code=709000000009')).body[0]).toMatchObject({
+      price: '40.00',
+      priceSource: 'PRODUCT_PROMOTION',
+      promotionId: tie.body.id,
+    });
+    const available = (await manager.request(`/products/${productId}/pricing/markdowns`)).body.find(
+      (u: { status: string }) => u.status === 'AVAILABLE',
+    );
+    expect(available).toBeTruthy();
     const attempts = await Promise.all(
       [1, 2].map(() =>
         register.request(
@@ -215,119 +430,42 @@ describe.sequential('manager price actions', () => {
           sale(
             [
               {
-                productId: offer.id,
-                quantity: '2',
+                productId,
+                quantity: '1',
                 expectedPrice: '50.00',
                 expectedTaxRate: '0.00',
+                markdownUnitId: available.id,
               },
-            ],
-            '100.00',
+            ] as any,
+            '50.00',
           ),
         ),
       ),
     );
-    expect(attempts.map((result) => result.status).sort()).toEqual([201, 409]);
-    expect((await register.request(`/pos/products?code=${offer.barcode}`)).body[0].stock).toBe(
-      '0.000',
-    );
-    const refund = await register.request('/pos/refunds', {
-      requestId: crypto.randomUUID(),
-      saleId: first.body.id,
-      reason: 'Returned one yogurt',
-      method: 'card',
-      confirmed: true,
-      lines: [{ productId: offer.id, quantity: '1', restock: true }],
-    });
-    expect(refund.status).toBe(201);
-    expect((await register.request(`/pos/products?code=${offer.barcode}`)).body[0].stock).toBe(
-      '1.000',
-    );
-    const restockCost = (
-      await db.pool.query('SELECT unit_cost FROM stock_batches WHERE product_id=$1', [offer.id])
-    ).rows[0].unit_cost;
-    expect(restockCost).toBe('60.00');
+    expect(attempts.map((a) => a.status).sort()).toEqual([201, 409]);
   });
-  it('distinguishes a product-wide discount from a permanent price change in reports', async () => {
-    expect(
-      (
-        await manager.request(`/products/${productId}/pricing`, {
-          kind: 'discount_all',
-          price: '60.00',
-        })
-      ).status,
-    ).toBe(201);
-    const editedProduct = (await manager.request('/products')).body.find(
-      (product: { id: string }) => product.id === productId,
-    );
-    expect(editedProduct.regularPrice).toBe('70.00');
-    expect(
-      (
-        await manager.request(
-          `/products/${productId}`,
-          { ...editedProduct, price: editedProduct.regularPrice, description: 'Updated details' },
-          'PATCH',
-        )
-      ).status,
-    ).toBe(200);
-    const catalog = await register.request('/pos/products?code=709000000009');
-    expect(catalog.body[0]).toMatchObject({ price: '60.00', regularPrice: '70.00' });
-    const paid = await register.request(
-      '/pos/sales',
-      sale(
-        [{ productId, quantity: '1', expectedPrice: '60.00', expectedTaxRate: '0.00' }],
-        '60.00',
-      ),
-    );
-    expect(paid.status).toBe(201);
-    expect(paid.body).toMatchObject({ subtotal: '70.00', discount: '10.00', total: '60.00' });
-    const range = `from=${today}&to=${today}&productId=${productId}`;
-    const profit = await manager.request(`/reports/gross-profit?${range}`);
-    expect(profit.status).toBe(200);
-    expect(profit.body).toMatchObject({
-      netRevenue: '230.00',
-      costOfGoodsSold: '238.00',
-      grossProfit: '-8.00',
+  it('replaces only the quick product discount without cancelling manager rules', async () => {
+    const first = await manager.request(`/products/${productId}/pricing`, {
+      kind: 'discount_all',
+      price: '35.00',
     });
-    const analytics = await manager.request(`/reports/analytics?${range}`);
-    expect(analytics.status).toBe(200);
-    expect(analytics.body.totals).toMatchObject({
-      total: '280.00',
-      refunds: '50.00',
-      net: '230.00',
-    });
-    const overview = await manager.request('/reports/owner-dashboard?period=today');
-    expect(overview.status).toBe(200);
-    expect(overview.body.readiness.products).toBe(1);
-    expect(overview.body.products.all).toBe(1);
-    expect(overview.body.kpis.grossProfit.value).toBe(-8);
-    const version = (
-      await db.pool.query('SELECT tag_price_version FROM products WHERE id=$1', [productId])
-    ).rows[0].tag_price_version;
-    expect(
-      (
-        await manager.request(
-          `/products/${productId}`,
-          { ...editedProduct, price: '60.00' },
-          'PATCH',
-        )
-      ).status,
-    ).toBe(200);
-    const changed = (
-      await db.pool.query('SELECT tag_price_version FROM products WHERE id=$1', [productId])
-    ).rows[0].tag_price_version;
-    expect(changed).toBe(version + 1);
-    expect(
-      (
-        await manager.request(
-          `/products/${productId}`,
-          { ...editedProduct, price: '65.00' },
-          'PATCH',
-        )
-      ).status,
-    ).toBe(200);
+    expect(first.status).toBe(201);
     expect((await register.request('/pos/products?code=709000000009')).body[0]).toMatchObject({
-      price: '65.00',
-      regularPrice: null,
+      price: '35.00',
+      priceSource: 'PRODUCT_PROMOTION',
     });
+    const second = await manager.request(`/products/${productId}/pricing`, {
+      kind: 'discount_all',
+      price: '38.00',
+    });
+    expect(second.status).toBe(201);
+    expect((await register.request('/pos/products?code=709000000009')).body[0]).toMatchObject({
+      price: '38.00',
+      priceSource: 'PRODUCT_PROMOTION',
+    });
+    const rules = (await manager.request('/promotions')).body;
+    expect(rules.find((r: { id: string }) => r.id === first.body.id).cancelledAt).toBeTruthy();
+    expect(rules.find((r: { id: string }) => r.id === second.body.id).cancelledAt).toBeNull();
+    expect(rules.find((r: { name: string }) => r.name === 'Yogurt tie').cancelledAt).toBeNull();
   });
 });

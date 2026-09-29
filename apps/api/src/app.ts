@@ -24,6 +24,8 @@ import { Database, DatabaseModule } from './database.js';
 import { AuthModule } from './auth.js';
 import { CatalogModule } from './catalog.js';
 import { PriceActionsModule } from './price-actions.js';
+import { PromotionsModule } from './promotions.js';
+import { PricingReportModule } from './pricing-report.js';
 import { StockCountsModule } from './stock-counts.js';
 import { InventoryModule } from './inventory.js';
 import { ManagementModule } from './management.js';
@@ -118,6 +120,8 @@ class HealthController {
     AuthModule,
     CatalogModule,
     PriceActionsModule,
+    PromotionsModule,
+    PricingReportModule,
     InventoryModule,
     StockCountsModule,
     ManagementModule,

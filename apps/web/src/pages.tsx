@@ -83,6 +83,7 @@ const navGroups = [
     label: 'Stock & purchasing',
     items: [
       { to: '/products', label: 'Products', icon: Package, permission: 'catalog.read' },
+      { to: '/promotions', label: 'Promotions', icon: Tags, permission: 'promotions.manage' },
       { to: '/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory.read' },
       {
         to: '/stock-counts',

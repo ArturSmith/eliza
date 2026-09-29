@@ -47,6 +47,7 @@ import { TeamManagementPage } from './team';
 import { OwnerDashboardPage } from './owner-dashboard';
 import { ActionCenterPage } from './action-center';
 import { PriceTagsPage } from './price-tags';
+import { PromotionsPage } from './promotions';
 import { ManagementAccessPage } from './management-access';
 import { SalesPage, ShiftsPage } from './reports';
 import { ReceiptDetailPage } from './refunds';
@@ -156,6 +157,7 @@ const routes = [
   createRoute({ getParentRoute: () => root, path: '/shifts', component: ShiftsPage }),
   createRoute({ getParentRoute: () => root, path: '/', component: Overview }),
   createRoute({ getParentRoute: () => root, path: '/products', component: ProductsPage }),
+  createRoute({ getParentRoute: () => root, path: '/promotions', component: PromotionsPage }),
   createRoute({ getParentRoute: () => root, path: '/inventory', component: InventoryPage }),
   createRoute({ getParentRoute: () => root, path: '/audit', component: AuditPage }),
   createRoute({ getParentRoute: () => root, path: '/team', component: TeamManagementPage }),

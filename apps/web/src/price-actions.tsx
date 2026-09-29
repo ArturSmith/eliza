@@ -24,6 +24,7 @@ type Details = {
     unit: string;
     price: string;
     regularPrice: string | null;
+    checkoutPrice: string;
     stock: string;
   };
   batches: { quantity: string; sellable: boolean }[];
@@ -37,6 +38,15 @@ type Label = {
   price: string;
   regularPrice: string;
   expiryDate: string | null;
+};
+type MarkdownUnit = {
+  id: string;
+  barcode: string;
+  status: string;
+  price: string;
+  regularPrice: string;
+  expiryDate: string | null;
+  validUntil: string | null;
 };
 
 function PrintedBarcode({ code }: { code: string }) {
@@ -67,11 +77,27 @@ export function PriceActions({
   const [mode, setMode] = useState<'limited' | 'discount_all'>('limited');
   const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('1');
+  const [reason, setReason] = useState('EXPIRING_SOON');
+  const [validUntil, setValidUntil] = useState('');
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const [labels, setLabels] = useState<Label[]>([]);
   const details = useQuery({
     queryKey: ['price-actions', product.id],
     queryFn: () => api<Details>(`/products/${product.id}/pricing`),
+  });
+  const markdowns = useQuery({
+    queryKey: ['markdown-units', product.id],
+    queryFn: () => api<MarkdownUnit[]>(`/products/${product.id}/pricing/markdowns`),
+  });
+  const labelAction = useMutation({
+    mutationFn: ({ id, kind }: { id: string; kind: 'cancel' | 'replace' }) =>
+      api<{ label?: Label }>(`/products/${product.id}/pricing/markdowns/${id}/${kind}`, {}),
+    onSuccess: (result) => {
+      if (result.label) setLabels([result.label]);
+      void markdowns.refetch();
+      void details.refetch();
+      void refresh();
+    },
   });
   const action = useMutation({
     mutationFn: () =>
@@ -80,6 +106,8 @@ export function PriceActions({
             requestId,
             quantity: Number(quantity),
             price,
+            reason,
+            ...(validUntil ? { validUntilLocal: validUntil } : {}),
           })
         : api(`/products/${product.id}/pricing`, { kind: 'discount_all', price }),
     onSuccess: (result) => {
@@ -87,6 +115,7 @@ export function PriceActions({
       setRequestId(crypto.randomUUID());
       setPrice('');
       void details.refetch();
+      void markdowns.refetch();
       void refresh();
     },
   });
@@ -101,8 +130,7 @@ export function PriceActions({
     Number.isFinite(Number(price)) &&
     Number(price) >= 0 &&
     price !== '' &&
-    Number(price) <
-      Number(mode === 'limited' ? current?.price : (current?.regularPrice ?? current?.price));
+    Number(price) < Number(mode === 'limited' ? current?.checkoutPrice : current?.price);
   const validQuantity =
     Number.isInteger(Number(quantity)) &&
     Number(quantity) >= 1 &&
@@ -131,12 +159,18 @@ export function PriceActions({
           {translateError(String(action.error))}
         </p>
       )}
+      {labelAction.error && (
+        <p className="error" role="alert">
+          {translateError(String(labelAction.error))}
+        </p>
+      )}
       {current && (
         <>
           <p className="muted">
-            {t('Current checkout price')}: <strong>{formatMoney(current.price, currency)}</strong>
-            {current.regularPrice &&
-              ` · ${t('Regular price')}: ${formatMoney(current.regularPrice, currency)}`}
+            {t('Current checkout price')}:{' '}
+            <strong>{formatMoney(current.checkoutPrice, currency)}</strong>
+            {current.checkoutPrice !== current.price &&
+              ` · ${t('Regular price')}: ${formatMoney(current.price, currency)}`}
           </p>
           <label className="field">
             <span>{t('Discounted selling price')}</span>
@@ -184,6 +218,24 @@ export function PriceActions({
           </div>
           {mode === 'limited' && (
             <>
+              <label className="field">
+                <span>{t('Reason')}</span>
+                <select value={reason} onChange={(e) => setReason(e.target.value)}>
+                  <option value="EXPIRING_SOON">{t('Expiring soon')}</option>
+                  <option value="DAMAGED_PACKAGING">{t('Damaged packaging')}</option>
+                  <option value="CLEARANCE">{t('Clearance')}</option>
+                  <option value="OVERSTOCK">{t('Overstock')}</option>
+                  <option value="OTHER">{t('Other')}</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>{t('Valid until (store time, optional)')}</span>
+                <input
+                  type="datetime-local"
+                  value={validUntil}
+                  onChange={(e) => setValidUntil(e.target.value)}
+                />
+              </label>
               <label className="field">
                 <span>{t('Number of units')}</span>
                 <input
@@ -235,7 +287,12 @@ export function PriceActions({
           </Button>
           {!!details.data?.offers.length && (
             <div className="price-action-existing">
-              <h4>{t('Discounted label batches')}</h4>
+              <h4>{t('Legacy discounted label batches')}</h4>
+              <p className="muted">
+                {t(
+                  'Existing shared barcodes remain valid until their stock is sold. New labels use one code per unit.',
+                )}
+              </p>
               {details.data.offers.map((offer) => (
                 <div key={offer.id} className="cash-history-row">
                   <span>
@@ -245,16 +302,42 @@ export function PriceActions({
                       {offer.expiryDate ? ` · ${t('Expires')} ${offer.expiryDate}` : ''}
                     </small>
                   </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={!offer.sellable || Number(offer.stock) <= 0}
-                    onClick={() =>
-                      setLabels([{ ...offer, name: current.name, quantity: Number(offer.stock) }])
-                    }
-                  >
-                    {t('Print labels')}
-                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+          {!!markdowns.data?.length && (
+            <div className="price-action-existing">
+              <h4>{t('Unit markdown labels')}</h4>
+              {markdowns.data.map((unit) => (
+                <div key={unit.id} className="cash-history-row">
+                  <span>
+                    <strong>{unit.barcode}</strong>
+                    <small>
+                      {formatMoney(unit.price, currency)} · {t(unit.status.toLowerCase())}
+                      {unit.expiryDate ? ` · ${t('Expires')} ${unit.expiryDate}` : ''}
+                    </small>
+                  </span>
+                  {unit.status === 'AVAILABLE' && (
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={labelAction.isPending}
+                        onClick={() => labelAction.mutate({ id: unit.id, kind: 'replace' })}
+                      >
+                        {t('Replace label')}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={labelAction.isPending}
+                        onClick={() => labelAction.mutate({ id: unit.id, kind: 'cancel' })}
+                      >
+                        {t('Cancel label')}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

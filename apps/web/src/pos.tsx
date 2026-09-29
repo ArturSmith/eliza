@@ -63,6 +63,9 @@ const draftLine = z.object({
     stock: quantity,
     plu: z.string(),
     barcodes: z.array(z.string()),
+    markdownUnitId: z.uuid().optional(),
+    priceSource: z.string().optional(),
+    promotionId: z.uuid().nullable().optional(),
   }),
   quantity: quantity.refine((v) => /^\d+(\.\d{1,3})?$/.test(v) && toScaled(v, 3) > 0n),
 });
@@ -632,7 +635,13 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     setMessage('');
     setScanError('');
     const current = draftRef.current;
-    const index = current.lines.findIndex((l) => l.product.id === product.id);
+    const index = current.lines.findIndex(
+      (l) => (l.product.markdownUnitId ?? l.product.id) === (product.markdownUnitId ?? product.id),
+    );
+    if (product.markdownUnitId && index >= 0) {
+      rejectScan('This markdown label is already in the cart.');
+      return false;
+    }
     const next =
       index >= 0
         ? {
@@ -678,7 +687,11 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       return false;
     }
     const inCart =
-      draftRef.current.lines.find((line) => line.product.id === product.id)?.quantity ?? '0';
+      draftRef.current.lines.find(
+        (line) =>
+          (line.product.markdownUnitId ?? line.product.id) ===
+          (product.markdownUnitId ?? product.id),
+      )?.quantity ?? '0';
     if (toScaled(inCart, 3) + toScaled(amount, 3) > remaining) {
       rejectScan(t('Not enough stock for {value0}.', { value0: product.name }));
       return false;
@@ -788,6 +801,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         quantity: l.quantity,
         expectedPrice: l.product.price,
         expectedTaxRate: l.product.taxRate,
+        ...(l.product.markdownUnitId ? { markdownUnitId: l.product.markdownUnitId } : {}),
       })),
       discountPercent: '0',
       payment: { method, tendered: method === 'card' ? total : tendered },
@@ -1003,6 +1017,11 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                     </span>
                     <small>{p.category}</small>
                     <strong>{p.name}</strong>
+                    {p.priceKind === 'limited_discount' && (
+                      <small className="pos-discount-price">
+                        {t('Discounted label')} · {p.barcodes[0]}
+                      </small>
+                    )}
                     <span className="pos-product-price">
                       {formatMoney(p.price, currency)}
                       <small>/ {t(p.unit ?? '')}</small>
@@ -1085,11 +1104,12 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
             {draft.lines.length ? (
               draft.lines.map((l) => (
                 <CartLine
-                  key={l.product.id}
+                  key={l.product.markdownUnitId ?? l.product.id}
                   line={l}
                   currency={currency}
                   discount={draft.pending?.discountPercent ?? '0'}
                   disabled={frozen}
+                  lockedQuantity={!!l.product.markdownUnitId}
                   onChange={(value) => {
                     if (toScaled(value, 3) > toScaled(l.product.stock, 3)) {
                       rejectScan(t('Not enough stock for {value0}.', { value0: l.product.name }));
@@ -1098,7 +1118,10 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                     setDraft((d) => ({
                       ...d,
                       lines: d.lines.map((i) =>
-                        i.product.id === l.product.id ? { ...i, quantity: value } : i,
+                        (i.product.markdownUnitId ?? i.product.id) ===
+                        (l.product.markdownUnitId ?? l.product.id)
+                          ? { ...i, quantity: value }
+                          : i,
                       ),
                     }));
                     return true;
@@ -1106,7 +1129,11 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                   onRemove={() =>
                     setDraft((d) => ({
                       ...d,
-                      lines: d.lines.filter((i) => i.product.id !== l.product.id),
+                      lines: d.lines.filter(
+                        (i) =>
+                          (i.product.markdownUnitId ?? i.product.id) !==
+                          (l.product.markdownUnitId ?? l.product.id),
+                      ),
                     }))
                   }
                 />
@@ -1429,6 +1456,7 @@ function CartLine({
   currency,
   discount,
   disabled,
+  lockedQuantity,
   onChange,
   onRemove,
 }: {
@@ -1436,6 +1464,7 @@ function CartLine({
   currency: string;
   discount: string;
   disabled: boolean;
+  lockedQuantity: boolean;
   onChange: (value: string) => boolean;
   onRemove: () => void;
 }) {
@@ -1470,7 +1499,7 @@ function CartLine({
           aria-label={t('Quantity for {value0}', { value0: line.product.name })}
           value={quantityInput}
           inputMode="decimal"
-          disabled={disabled}
+          disabled={disabled || lockedQuantity}
           onChange={(e) => setQuantityInput(e.target.value)}
           onBlur={() => {
             if (

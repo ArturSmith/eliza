@@ -1,6 +1,7 @@
 import { ConflictException } from '@nestjs/common';
 import { fromScaled, toScaled } from '@eliza/contracts';
 import type { PoolClient } from 'pg';
+import { reservedByBatch } from './pricing-engine.js';
 
 // Call only while holding the product row lock, inside the stock-changing transaction.
 export async function addUnknownStock(
@@ -22,7 +23,7 @@ export async function consumeBatches(
   storeId: string,
   productId: string,
   quantity: string,
-  options: { saleItemId?: string } = {},
+  options: { saleItemId?: string; markdownBatchId?: string } = {},
 ) {
   let remaining = toScaled(quantity, 3);
   let totalCost = 0n;
@@ -30,16 +31,20 @@ export async function consumeBatches(
     await c.query(
       `SELECT id,quantity::text,expiry_date,unit_cost::text FROM stock_batches
        WHERE store_id=$1 AND product_id=$2 AND quantity>0
+         AND ($4::uuid IS NULL OR id=$4)
          AND ($3::boolean OR expiry_date IS NULL OR expiry_date>(now() AT TIME ZONE
            (SELECT timezone FROM stores WHERE id=$1))::date)
        ORDER BY expiry_date ASC NULLS LAST,created_at,id
        FOR UPDATE`,
-      [storeId, productId, !options.saleItemId],
+      [storeId, productId, !options.saleItemId, options.markdownBatchId ?? null],
     )
   ).rows;
   for (const row of rows) {
     if (remaining === 0n) break;
-    const taken = remaining < toScaled(row.quantity, 3) ? remaining : toScaled(row.quantity, 3);
+    const reserved = options.markdownBatchId ? 0n : await reservedByBatch(c, storeId, row.id);
+    const free = toScaled(row.quantity, 3) - reserved;
+    if (free <= 0n) continue;
+    const taken = remaining < free ? remaining : free;
     await c.query('UPDATE stock_batches SET quantity=quantity-$2 WHERE id=$1', [
       row.id,
       fromScaled(taken, 3),
@@ -77,6 +82,7 @@ export async function restockSaleBatches(
   refundLineId: string,
   quantity: string,
   restock: boolean,
+  saleItemId?: string,
 ) {
   let remaining = toScaled(quantity, 3);
   let restoredCost = 0n;
@@ -89,8 +95,9 @@ export async function restockSaleBatches(
        JOIN sale_items i ON i.id=a.sale_item_id AND i.store_id=a.store_id
        JOIN stock_batches b ON b.id=a.batch_id AND b.store_id=a.store_id
        WHERE a.store_id=$1 AND i.sale_id=$2 AND i.product_id=$3
+         AND ($4::uuid IS NULL OR i.id=$4)
        ORDER BY b.expiry_date ASC NULLS LAST,b.created_at,b.id FOR UPDATE OF a`,
-      [storeId, saleId, productId],
+      [storeId, saleId, productId, saleItemId ?? null],
     )
   ).rows;
   for (const row of rows) {
@@ -122,8 +129,8 @@ export async function restockSaleBatches(
   if (remaining > 0n && restock) {
     const historical = (
       await c.query(
-        'SELECT round(sum(COALESCE(cost_total,round(cost*quantity,2)))/NULLIF(sum(quantity),0),2)::text AS cost FROM sale_items WHERE store_id=$1 AND sale_id=$2 AND product_id=$3',
-        [storeId, saleId, productId],
+        'SELECT round(sum(COALESCE(cost_total,round(cost*quantity,2)))/NULLIF(sum(quantity),0),2)::text AS cost FROM sale_items WHERE store_id=$1 AND sale_id=$2 AND product_id=$3 AND ($4::uuid IS NULL OR id=$4)',
+        [storeId, saleId, productId, saleItemId ?? null],
       )
     ).rows[0];
     await addUnknownStock(

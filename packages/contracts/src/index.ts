@@ -28,6 +28,8 @@ export const permissions = [
   'analytics.margin',
   'expenses.read',
   'expenses.manage',
+  'promotions.manage',
+  'markdowns.manage',
 ] as const;
 export type Permission = (typeof permissions)[number];
 const short = z.string().trim().min(1).max(120);
@@ -275,12 +277,13 @@ export const saleSchema = z.object({
         ),
         expectedPrice: money,
         expectedTaxRate: money,
+        markdownUnitId: z.uuid().optional(),
       }),
     )
     .min(1)
     .max(100)
     .refine(
-      (lines) => new Set(lines.map((l) => l.productId)).size === lines.length,
+      (lines) => new Set(lines.map((l) => l.markdownUnitId ?? l.productId)).size === lines.length,
       'Combine duplicate products into one line',
     ),
   discountPercent: money
@@ -366,6 +369,9 @@ export type PosProduct = {
   stock: string;
   plu: string;
   barcodes: string[];
+  markdownUnitId?: string;
+  priceSource?: string;
+  promotionId?: string | null;
 };
 export type PosContext = {
   registered: boolean;
@@ -391,6 +397,7 @@ export type Receipt = {
   deviceName: string;
   shiftId: string;
   lines: {
+    saleItemId?: string;
     productId: string;
     name: string;
     category?: string;
@@ -399,6 +406,10 @@ export type Receipt = {
     quantity: string;
     price: string;
     taxRate: string;
+    baseUnitPrice?: string;
+    pricingSource?: string;
+    promotionId?: string | null;
+    markdownUnitId?: string | null;
     gross: string;
     discount: string;
     tax: string;

@@ -95,7 +95,9 @@ export class InventoryController {
         .for('update');
       if (!product) throw new NotFoundException('Product not found.');
       if (product.baseProductId)
-        throw new BadRequestException('Discounted-label stock can only change through its original batch sale or refund.');
+        throw new BadRequestException(
+          'Discounted-label stock can only change through its original batch sale or refund.',
+        );
       if (!product.active)
         throw new BadRequestException('Activate this product before changing its stock.');
       const change = toScaled(body.quantity, 3);
@@ -123,6 +125,19 @@ export class InventoryController {
         throw new BadRequestException(
           'This adjustment would make stock negative. Check the quantity.',
         );
+      if (change < 0n) {
+        const free = await tx.execute(sql`
+          SELECT COALESCE(sum(b.quantity-COALESCE((SELECT count(*) FROM markdown_units u
+            JOIN markdowns m ON m.id=u.markdown_id
+            WHERE u.store_id=b.store_id AND u.batch_id=b.id AND u.status='AVAILABLE'
+              AND m.cancelled_at IS NULL AND (m.valid_until IS NULL OR m.valid_until>now())),0)),0)::text AS quantity
+          FROM stock_batches b WHERE b.store_id=${store.id} AND b.product_id=${product.id}
+        `);
+        if (toScaled(String(free.rows[0].quantity), 3) < -change)
+          throw new ConflictException(
+            'This adjustment would remove units reserved for markdown labels. Cancel or replace those labels first.',
+          );
+      }
       const balance = fromScaled(next, 3);
       await tx.execute(
         sql`SELECT adjust_stock_batches(${store.id}::uuid,${product.id}::uuid,${body.quantity}::numeric)`,

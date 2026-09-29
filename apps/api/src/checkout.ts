@@ -36,6 +36,7 @@ import { AccessGuard, type AuthRequest, Require, parse, hash } from './security.
 import { AuthModule } from './auth.js';
 import { Database } from './database.js';
 import { consumeBatches } from './stock-batches.js';
+import { resolvePrice } from './pricing-engine.js';
 async function requestLock(client: PoolClient, storeId: string, id: string) {
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [storeId + id]);
 }
@@ -57,12 +58,41 @@ async function openShift(client: PoolClient, actor: Operator, id?: string) {
     throw new ConflictException('Start your shift before using this register.');
   return shift;
 }
-const posCatalogSql = `SELECT p.id,p.image,p.source,p.name,p.sku,p.category,p.unit,p.price::text,p.regular_price::text AS "regularPrice",p.price_kind AS "priceKind",p.base_product_id AS "baseProductId",p.tax_rate::text AS "taxRate",
-          COALESCE((SELECT sum(sb.quantity) FROM stock_batches sb
+const posCatalogSql = `SELECT p.id,p.image,p.source,p.name,p.sku,p.category,p.category_id AS "categoryId",p.unit,p.price::text,p.regular_price::text AS "regularPrice",p.price_kind AS "priceKind",p.base_product_id AS "baseProductId",p.tax_rate::text AS "taxRate",
+          COALESCE((SELECT sum(sb.quantity - COALESCE((SELECT count(*) FROM markdown_units u JOIN markdowns m ON m.id=u.markdown_id
+             WHERE u.store_id=sb.store_id AND u.batch_id=sb.id AND u.status='AVAILABLE'
+               AND m.cancelled_at IS NULL AND (m.valid_until IS NULL OR m.valid_until>now())),0)) FROM stock_batches sb
             WHERE sb.store_id=p.store_id AND sb.product_id=p.id
               AND (sb.expiry_date IS NULL OR sb.expiry_date>(now() AT TIME ZONE
                 (SELECT timezone FROM stores WHERE id=p.store_id))::date)),0)::numeric(15,3)::text AS stock,
           COALESCE(p.plu,'') AS plu,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),'[]'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active`;
+async function pricedCatalogRow(
+  client: PoolClient,
+  storeId: string,
+  row: any,
+  markdownUnitId?: string,
+) {
+  const resolved = await resolvePrice(
+    client,
+    storeId,
+    {
+      id: row.id,
+      price: row.price,
+      category_id: row.categoryId,
+      price_kind: row.priceKind,
+      regularPrice: row.regularPrice,
+    },
+    markdownUnitId,
+  );
+  return {
+    ...row,
+    price: resolved.price,
+    regularPrice: resolved.source === 'BASE' ? row.regularPrice : resolved.basePrice,
+    priceSource: resolved.source,
+    promotionId: resolved.promotionId,
+    ...(markdownUnitId ? { markdownUnitId, stock: '1.000' } : {}),
+  };
+}
 const catalogFilters = z.object({
   page: z.coerce.number().int().min(1).max(100000).default(1),
   category: z.string().max(200).default(''),
@@ -97,7 +127,29 @@ export class CheckoutController {
       throw new BadRequestException('Invalid PLU.');
     return this.operations.transaction(async (client) => {
       const actor = await this.registers.operator(client, req);
-      return (
+      if (code) {
+        const token = (
+          await client.query(
+            'SELECT id,product_id FROM markdown_units WHERE store_id=$1 AND barcode=$2',
+            [actor.storeId, code],
+          )
+        ).rows[0];
+        if (token) {
+          const product = (
+            await client.query(`SELECT * FROM (${posCatalogSql}) p WHERE p.id=$2`, [
+              actor.storeId,
+              token.product_id,
+            ])
+          ).rows[0];
+          if (!product) throw new ConflictException('This markdown product is unavailable.');
+          try {
+            return [await pricedCatalogRow(client, actor.storeId, product, token.id)];
+          } catch {
+            throw new ConflictException('This markdown label is no longer valid.');
+          }
+        }
+      }
+      const rows = (
         await client.query(
           `SELECT * FROM (${posCatalogSql}) p WHERE
             ($2::text IS NULL OR p.sku=$2 OR p.plu=$2 OR p.barcodes ? $2)
@@ -106,6 +158,7 @@ export class CheckoutController {
           [actor.storeId, code ?? null, plu ?? null],
         )
       ).rows;
+      return Promise.all(rows.map((row) => pricedCatalogRow(client, actor.storeId, row)));
     });
   }
   @Get('product-availability') productAvailability(
@@ -138,12 +191,41 @@ export class CheckoutController {
     const filters = parse(catalogFilters, input);
     return this.operations.transaction(async (client) => {
       const actor = await this.registers.operator(client, req);
+      if (filters.search) {
+        const unit = (
+          await client.query(
+            'SELECT id,product_id FROM markdown_units WHERE store_id=$1 AND barcode=$2',
+            [actor.storeId, filters.search],
+          )
+        ).rows[0];
+        if (unit) {
+          const product = (
+            await client.query(`SELECT * FROM (${posCatalogSql}) p WHERE p.id=$2`, [
+              actor.storeId,
+              unit.product_id,
+            ])
+          ).rows[0];
+          if (!product) return { total: 0, categories: [], products: [], page: 1, pageSize: 20 };
+          try {
+            return {
+              total: 1,
+              categories: [product.category],
+              products: [await pricedCatalogRow(client, actor.storeId, product, unit.id)],
+              page: 1,
+              pageSize: 20,
+            };
+          } catch {
+            return { total: 0, categories: [], products: [], page: 1, pageSize: 20 };
+          }
+        }
+      }
       const result = await client.query(
         `WITH available AS (
         SELECT p.*, EXISTS(SELECT 1 FROM pos_product_favorites f WHERE f.store_id=$1 AND f.employee_id=$2 AND f.product_id=p.id) AS favorite,
         CASE WHEN $6::boolean THEN COALESCE((SELECT sum(i.quantity) FROM sale_items i JOIN sales s ON s.id=i.sale_id AND s.store_id=i.store_id
           WHERE i.store_id=$1 AND i.product_id=p.id AND s.created_at>=now()-interval '30 days'),0) ELSE 0 END AS popularity
-        FROM (${posCatalogSql}) p WHERE p.stock::numeric>0 AND p."baseProductId" IS NULL
+        FROM (${posCatalogSql}) p WHERE p.stock::numeric>0
+          AND (p."baseProductId" IS NULL OR $5<>'' )
       ), filtered AS (
         SELECT * FROM available WHERE ($3='' OR category=$3) AND (NOT $4::boolean OR favorite)
         AND ($5='' OR name ILIKE '%'||$5||'%' OR sku ILIKE '%'||$5||'%' OR plu ILIKE '%'||$5||'%'
@@ -163,7 +245,15 @@ export class CheckoutController {
           (filters.page - 1) * 20,
         ],
       );
-      return { ...result.rows[0], page: filters.page, pageSize: 20 };
+      const data = result.rows[0];
+      return {
+        ...data,
+        products: await Promise.all(
+          data.products.map((row: any) => pricedCatalogRow(client, actor.storeId, row)),
+        ),
+        page: filters.page,
+        pageSize: 20,
+      };
     });
   }
   @Post('products/:id/favorite') favorite(
@@ -392,6 +482,7 @@ export class CheckoutController {
         )
       ).rows;
       const lines: Receipt['lines'] = [];
+      const markdownBatches = new Map<string, string>();
       let subtotal = 0n,
         discount = 0n,
         tax = 0n,
@@ -400,8 +491,32 @@ export class CheckoutController {
         const product = products.find((p) => p.id === item.productId);
         if (!product || !product.active)
           throw new BadRequestException('A product is no longer available. Refresh your cart.');
+        let resolved;
+        try {
+          resolved = await resolvePrice(client, actor.storeId, product, item.markdownUnitId);
+        } catch {
+          throw new ConflictException(
+            `${product.name} has an invalid markdown label. Remove it from the cart.`,
+          );
+        }
+        if (item.markdownUnitId) {
+          const unit = (
+            await client.query(
+              `SELECT u.batch_id,u.status,m.cancelled_at,
+              (m.valid_from<=now() AND (m.valid_until IS NULL OR m.valid_until>now())) AS time_valid
+             FROM markdown_units u JOIN markdowns m ON m.id=u.markdown_id
+             WHERE u.id=$1 AND u.store_id=$2 AND u.product_id=$3 FOR UPDATE OF u`,
+              [item.markdownUnitId, actor.storeId, product.id],
+            )
+          ).rows[0];
+          if (!unit || unit.status !== 'AVAILABLE' || unit.cancelled_at || !unit.time_valid)
+            throw new ConflictException('This markdown label is no longer valid.');
+          markdownBatches.set(item.markdownUnitId, unit.batch_id);
+          if (item.quantity !== '1' && toScaled(item.quantity, 3) !== 1000n)
+            throw new BadRequestException('A markdown label sells exactly one unit.');
+        }
         if (
-          toScaled(product.price, 2) !== toScaled(item.expectedPrice, 2) ||
+          toScaled(resolved.price, 2) !== toScaled(item.expectedPrice, 2) ||
           toScaled(product.tax_rate, 2) !== toScaled(item.expectedTaxRate, 2)
         )
           throw new ConflictException(
@@ -413,8 +528,8 @@ export class CheckoutController {
         if (qty > toScaled(product.stock, 3))
           throw new ConflictException(`Not enough stock for ${product.name}.`);
         const amounts = calculatePricedLine(
-          product.price,
-          product.regular_price,
+          resolved.price,
+          resolved.source === 'BASE' ? product.regular_price : resolved.basePrice,
           item.quantity,
           product.tax_rate,
           body.discountPercent,
@@ -424,14 +539,19 @@ export class CheckoutController {
         tax += toScaled(amounts.tax, 2);
         total += toScaled(amounts.total, 2);
         lines.push({
+          saleItemId: randomUUID(),
           productId: product.id,
           name: product.name,
           category: product.category,
           sku: product.sku,
           unit: product.unit,
           quantity: item.quantity,
-          price: product.price,
+          price: resolved.price,
           taxRate: product.tax_rate,
+          baseUnitPrice: resolved.basePrice,
+          pricingSource: resolved.source,
+          promotionId: resolved.promotionId,
+          markdownUnitId: resolved.markdownUnitId,
           ...amounts,
         });
       }
@@ -512,15 +632,23 @@ export class CheckoutController {
           JSON.stringify(receipt),
         ],
       );
+      const remainingStock = new Map<string, bigint>();
       for (const line of lines) {
         const product = products.find((p) => p.id === line.productId)!;
-        const balance = fromScaled(toScaled(product.stock, 3) - toScaled(line.quantity, 3), 3);
-        const saleItemId = randomUUID();
+        const previous = remainingStock.get(product.id) ?? toScaled(product.stock, 3);
+        const next = previous - toScaled(line.quantity, 3);
+        if (next < 0n) throw new ConflictException(`Not enough stock for ${product.name}.`);
+        remainingStock.set(product.id, next);
+        const balance = fromScaled(next, 3);
+        const saleItemId = line.saleItemId!;
         const costTotal = await consumeBatches(client, actor.storeId, product.id, line.quantity, {
           saleItemId,
+          markdownBatchId: line.markdownUnitId
+            ? markdownBatches.get(line.markdownUnitId)
+            : undefined,
         });
         await client.query(
-          'INSERT INTO sale_items(id,store_id,sale_id,product_id,quantity,price,cost,tax_rate,total,cost_total) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)',
+          'INSERT INTO sale_items(id,store_id,sale_id,product_id,quantity,price,cost,tax_rate,total,cost_total,base_unit_price,pricing_source,promotion_id,markdown_unit_id,discount_total) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)',
           [
             saleItemId,
             actor.storeId,
@@ -536,8 +664,22 @@ export class CheckoutController {
             line.taxRate,
             line.total,
             costTotal,
+            line.baseUnitPrice ?? line.price,
+            line.pricingSource ?? 'BASE',
+            line.promotionId ?? null,
+            line.markdownUnitId ?? null,
+            line.discount,
           ],
         );
+        if (line.markdownUnitId) {
+          const redeemed = await client.query(
+            `UPDATE markdown_units SET status='SOLD',sold_at=now(),sale_item_id=$2
+           WHERE id=$1 AND store_id=$3 AND status='AVAILABLE'`,
+            [line.markdownUnitId, saleItemId, actor.storeId],
+          );
+          if (redeemed.rowCount !== 1)
+            throw new ConflictException('This markdown label was already used.');
+        }
         await client.query('UPDATE products SET stock=$1 WHERE id=$2', [balance, product.id]);
         await client.query(
           "INSERT INTO movements(store_id,product_id,employee_id,device_id,quantity,balance,reason,notes,request_id,request_hash,sale_id,shift_id) VALUES($1,$2,$3,$4,$5,$6,'sale',$7,$8,$9,$10,$11)",

@@ -409,6 +409,23 @@ export function OwnerDashboardPage() {
     queryKey: ['owner-dashboard', period],
     queryFn: () => api<Dashboard>('/reports/owner-dashboard?period=' + period),
   });
+  const pricingSources = useQuery({
+    queryKey: ['pricing-sources', period],
+    queryFn: () =>
+      api<
+        {
+          source: string;
+          units: string;
+          revenue: string;
+          discount: string;
+          refunds: string;
+          netRevenue: string;
+          costOfGoodsSold: string;
+          grossProfit: string;
+        }[]
+      >('/reports/pricing-sources?period=' + period),
+    enabled: session.user.permissions.includes('analytics.margin'),
+  });
   const data = q.data;
   const currency = session.store.currency;
   const money = (value: unknown) => formatMoney(String(value ?? 0), currency);
@@ -481,6 +498,42 @@ export function OwnerDashboardPage() {
             <Kpi label="Average basket" data={data.kpis.averageBasket} currency={currency} />
             <Kpi label="Refunds" data={data.kpis.refunds} currency={currency} />
           </div>
+
+          {!!pricingSources.data?.length && (
+            <Table
+              title="Pricing and discounts"
+              description="Sales and gross profit by the price actually used at checkout."
+              head={[
+                'Price source',
+                'Sales',
+                'Discount',
+                'Refunds',
+                'Cost of goods sold',
+                'Gross profit',
+              ]}
+              empty="No sales in this period."
+              rows={pricingSources.data.map((row) => [
+                t(
+                  row.source === 'BASE'
+                    ? 'Regular price'
+                    : row.source === 'PRODUCT_PROMOTION'
+                      ? 'Product promotion'
+                      : row.source === 'CATEGORY_PROMOTION'
+                        ? 'Category promotion'
+                        : row.source === 'MARKDOWN'
+                          ? 'Unit markdown'
+                          : row.source === 'LEGACY_MARKDOWN'
+                            ? 'Legacy markdown'
+                            : 'Prior sale',
+                ),
+                money(row.revenue),
+                money(row.discount),
+                money(row.refunds),
+                money(row.costOfGoodsSold),
+                money(row.grossProfit),
+              ])}
+            />
+          )}
 
           <p className="muted">
             {t('Operating expenses')}:{' '}

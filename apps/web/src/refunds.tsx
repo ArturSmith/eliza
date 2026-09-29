@@ -21,7 +21,7 @@ type Refund = {
 };
 type Detail = {
   receipt: Receipt;
-  returned: { productId: string; quantity: string }[];
+  returned: { productId: string; saleItemId?: string | null; quantity: string }[];
   refunds: Refund[];
 };
 export function ReceiptSearch({ context }: { context?: PosContext }) {
@@ -259,16 +259,20 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
   const [busy, setBusy] = useState(false),
     [error, setError] = useState<unknown>(),
     [result, setResult] = useState<Refund>();
+  const keyFor = (line: Receipt['lines'][number]) => line.saleItemId ?? line.productId;
+  const returnedFor = (line: Receipt['lines'][number]) =>
+    detail.returned
+      .filter((r) =>
+        line.saleItemId ? r.saleItemId === line.saleItemId : r.productId === line.productId,
+      )
+      .reduce((sum, r) => sum + toScaled(r.quantity, 3), 0n);
   let preview = '—';
   try {
     let total = 0n;
     for (const l of detail.receipt.lines) {
-      const qty = toScaled(quantities[l.productId] ?? '0', 3),
+      const qty = toScaled(quantities[keyFor(l)] ?? '0', 3),
         sold = toScaled(l.quantity, 3),
-        prior = toScaled(
-          detail.returned.find((r) => r.productId === l.productId)?.quantity ?? '0',
-          3,
-        ),
+        prior = returnedFor(l),
         cents = toScaled(l.total, 2);
       if (qty < 0n || qty + prior > sold) throw new Error();
       total += (cents * (prior + qty) + sold / 2n) / sold - (cents * prior + sold / 2n) / sold;
@@ -286,11 +290,12 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
         method: detail.receipt.payment.method,
         confirmed,
         lines: detail.receipt.lines
-          .filter((l) => Number(quantities[l.productId] ?? 0) > 0)
+          .filter((l) => Number(quantities[keyFor(l)] ?? 0) > 0)
           .map((l) => ({
             productId: l.productId,
-            quantity: quantities[l.productId],
-            restock: restock[l.productId] ?? false,
+            ...(l.saleItemId ? { saleItemId: l.saleItemId } : {}),
+            quantity: quantities[keyFor(l)],
+            restock: restock[keyFor(l)] ?? false,
           })),
       };
       sessionStorage.setItem(key, JSON.stringify(payload));
@@ -344,23 +349,25 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
     >
       <div className="refund-form-heading">
         <h2>{t('Return items')}</h2>
-        <p className="muted">{t('Enter the quantity returned for each item. Leave 0 for items the customer kept.')}</p>
+        <p className="muted">
+          {t('Enter the quantity returned for each item. Leave 0 for items the customer kept.')}
+        </p>
       </div>
       <fieldset disabled={!!pending || busy}>
         {detail.receipt.lines.map((l) => {
-          const remaining = fromScaled(
-            toScaled(l.quantity, 3) -
-              toScaled(
-                detail.returned.find((r) => r.productId === l.productId)?.quantity ?? '0',
-                3,
-              ),
-            3,
-          );
+          const remaining = fromScaled(toScaled(l.quantity, 3) - returnedFor(l), 3);
           return (
-            <div className="refund-item" key={l.productId}>
+            <div className="refund-item" key={keyFor(l)}>
               <div className="refund-item-heading">
                 <strong>{l.name}</strong>
-                <small>{t('Sold')}: {l.quantity} {t(l.unit ?? '')}</small>
+                {l.pricingSource === 'MARKDOWN' && (
+                  <small>
+                    {t('Unit markdown')} · {formatMoney(l.price, detail.receipt.currency)}
+                  </small>
+                )}
+                <small>
+                  {t('Sold')}: {l.quantity} {t(l.unit ?? '')}
+                </small>
               </div>
               <Field
                 label={t('{value0} — {value1} {value2} remaining', {
@@ -371,19 +378,19 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
               >
                 <input
                   inputMode="decimal"
-                  aria-describedby={'refund-remaining-' + l.productId}
-                  value={quantities[l.productId] ?? '0'}
-                  onChange={(e) => setQuantities({ ...quantities, [l.productId]: e.target.value })}
+                  aria-describedby={'refund-remaining-' + keyFor(l)}
+                  value={quantities[keyFor(l)] ?? '0'}
+                  onChange={(e) => setQuantities({ ...quantities, [keyFor(l)]: e.target.value })}
                 />
               </Field>
-              <p className="muted" id={'refund-remaining-' + l.productId}>
+              <p className="muted" id={'refund-remaining-' + keyFor(l)}>
                 {t('Maximum refundable')}: {remaining} {t(l.unit ?? '')}
               </p>
               <label className="refund-checkbox-row">
                 <input
                   type="checkbox"
-                  checked={restock[l.productId] ?? false}
-                  onChange={(e) => setRestock({ ...restock, [l.productId]: e.target.checked })}
+                  checked={restock[keyFor(l)] ?? false}
+                  onChange={(e) => setRestock({ ...restock, [keyFor(l)]: e.target.checked })}
                 />{' '}
                 {t('Saleable: restore stock ')}
               </label>

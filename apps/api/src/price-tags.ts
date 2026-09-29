@@ -18,10 +18,31 @@ import { encodeScaleBarcode, employeeUnlockSchema, scaleBarcodeSchema } from '@e
 import { Database } from './database.js';
 import { cookie, hash, parse, token, verifyPassword } from './security.js';
 import { cookieOptions } from './register.js';
+import { resolvePrice } from './pricing-engine.js';
 
 @Controller('price-tags')
 export class PriceTagsController {
   constructor(private database: Database) {}
+  private async priced(store: string, rows: any[]) {
+    return Promise.all(
+      rows.map(async (row) => {
+        const current = await resolvePrice(this.database.pool as any, store, {
+          id: row.id,
+          price: row.price,
+          category_id: row.categoryId,
+          price_kind: row.priceKind,
+        });
+        return {
+          ...row,
+          price: current.price,
+          regularPrice: current.source === 'BASE' ? row.regularPrice : current.basePrice,
+          priceChanged:
+            row.priceChanged ||
+            (row.lastPrintedPrice !== null && row.lastPrintedPrice !== current.price),
+        };
+      }),
+    );
+  }
   private async station(req: Request) {
     const result = await this.database.pool.query(
       'SELECT d.id,d.store_id,d.name,d.type,d.active,s.name AS store_name,s.currency,s.scale_barcode,s.tag_design FROM devices d JOIN stores s ON s.id=d.store_id WHERE d.token_hash=$1 OR d.token_hash=$2 ORDER BY CASE WHEN d.token_hash=$1 THEN 0 ELSE 1 END LIMIT 1',
@@ -154,12 +175,13 @@ export class PriceTagsController {
   }
   @Get('products') async products(@Req() req: Request) {
     const { device } = await this.operator(req);
-    return (
+    const rows = (
       await this.database.pool.query(
-        'SELECT p.id,p.name,p.sku,p.price::text,p.regular_price::text AS "regularPrice",p.unit,p.plu,p.tag_price_version AS "priceVersion",(p.tag_price_version>p.tag_printed_version) AS "priceChanged",COALESCE((SELECT b.value FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id ORDER BY b.value LIMIT 1),\'\') AS barcode,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),\'[]\'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active AND p.base_product_id IS NULL ORDER BY p.name',
+        'SELECT p.id,p.name,p.sku,p.category_id AS "categoryId",p.price_kind AS "priceKind",p.price::text,p.regular_price::text AS "regularPrice",p.tag_last_printed_price::text AS "lastPrintedPrice",p.unit,p.plu,p.tag_price_version AS "priceVersion",(p.tag_price_version>p.tag_printed_version) AS "priceChanged",COALESCE((SELECT b.value FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id ORDER BY b.value LIMIT 1),\'\') AS barcode,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),\'[]\'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active AND p.base_product_id IS NULL ORDER BY p.name',
         [device.store_id],
       )
     ).rows;
+    return this.priced(device.store_id, rows);
   }
   @Post('weight-barcode') async weightBarcode(@Req() req: Request, @Body() input: unknown) {
     const body = parse(
@@ -172,20 +194,21 @@ export class PriceTagsController {
     const { device } = await this.operator(req);
     const product = (
       await this.database.pool.query(
-        'SELECT id,name,sku,price::text,unit,plu FROM products WHERE store_id=$1 AND id=$2 AND active',
+        'SELECT id,name,sku,price::text,category_id,price_kind,unit,plu FROM products WHERE store_id=$1 AND id=$2 AND active',
         [device.store_id, body.productId],
       )
     ).rows[0];
     if (!product || product.unit !== 'kilogram')
       throw new BadRequestException('Choose an active product sold by kilogram.');
     const profile = scaleBarcodeSchema.parse(device.scale_barcode);
+    const current = await resolvePrice(this.database.pool as any, device.store_id, product);
     try {
       return {
         barcode: encodeScaleBarcode(product.plu ?? '', body.weight, profile),
         productId: product.id,
         name: product.name,
         sku: product.sku,
-        price: product.price,
+        price: current.price,
         weight: body.weight,
       };
     } catch (error) {
@@ -198,16 +221,17 @@ export class PriceTagsController {
     const body = parse(z.object({ productIds: z.array(z.uuid()).min(1).max(100) }), input);
     const { device, employee } = await this.operator(req);
     const products = await this.database.pool.query(
-      'SELECT p.id,p.name,p.sku,p.price::text,p.regular_price::text AS "regularPrice",p.unit,p.plu,p.tag_price_version AS "priceVersion",(p.tag_price_version>p.tag_printed_version) AS "priceChanged",COALESCE((SELECT b.value FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id ORDER BY b.value LIMIT 1),\'\') AS barcode,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),\'[]\'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active AND p.base_product_id IS NULL AND p.id=ANY($2::uuid[])',
+      'SELECT p.id,p.name,p.sku,p.category_id AS "categoryId",p.price_kind AS "priceKind",p.price::text,p.regular_price::text AS "regularPrice",p.tag_last_printed_price::text AS "lastPrintedPrice",p.unit,p.plu,p.tag_price_version AS "priceVersion",(p.tag_price_version>p.tag_printed_version) AS "priceChanged",COALESCE((SELECT b.value FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id ORDER BY b.value LIMIT 1),\'\') AS barcode,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),\'[]\'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active AND p.base_product_id IS NULL AND p.id=ANY($2::uuid[])',
       [device.store_id, body.productIds],
     );
     if (products.rows.length !== new Set(body.productIds).size)
       throw new ForbiddenException('One or more products are unavailable. Refresh the list.');
+    const priced = await this.priced(device.store_id, products.rows);
     const job = await this.database.pool.query(
       'INSERT INTO price_tag_prints(store_id,device_id,employee_id,products) VALUES($1,$2,$3,$4) RETURNING id',
-      [device.store_id, device.id, employee.id, JSON.stringify(products.rows)],
+      [device.store_id, device.id, employee.id, JSON.stringify(priced)],
     );
-    return { id: job.rows[0].id, products: products.rows };
+    return { id: job.rows[0].id, products: priced };
   }
   @Post('prints/:id/complete') @HttpCode(200) async complete(
     @Req() req: Request,
@@ -228,8 +252,8 @@ export class PriceTagsController {
       if (!job.completed_at) {
         for (const product of job.products) {
           await client.query(
-            'UPDATE products SET tag_printed_version=$3 WHERE id=$1 AND store_id=$2 AND tag_price_version=$3 AND tag_printed_version<$3',
-            [product.id, device.store_id, product.priceVersion],
+            'UPDATE products SET tag_printed_version=$3,tag_last_printed_price=$4 WHERE id=$1 AND store_id=$2 AND tag_price_version=$3',
+            [product.id, device.store_id, product.priceVersion, product.price],
           );
         }
         await client.query('UPDATE price_tag_prints SET completed_at=now() WHERE id=$1', [jobId]);
