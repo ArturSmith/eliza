@@ -1865,5 +1865,6 @@
   "Available batches are used automatically, earliest expiry first. Print and attach every new label.": "Система автоматически выбирает партии, начиная с ближайшего срока годности. Распечатайте и наклейте все новые этикетки.",
   "All units keep the existing product barcode.": "Все товары сохранят существующий штрихкод.",
   "Save selling price changes before applying a discount.": "Сначала сохраните изменение обычной цены продажи, затем примените скидку.",
-  "Apply discount": "Применить скидку"
+  "Apply discount": "Применить скидку",
+  "Product details": "Сведения о товаре"
 }

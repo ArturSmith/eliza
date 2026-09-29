@@ -401,247 +401,254 @@ export function ProductForm({
           }}
         />
       )}
-      {source && (
-        <p className="muted">
-          {t('Source:')}{' '}
-          <a
-            href={'https://world.openfoodfacts.org/product/' + source.barcode}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t('Open Food Facts contributors ')}
-          </a>{' '}
-          ·{' '}
-          <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noreferrer">
-            {t('ODbL ')}
-          </a>
-          {source.imageImported && (
-            <>
-              {' '}
-              {t('· Photo resized from source,')}{' '}
-              <a
-                href="https://creativecommons.org/licenses/by-sa/3.0/"
-                target="_blank"
-                rel="noreferrer"
-              >
-                {t('CC BY-SA 3.0 ')}
-              </a>
-            </>
-          )}
-          {source.brand && <> · {source.brand}</>}
-          {source.quantity && (
-            <>
-              {' '}
-              {t(' · Package: ')}
-              {source.quantity}
-            </>
-          )}
-        </p>
-      )}
-      <Field
-        label={t('Product photo')}
-        hint={t('Optional. JPEG, PNG, or WebP up to 10 MB. Photos are resized automatically.')}
-      >
-        <input
-          type="file"
-          accept="image/jpeg,image/png,image/webp"
-          disabled={imageBusy || mutation.isPending}
-          onChange={async (event) => {
-            const file = event.target.files?.[0];
-            event.target.value = '';
-            if (!file) return;
-            setImageBusy(true);
-            setImageError(null);
-            try {
-              setImage(await prepareProductImage(file));
-              setSource((value) => (value ? { ...value, imageImported: false } : null));
-            } catch (error) {
-              setImageError(
-                error instanceof Error ? error : new Error('Unable to read this image.'),
-              );
-            } finally {
-              setImageBusy(false);
-            }
-          }}
-        />
-      </Field>
-      {imageBusy && <p role="status">{t('Preparing photo…')}</p>}
-      <ErrorMessage error={imageError} />
-      {image && (
-        <div className="product-photo-preview">
-          <img src={image} alt={t('Product photo preview')} />
-          <Button
-            type="button"
-            variant="ghost"
+      <div className={initial ? 'product-edit-card' : 'product-form-fields'}>
+        {initial && <h3 className="product-edit-card-title">{t('Product details')}</h3>}
+        {source && (
+          <p className="muted">
+            {t('Source:')}{' '}
+            <a
+              href={'https://world.openfoodfacts.org/product/' + source.barcode}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t('Open Food Facts contributors ')}
+            </a>{' '}
+            ·{' '}
+            <a
+              href="https://opendatacommons.org/licenses/odbl/1-0/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t('ODbL ')}
+            </a>
+            {source.imageImported && (
+              <>
+                {' '}
+                {t('· Photo resized from source,')}{' '}
+                <a
+                  href="https://creativecommons.org/licenses/by-sa/3.0/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {t('CC BY-SA 3.0 ')}
+                </a>
+              </>
+            )}
+            {source.brand && <> · {source.brand}</>}
+            {source.quantity && (
+              <>
+                {' '}
+                {t(' · Package: ')}
+                {source.quantity}
+              </>
+            )}
+          </p>
+        )}
+        <Field
+          label={t('Product photo')}
+          hint={t('Optional. JPEG, PNG, or WebP up to 10 MB. Photos are resized automatically.')}
+        >
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
             disabled={imageBusy || mutation.isPending}
-            onClick={() => {
-              setImage('');
-              setSource((value) => (value ? { ...value, imageImported: false } : null));
+            onChange={async (event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (!file) return;
+              setImageBusy(true);
+              setImageError(null);
+              try {
+                setImage(await prepareProductImage(file));
+                setSource((value) => (value ? { ...value, imageImported: false } : null));
+              } catch (error) {
+                setImageError(
+                  error instanceof Error ? error : new Error('Unable to read this image.'),
+                );
+              } finally {
+                setImageBusy(false);
+              }
             }}
-          >
-            {t('Remove photo ')}
-          </Button>
-        </div>
-      )}
-      <Field label={t('Product name')}>
-        <input
-          name="name"
-          placeholder={t('e.g. Organic whole milk')}
-          value={productName}
-          onChange={(e) => setProductName(e.target.value)}
-          required
-          maxLength={120}
-        />
-      </Field>
-      <Field label={t('Description (optional)')}>
-        <textarea
-          name="description"
-          defaultValue={initial?.description ?? prefill?.description ?? ''}
-          maxLength={2000}
-          rows={3}
-          placeholder={t('Additional details about this product')}
-        />
-      </Field>
-      <div className="form-grid">
-        <Field label={t('SKU')}>
+          />
+        </Field>
+        {imageBusy && <p role="status">{t('Preparing photo…')}</p>}
+        <ErrorMessage error={imageError} />
+        {image && (
+          <div className="product-photo-preview">
+            <img src={image} alt={t('Product photo preview')} />
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={imageBusy || mutation.isPending}
+              onClick={() => {
+                setImage('');
+                setSource((value) => (value ? { ...value, imageImported: false } : null));
+              }}
+            >
+              {t('Remove photo ')}
+            </Button>
+          </div>
+        )}
+        <Field label={t('Product name')}>
           <input
-            name="sku"
-            placeholder={t('e.g. MILK-001')}
-            value={effectiveSku}
-            onChange={(e) => {
-              setManualSku(true);
-              setSku(e.target.value);
-            }}
+            name="name"
+            placeholder={t('e.g. Organic whole milk')}
+            value={productName}
+            onChange={(e) => setProductName(e.target.value)}
             required
             maxLength={120}
           />
         </Field>
-        <Field label={t('Category')}>
-          <input
-            name="category"
-            list="categories"
-            placeholder={t('e.g. Dairy')}
-            defaultValue={initial?.category ?? prefill?.category}
-            required
-            maxLength={120}
-          />
-          <datalist id="categories">
-            {['Produce', 'Dairy', 'Bakery', 'Pantry', 'Drinks', 'Household'].map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </datalist>
-        </Field>
-      </div>
-      <div className="form-grid">
-        <Field label={t('Purchase cost')}>
-          <input
-            name="cost"
-            inputMode="decimal"
-            placeholder={t('0.00')}
-            value={cost}
-            onChange={(e) => {
-              setCost(e.target.value);
-              if (!initial) setManualPrice(false);
-            }}
-            required
-          />
-        </Field>
-        <Field
-          label={t('Selling price')}
-          hint={
-            !manualPrice
-              ? t(
-                  'Suggested using {percent}% markup on purchase cost. This price already includes VAT.',
-                  { percent: markup },
-                )
-              : undefined
-          }
-        >
-          <input
-            name="price"
-            inputMode="decimal"
-            placeholder={t('0.00')}
-            value={manualPrice ? price : suggestedPrice}
-            onChange={(e) => {
-              setPrice(e.target.value);
-              setManualPrice(true);
-            }}
-            required
-          />
-          <small className="product-margin-preview" aria-live="polite">
-            {t('Gross margin')}: {marginPreview}
-          </small>
-        </Field>
-        <Field
-          label={t('Tax rate (%)')}
-          hint={t('Selling prices include this tax. Set the appropriate rate for this product.')}
-        >
-          <input
-            name="taxRate"
-            inputMode="decimal"
-            value={effectiveTaxRate}
-            onChange={(event) => setTaxRate(event.target.value)}
-            required
-          />
-        </Field>
-      </div>
-      {initial && (
-        <PriceActions
-          product={initial}
-          currency={currency}
-          regularPriceChanged={price !== (initial.regularPrice ?? initial.price)}
-        />
-      )}
-      <div className="form-grid">
-        <Field label={t('Unit')}>
-          <select name="unit" defaultValue={initial?.unit ?? 'piece'}>
-            {units.map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label={t('Low-stock threshold')}>
-          <input
-            name="minStock"
-            inputMode="decimal"
-            defaultValue={initial?.minStock ?? '5'}
-            required
-          />
-        </Field>
-      </div>
-      <Field
-        label={t('Barcodes (optional)')}
-        hint={t('Add one per line, or separate with commas. Leave blank to generate a barcode.')}
-      >
-        <div className="barcode-input-with-camera">
+        <Field label={t('Description (optional)')}>
           <textarea
-            name="barcodes"
-            rows={2}
-            defaultValue={(initial?.barcodes ?? prefill?.barcodes)?.join('\n')}
-            placeholder={t('Scan or enter a barcode')}
+            name="description"
+            defaultValue={initial?.description ?? prefill?.description ?? ''}
+            maxLength={2000}
+            rows={3}
+            placeholder={t('Additional details about this product')}
           />
-          <CameraBarcodeScanner onScan={(code) => fillField('barcodes', code, true)} />
+        </Field>
+        <div className="form-grid">
+          <Field label={t('SKU')}>
+            <input
+              name="sku"
+              placeholder={t('e.g. MILK-001')}
+              value={effectiveSku}
+              onChange={(e) => {
+                setManualSku(true);
+                setSku(e.target.value);
+              }}
+              required
+              maxLength={120}
+            />
+          </Field>
+          <Field label={t('Category')}>
+            <input
+              name="category"
+              list="categories"
+              placeholder={t('e.g. Dairy')}
+              defaultValue={initial?.category ?? prefill?.category}
+              required
+              maxLength={120}
+            />
+            <datalist id="categories">
+              {['Produce', 'Dairy', 'Bakery', 'Pantry', 'Drinks', 'Household'].map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </datalist>
+          </Field>
         </div>
-      </Field>
-      {!initial && (
-        <p className="muted">
-          {t('Codes are suggested automatically. The next PLU is confirmed when you save.')}
-        </p>
-      )}
-      <Field label={t('PLU / short code (optional)')}>
-        <input
-          name="plu"
-          value={effectivePlu}
-          onChange={(e) => {
-            setManualPlu(true);
-            setPlu(e.target.value);
-          }}
-          maxLength={20}
-          placeholder={t('e.g. 4011')}
-        />
-      </Field>
+        <div className="form-grid">
+          <Field label={t('Purchase cost')}>
+            <input
+              name="cost"
+              inputMode="decimal"
+              placeholder={t('0.00')}
+              value={cost}
+              onChange={(e) => {
+                setCost(e.target.value);
+                if (!initial) setManualPrice(false);
+              }}
+              required
+            />
+          </Field>
+          <Field
+            label={t('Selling price')}
+            hint={
+              !manualPrice
+                ? t(
+                    'Suggested using {percent}% markup on purchase cost. This price already includes VAT.',
+                    { percent: markup },
+                  )
+                : undefined
+            }
+          >
+            <input
+              name="price"
+              inputMode="decimal"
+              placeholder={t('0.00')}
+              value={manualPrice ? price : suggestedPrice}
+              onChange={(e) => {
+                setPrice(e.target.value);
+                setManualPrice(true);
+              }}
+              required
+            />
+            <small className="product-margin-preview" aria-live="polite">
+              {t('Gross margin')}: {marginPreview}
+            </small>
+          </Field>
+          <Field
+            label={t('Tax rate (%)')}
+            hint={t('Selling prices include this tax. Set the appropriate rate for this product.')}
+          >
+            <input
+              name="taxRate"
+              inputMode="decimal"
+              value={effectiveTaxRate}
+              onChange={(event) => setTaxRate(event.target.value)}
+              required
+            />
+          </Field>
+        </div>
+        <div className="form-grid">
+          <Field label={t('Unit')}>
+            <select name="unit" defaultValue={initial?.unit ?? 'piece'}>
+              {units.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label={t('Low-stock threshold')}>
+            <input
+              name="minStock"
+              inputMode="decimal"
+              defaultValue={initial?.minStock ?? '5'}
+              required
+            />
+          </Field>
+        </div>
+        <Field
+          label={t('Barcodes (optional)')}
+          hint={t('Add one per line, or separate with commas. Leave blank to generate a barcode.')}
+        >
+          <div className="barcode-input-with-camera">
+            <textarea
+              name="barcodes"
+              rows={2}
+              defaultValue={(initial?.barcodes ?? prefill?.barcodes)?.join('\n')}
+              placeholder={t('Scan or enter a barcode')}
+            />
+            <CameraBarcodeScanner onScan={(code) => fillField('barcodes', code, true)} />
+          </div>
+        </Field>
+        {!initial && (
+          <p className="muted">
+            {t('Codes are suggested automatically. The next PLU is confirmed when you save.')}
+          </p>
+        )}
+        <Field label={t('PLU / short code (optional)')}>
+          <input
+            name="plu"
+            value={effectivePlu}
+            onChange={(e) => {
+              setManualPlu(true);
+              setPlu(e.target.value);
+            }}
+            maxLength={20}
+            placeholder={t('e.g. 4011')}
+          />
+        </Field>
+        {initial && (
+          <PriceActions
+            product={initial}
+            currency={currency}
+            regularPriceChanged={price !== (initial.regularPrice ?? initial.price)}
+          />
+        )}
+      </div>
       <ErrorMessage error={error ?? mutation.error} />
       <div className="form-actions">
         <Button type="button" variant="outline" onClick={onDone}>

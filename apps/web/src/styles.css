@@ -5533,6 +5533,28 @@ input.shopping-section-title {
   min-width: 140px;
 }
 /* Manager pricing and printable labels for quantity-limited markdowns. */
+.product-form-fields {
+  display: contents;
+}
+.product-edit-card {
+  display: grid;
+  gap: 1rem;
+  padding: 1.5rem;
+  border: 1px solid var(--line, #dde5d9);
+  border-radius: 16px;
+  background: var(--surface, #fff);
+}
+.product-edit-card-title {
+  margin: 0;
+}
+.product-edit-card .price-actions {
+  margin: 0;
+  padding: 1.25rem 0 0;
+  border: 0;
+  border-top: 1px solid var(--line, #dde5d9);
+  border-radius: 0;
+  background: transparent;
+}
 .price-actions {
   display: grid;
   gap: 1rem;
