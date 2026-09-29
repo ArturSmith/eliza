@@ -42,7 +42,7 @@ import {
   type Receipt,
   type Shift,
 } from '@eliza/contracts';
-import { api, ApiError, queryClient } from './api';
+import { api, ApiError, productCatalogUpdateKey, queryClient } from './api';
 import { ErrorMessage, Field } from './forms';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
@@ -466,7 +466,16 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
           }),
       ),
     staleTime: 0,
+    refetchInterval: 5_000,
   });
+  useEffect(() => {
+    const onCatalogUpdate = (event: StorageEvent) => {
+      if (event.key === productCatalogUpdateKey)
+        void queryClient.invalidateQueries({ queryKey: ['pos-products'] });
+    };
+    window.addEventListener('storage', onCatalogUpdate);
+    return () => window.removeEventListener('storage', onCatalogUpdate);
+  }, []);
   const favorite = useMutation({
     mutationFn: ({ id, value }: { id: string; value: boolean }) =>
       api('/pos/products/' + id + '/favorite', { favorite: value }),
@@ -856,7 +865,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   const categories = catalog.data?.categories ?? [];
   useEffect(() => {
     productScroll.current?.scrollTo({ top: 0 });
-  }, [search, page, category, favorites, popular, catalog.data]);
+  }, [search, page, category, favorites, popular]);
   return (
     <div className="pos-shell">
       <header className="pos-topbar">

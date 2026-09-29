@@ -25,7 +25,7 @@ import {
   type Product,
   units,
 } from '@eliza/contracts';
-import { api, queryClient, refresh } from './api';
+import { api, productCatalogUpdateKey, queryClient, refresh } from './api';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { prepareProductImage } from './product-image';
@@ -329,6 +329,11 @@ export function ProductForm({
       ),
     onSuccess: (product) => {
       void refresh();
+      try {
+        localStorage.setItem(productCatalogUpdateKey, crypto.randomUUID());
+      } catch {
+        // Checkout on other devices still refreshes its catalog periodically.
+      }
       if (!initial) onCreated?.(product);
       onDone();
     },

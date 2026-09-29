@@ -13,6 +13,7 @@ export class ApiError extends Error {
 export const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, staleTime: 15_000 } },
 });
+export const productCatalogUpdateKey = 'eliza:products-updated';
 export async function api<T>(
   path: string,
   body?: unknown,
