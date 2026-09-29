@@ -44,6 +44,7 @@ type MarkdownUnit = {
   id: string;
   barcode: string;
   status: string;
+  replacementForId: string | null;
   price: string;
   regularPrice: string;
   expiryDate: string | null;
@@ -82,6 +83,7 @@ export function PriceActions({
   const [validUntil, setValidUntil] = useState('');
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const [labels, setLabels] = useState<Label[]>([]);
+  const [replacedLabel, setReplacedLabel] = useState(false);
   const details = useQuery({
     queryKey: ['price-actions', product.id],
     queryFn: () => api<Details>(`/products/${product.id}/pricing`),
@@ -93,8 +95,9 @@ export function PriceActions({
   const labelAction = useMutation({
     mutationFn: ({ id, kind }: { id: string; kind: 'cancel' | 'replace' }) =>
       api<{ label?: Label }>(`/products/${product.id}/pricing/markdowns/${id}/${kind}`, {}),
-    onSuccess: (result) => {
-      if (result.label) setLabels([result.label]);
+    onSuccess: (result, { kind }) => {
+      setLabels(result.label ? [result.label] : []);
+      setReplacedLabel(kind === 'replace');
       void markdowns.refetch();
       void details.refetch();
       void refresh();
@@ -111,6 +114,7 @@ export function PriceActions({
       }),
     onSuccess: (result) => {
       setLabels(result.labels);
+      setReplacedLabel(false);
       setRequestId(crypto.randomUUID());
       setPrice('');
       void details.refetch();
@@ -119,6 +123,13 @@ export function PriceActions({
     },
   });
   const current = details.data?.product;
+  const activeLabels = (markdowns.data ?? []).filter((unit) => unit.status === 'AVAILABLE');
+  const labelHistory = (markdowns.data ?? []).filter((unit) => unit.status !== 'AVAILABLE');
+  const replacementById = new Map(
+    (markdowns.data ?? [])
+      .filter((unit) => unit.replacementForId)
+      .map((unit) => [unit.replacementForId, unit.barcode]),
+  );
   const available =
     details.data?.batches.reduce(
       (sum, batch) => sum + (batch.sellable ? Math.floor(Number(batch.quantity)) : 0),
@@ -277,46 +288,84 @@ export function PriceActions({
                   ))}
                 </div>
               )}
-              {!!markdowns.data?.length && (
+              {!!activeLabels.length && (
                 <div className="price-action-existing">
-                  <h4>{t('Unit markdown labels')}</h4>
-                  {markdowns.data.map((unit) => (
+                  <h4>{t('Active unit markdown labels')}</h4>
+                  {activeLabels.map((unit) => (
                     <div key={unit.id} className="cash-history-row">
                       <span>
                         <strong>{unit.barcode}</strong>
                         <small>
-                          {formatMoney(unit.price, currency)} · {t(unit.status.toLowerCase())}
+                          {formatMoney(unit.price, currency)}
                           {unit.expiryDate ? ` · ${t('Expires')} ${unit.expiryDate}` : ''}
                         </small>
                       </span>
-                      {unit.status === 'AVAILABLE' && (
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={labelAction.isPending}
-                            onClick={() => labelAction.mutate({ id: unit.id, kind: 'replace' })}
-                          >
-                            {t('Replace label')}
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            disabled={labelAction.isPending}
-                            onClick={() => labelAction.mutate({ id: unit.id, kind: 'cancel' })}
-                          >
-                            {t('Cancel label')}
-                          </Button>
-                        </div>
-                      )}
+                      <div className="price-action-label-actions">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={labelAction.isPending}
+                          onClick={() => labelAction.mutate({ id: unit.id, kind: 'replace' })}
+                        >
+                          {t('Replace label')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={labelAction.isPending}
+                          onClick={() => labelAction.mutate({ id: unit.id, kind: 'cancel' })}
+                        >
+                          {t('Cancel label')}
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
+              )}
+              {!!labelHistory.length && (
+                <details className="price-action-history">
+                  <summary>{t('Label history ({count})', { count: labelHistory.length })}</summary>
+                  <div className="price-action-existing">
+                    {labelHistory.map((unit) => {
+                      const replacement = replacementById.get(unit.id);
+                      return (
+                        <div key={unit.id} className="cash-history-row">
+                          <span>
+                            <strong>{unit.barcode}</strong>
+                            <small>
+                              {unit.status === 'SOLD'
+                                ? t('Sold')
+                                : replacement
+                                  ? t('Replaced')
+                                  : t('Cancelled')}
+                              {' · '}
+                              {formatMoney(unit.price, currency)}
+                              {replacement &&
+                                ` · ${t('Replacement barcode: {code}', { code: replacement })}`}
+                            </small>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
               )}
             </>
           )}
           {!!labels.length && (
             <>
+              <div className="notice" role="status">
+                {t(
+                  replacedLabel
+                    ? 'Old barcode is invalid. Print and attach the replacement label.'
+                    : 'New barcode labels are ready. Print and attach them to the products.',
+                )}
+                <div className="price-action-new-codes">
+                  {labels.map((label) => (
+                    <strong key={label.id}>{label.barcode}</strong>
+                  ))}
+                </div>
+              </div>
               {createPortal(
                 <div className="price-action-print-sheet">
                   {labels.flatMap((label) =>

@@ -5592,6 +5592,31 @@ input.shopping-section-title {
   display: grid;
   gap: 0.5rem;
 }
+.price-action-label-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.price-action-history summary {
+  cursor: pointer;
+  color: var(--green);
+  font-weight: 600;
+}
+.price-action-history .price-action-existing {
+  margin-top: 0.75rem;
+}
+.price-action-new-codes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.price-action-new-codes strong {
+  padding: 0.3rem 0.55rem;
+  border-radius: 6px;
+  background: white;
+  font-variant-numeric: tabular-nums;
+}
 .price-action-print-sheet {
   display: none;
 }

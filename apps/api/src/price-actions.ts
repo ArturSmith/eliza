@@ -127,7 +127,7 @@ export class PriceActionsController {
         );
         const promo = (
           await client.query(
-          `INSERT INTO promotions(store_id,name,origin,discount_type,discount_value,created_by)
+            `INSERT INTO promotions(store_id,name,origin,discount_type,discount_value,created_by)
            VALUES($1,$2,'PRODUCT_DISCOUNT','FIXED_PRICE',$3,$4) RETURNING id`,
             [store, `Product discount: ${product.name}`, body.price, req.context.user.id],
           )
@@ -185,6 +185,7 @@ export class PriceActionsController {
     return (
       await this.database.pool.query(
         `SELECT u.id,u.barcode,u.status,u.batch_id AS "batchId",u.sold_at AS "soldAt",
+        u.replacement_for_id AS "replacementForId",
         m.final_unit_price::text AS price,m.base_unit_price::text AS "regularPrice",
         b.expiry_date AS "expiryDate",m.valid_until AS "validUntil"
        FROM markdown_units u JOIN markdowns m ON m.id=u.markdown_id

@@ -264,6 +264,13 @@ describe.sequential('manager price actions', () => {
     );
     expect(replaced.status).toBe(201);
     expect(replaced.body.label.barcode).not.toBe(remaining.barcode);
+    const markdownHistory = (await manager.request(`/products/${productId}/pricing/markdowns`))
+      .body;
+    expect(markdownHistory.find((unit: any) => unit.id === remaining.id).status).toBe('CANCELLED');
+    expect(markdownHistory.find((unit: any) => unit.id === replaced.body.label.id)).toMatchObject({
+      status: 'AVAILABLE',
+      replacementForId: remaining.id,
+    });
     expect((await register.request(`/pos/products?code=${remaining.barcode}`)).status).toBe(409);
     const cancelled = await manager.request(
       `/products/${productId}/pricing/markdowns/${replaced.body.label.id}/cancel`,
