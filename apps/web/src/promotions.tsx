@@ -1,9 +1,10 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { api, refresh, useProducts } from './api';
+import { api, refresh, useProducts, useSession } from './api';
 import { Button } from './components/ui/button';
 import { ErrorMessage } from './forms';
-import { t, useLanguage } from './i18n';
+import { getLocale, t, useLanguage } from './i18n';
+import './promotions.css';
 
 type Promotion = {
   id: string;
@@ -18,9 +19,11 @@ type Promotion = {
   categoryIds: string[];
 };
 type Category = { id: string; name: string };
+type Scope = 'products' | 'categories';
 
 export function PromotionsPage() {
   useLanguage();
+  const session = useSession();
   const products = useProducts();
   const categories = useQuery({
     queryKey: ['promotion-categories'],
@@ -30,22 +33,52 @@ export function PromotionsPage() {
     queryKey: ['promotions'],
     queryFn: () => api<Promotion[]>('/promotions'),
   });
+  const [scope, setScope] = useState<Scope>('products');
+  const [search, setSearch] = useState('');
   const [name, setName] = useState('');
   const [type, setType] = useState<'PERCENTAGE' | 'FIXED_PRICE'>('PERCENTAGE');
   const [value, setValue] = useState('');
   const [productIds, setProductIds] = useState<string[]>([]);
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
+  const [timing, setTiming] = useState<'now' | 'later'>('now');
   const [startsAt, setStartsAt] = useState('');
   const [endsAt, setEndsAt] = useState('');
+  const allProducts = (products.data ?? []).filter(
+    (product) => product.active && !product.baseProductId,
+  );
+  const searchTerm = search.trim().toLocaleLowerCase();
+  const matchingProducts = allProducts.filter((product) =>
+    (product.name + ' ' + product.sku).toLocaleLowerCase().includes(searchTerm),
+  );
+  const matchingCategories = (categories.data ?? []).filter((category) =>
+    category.name.toLocaleLowerCase().includes(searchTerm),
+  );
+  const selectedCount = scope === 'products' ? productIds.length : categoryIds.length;
+  const validValue =
+    value !== '' &&
+    Number.isFinite(Number(value)) &&
+    Number(value) >= 0 &&
+    (type === 'FIXED_PRICE' || (Number(value) > 0 && Number(value) <= 100));
+  const canCreate =
+    name.trim() && selectedCount > 0 && validValue && (timing === 'now' || !!startsAt);
+  const currency = session.data?.store.currency ?? 'NOK';
+  const money = (amount: string) =>
+    new Intl.NumberFormat(getLocale(), { style: 'currency', currency }).format(Number(amount));
+  const date = (value: string) =>
+    new Intl.DateTimeFormat(getLocale(), {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+      timeZone: session.data?.store.timezone,
+    }).format(new Date(value));
   const create = useMutation({
     mutationFn: () =>
       api('/promotions', {
-        name,
+        name: name.trim(),
         discountType: type,
         discountValue: value,
-        productIds,
-        categoryIds,
-        ...(startsAt ? { startsAtLocal: startsAt } : {}),
+        productIds: scope === 'products' ? productIds : [],
+        categoryIds: scope === 'categories' ? categoryIds : [],
+        ...(timing === 'later' ? { startsAtLocal: startsAt } : {}),
         ...(endsAt ? { endsAtLocal: endsAt } : {}),
       }),
     onSuccess: () => {
@@ -55,161 +88,312 @@ export function PromotionsPage() {
       setCategoryIds([]);
       setStartsAt('');
       setEndsAt('');
+      setTiming('now');
+      setSearch('');
       void list.refetch();
       void refresh();
     },
   });
   const cancel = useMutation({
-    mutationFn: (id: string) => api(`/promotions/${id}/cancel`, {}),
+    mutationFn: (id: string) => api('/promotions/' + id + '/cancel', {}),
     onSuccess: () => {
       void list.refetch();
       void refresh();
     },
   });
+  function changeScope(next: Scope) {
+    setScope(next);
+    setSearch('');
+    setProductIds([]);
+    setCategoryIds([]);
+  }
   function toggle(id: string, selected: string[], set: (next: string[]) => void) {
-    set(selected.includes(id) ? selected.filter((v) => v !== id) : [...selected, id]);
+    set(selected.includes(id) ? selected.filter((item) => item !== id) : [...selected, id]);
   }
   function submit(event: FormEvent) {
     event.preventDefault();
-    create.mutate();
+    if (canCreate && !create.isPending) create.mutate();
+  }
+  function targets(promotion: Promotion) {
+    const names = [
+      ...promotion.productIds
+        .map((id) => allProducts.find((product) => product.id === id)?.name)
+        .filter(Boolean),
+      ...promotion.categoryIds
+        .map((id) => categories.data?.find((category) => category.id === id)?.name)
+        .filter(Boolean),
+    ];
+    return names.length ? names.join(', ') : t('Targets unavailable');
+  }
+  function status(promotion: Promotion) {
+    if (promotion.cancelledAt) return 'Cancelled';
+    if (!promotion.enabled || (promotion.endsAt && new Date(promotion.endsAt) <= new Date()))
+      return 'Ended';
+    if (new Date(promotion.startsAt) > new Date()) return 'Scheduled';
+    return 'Active';
   }
   return (
-    <div className="page-content">
+    <div className="page-content promotions-page">
       <header className="page-heading">
         <div>
           <h1>{t('Promotions')}</h1>
           <p className="muted">
-            {t(
-              'Set a price rule for products or categories. The base selling price stays unchanged.',
-            )}
+            {t('Discount products or whole categories without changing their regular prices.')}
           </p>
         </div>
       </header>
-      <section className="panel" style={{ padding: 24, marginBottom: 24 }}>
-        <h2>{t('Create promotion')}</h2>
-        <form onSubmit={submit} className="form-grid">
-          <label className="field">
-            <span>{t('Name')}</span>
+      <form onSubmit={submit} className="promotion-editor panel">
+        <div className="promotion-editor-heading">
+          <h2>{t('Create promotion')}</h2>
+          <p className="muted">
+            {t('Choose who gets the discount, set the offer, then choose when it runs.')}
+          </p>
+        </div>
+        <section
+          className="promotion-step promotion-target-step"
+          aria-labelledby="promotion-target-heading"
+        >
+          <div className="promotion-step-title">
+            <span>1</span>
+            <h3 id="promotion-target-heading">{t('Who gets the discount?')}</h3>
+          </div>
+          <div className="promotion-segmented" role="radiogroup" aria-label={t('Apply to')}>
+            <label className={scope === 'products' ? 'selected' : ''}>
+              <input
+                type="radio"
+                name="promotion-scope"
+                checked={scope === 'products'}
+                onChange={() => changeScope('products')}
+              />
+              {t('Specific products')}
+            </label>
+            <label className={scope === 'categories' ? 'selected' : ''}>
+              <input
+                type="radio"
+                name="promotion-scope"
+                checked={scope === 'categories'}
+                onChange={() => changeScope('categories')}
+              />
+              {t('Entire categories')}
+            </label>
+          </div>
+          <label className="field promotion-search">
+            <span>{scope === 'products' ? t('Find products') : t('Find categories')}</span>
             <input
-              required
-              maxLength={120}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={
+                scope === 'products' ? t('Search by name or SKU…') : t('Search categories…')
+              }
             />
           </label>
-          <label className="field">
-            <span>{t('Discount type')}</span>
-            <select value={type} onChange={(e) => setType(e.target.value as typeof type)}>
-              <option value="PERCENTAGE">{t('Percentage off')}</option>
-              <option value="FIXED_PRICE">{t('Final selling price')}</option>
-            </select>
-          </label>
-          <label className="field">
-            <span>{type === 'PERCENTAGE' ? t('Percent off') : t('Final selling price')}</span>
-            <input
-              required
-              type="number"
-              min="0"
-              max={type === 'PERCENTAGE' ? '100' : undefined}
-              step="0.01"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span>{t('Starts at (store time)')}</span>
-            <input
-              type="datetime-local"
-              value={startsAt}
-              onChange={(e) => setStartsAt(e.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span>{t('Ends at (store time, optional)')}</span>
-            <input
-              type="datetime-local"
-              min={startsAt || undefined}
-              value={endsAt}
-              onChange={(e) => setEndsAt(e.target.value)}
-            />
-          </label>
-          <fieldset className="promotion-targets">
-            <legend>{t('Products')}</legend>
-            <div style={{ maxHeight: 210, overflowY: 'auto' }}>
-              {(products.data ?? [])
-                .filter((p) => !p.baseProductId)
-                .map((p) => (
-                  <label key={p.id} className="price-actions-choice">
+          <div className="promotion-target-count">
+            <strong>{selectedCount}</strong>{' '}
+            {scope === 'products' ? t('products selected') : t('categories selected')}
+          </div>
+          <div className="promotion-target-list">
+            {scope === 'products'
+              ? matchingProducts.map((product) => (
+                  <label key={product.id} className="promotion-target-row">
                     <input
                       type="checkbox"
-                      checked={productIds.includes(p.id)}
-                      onChange={() => toggle(p.id, productIds, setProductIds)}
+                      checked={productIds.includes(product.id)}
+                      onChange={() => toggle(product.id, productIds, setProductIds)}
                     />
-                    {p.name}
+                    <span>
+                      <strong>{product.name}</strong>
+                      <small>
+                        {product.sku} · {money(product.price)}
+                      </small>
+                    </span>
+                  </label>
+                ))
+              : matchingCategories.map((category) => (
+                  <label key={category.id} className="promotion-target-row">
+                    <input
+                      type="checkbox"
+                      checked={categoryIds.includes(category.id)}
+                      onChange={() => toggle(category.id, categoryIds, setCategoryIds)}
+                    />
+                    <span>
+                      <strong>{category.name}</strong>
+                    </span>
                   </label>
                 ))}
-            </div>
-          </fieldset>
-          <fieldset className="promotion-targets">
-            <legend>{t('Categories')}</legend>
-            <div style={{ maxHeight: 210, overflowY: 'auto' }}>
-              {(categories.data ?? []).map((c) => (
-                <label key={c.id} className="price-actions-choice">
-                  <input
-                    type="checkbox"
-                    checked={categoryIds.includes(c.id)}
-                    onChange={() => toggle(c.id, categoryIds, setCategoryIds)}
-                  />
-                  {c.name}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <ErrorMessage error={create.error} />
-          <div>
-            <Button
-              disabled={
-                create.isPending || !name || !value || !(productIds.length || categoryIds.length)
-              }
-            >
-              {t('Create promotion')}
-            </Button>
-          </div>
-        </form>
-      </section>
-      <section className="panel" style={{ padding: 24 }}>
-        <h2>{t('Promotion rules')}</h2>
-        <ErrorMessage error={list.error ?? cancel.error} />
-        {(list.data ?? []).map((p) => (
-          <div key={p.id} className="cash-history-row">
-            <span>
-              <strong>{p.name}</strong>
-              <small>
-                {p.discountType === 'PERCENTAGE' ? `${p.discountValue}%` : p.discountValue}
-                {' · '}
-                {p.productIds.length} {t('products')}, {p.categoryIds.length} {t('categories')}
-                {' · '}
-                {p.cancelledAt
-                  ? t('Cancelled')
-                  : p.endsAt && new Date(p.endsAt) <= new Date()
-                    ? t('Ended')
-                    : new Date(p.startsAt) > new Date()
-                      ? t('Scheduled')
-                      : t('Active')}
-              </small>
-            </span>
-            {!p.cancelledAt && (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={cancel.isPending}
-                onClick={() => cancel.mutate(p.id)}
-              >
-                {t('Cancel promotion')}
-              </Button>
+            {(scope === 'products' ? matchingProducts.length : matchingCategories.length) === 0 && (
+              <p className="muted promotion-empty">{t('No matches found.')}</p>
             )}
           </div>
-        ))}
+          {selectedCount > 0 && (
+            <p className="promotion-selection-note">
+              {t('Selected targets stay included when you search again.')}
+            </p>
+          )}
+        </section>
+        <div className="promotion-settings">
+          <section className="promotion-step" aria-labelledby="promotion-price-heading">
+            <div className="promotion-step-title">
+              <span>2</span>
+              <h3 id="promotion-price-heading">{t('What is the offer?')}</h3>
+            </div>
+            <div className="promotion-fields">
+              <label className="field">
+                <span>{t('Discount type')}</span>
+                <select
+                  value={type}
+                  onChange={(event) => setType(event.target.value as typeof type)}
+                >
+                  <option value="PERCENTAGE">{t('Percentage off')}</option>
+                  <option value="FIXED_PRICE">{t('Final selling price')}</option>
+                </select>
+              </label>
+              <label className="field">
+                <span>{type === 'PERCENTAGE' ? t('Percent off') : t('Final selling price')}</span>
+                <input
+                  required
+                  type="number"
+                  min={type === 'PERCENTAGE' ? '0.01' : '0'}
+                  max={type === 'PERCENTAGE' ? '100' : undefined}
+                  step="0.01"
+                  value={value}
+                  onChange={(event) => setValue(event.target.value)}
+                  placeholder={type === 'PERCENTAGE' ? '10' : '60.00'}
+                />
+              </label>
+            </div>
+            <p className="muted">
+              {type === 'PERCENTAGE'
+                ? t('The discount is calculated from each product’s regular price.')
+                : t('This final price applies only where it is lower than the regular price.')}
+            </p>
+          </section>
+          <section className="promotion-step" aria-labelledby="promotion-time-heading">
+            <div className="promotion-step-title">
+              <span>3</span>
+              <h3 id="promotion-time-heading">{t('When should it run?')}</h3>
+            </div>
+            <div className="promotion-timing-choice">
+              <label>
+                <input
+                  type="radio"
+                  name="promotion-timing"
+                  checked={timing === 'now'}
+                  onChange={() => setTiming('now')}
+                />
+                {t('Start now')}
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="promotion-timing"
+                  checked={timing === 'later'}
+                  onChange={() => setTiming('later')}
+                />
+                {t('Schedule for later')}
+              </label>
+            </div>
+            {timing === 'later' && (
+              <label className="field">
+                <span>{t('Starts at (store time)')}</span>
+                <input
+                  required
+                  type="datetime-local"
+                  value={startsAt}
+                  onChange={(event) => setStartsAt(event.target.value)}
+                />
+              </label>
+            )}
+            <label className="field">
+              <span>{t('Ends at (store time, optional)')}</span>
+              <input
+                type="datetime-local"
+                min={timing === 'later' ? startsAt || undefined : undefined}
+                value={endsAt}
+                onChange={(event) => setEndsAt(event.target.value)}
+              />
+            </label>
+            <p className="muted">
+              {t('Leave the end empty to keep the promotion active until you cancel it.')}
+            </p>
+          </section>
+          <section className="promotion-save">
+            <label className="field">
+              <span>{t('Promotion name')}</span>
+              <input
+                required
+                maxLength={120}
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder={t('For example: Weekend dairy sale')}
+              />
+            </label>
+            <p className="muted">
+              {t(
+                'The regular price stays unchanged. If several offers apply, checkout uses the lowest price.',
+              )}
+            </p>
+            <ErrorMessage error={create.error} />
+            <Button disabled={!canCreate || create.isPending}>
+              {create.isPending ? t('Saving…') : t('Create promotion')}
+            </Button>
+          </section>
+        </div>
+      </form>
+      <section className="panel promotion-list">
+        <div className="promotion-list-heading">
+          <div>
+            <h2>{t('Promotions')}</h2>
+            <p className="muted">{t('Review active, scheduled and past offers.')}</p>
+          </div>
+          <span>
+            {(list.data ?? []).filter((promotion) => status(promotion) === 'Active').length}{' '}
+            {t('active')}
+          </span>
+        </div>
+        <ErrorMessage error={list.error ?? cancel.error} />
+        {!list.isPending && !list.data?.length && (
+          <p className="muted promotion-empty">{t('No promotions yet.')}</p>
+        )}
+        <div className="promotion-list-items">
+          {(list.data ?? []).map((promotion) => {
+            const state = status(promotion);
+            return (
+              <article key={promotion.id} className="promotion-record">
+                <div className="promotion-record-main">
+                  <span className={'promotion-status promotion-status-' + state.toLowerCase()}>
+                    {t(state)}
+                  </span>
+                  <div>
+                    <h3>{promotion.name}</h3>
+                    <p>{targets(promotion)}</p>
+                  </div>
+                </div>
+                <div className="promotion-record-meta">
+                  <strong>
+                    {promotion.discountType === 'PERCENTAGE'
+                      ? promotion.discountValue + '% ' + t('off')
+                      : money(promotion.discountValue)}
+                  </strong>
+                  <small>
+                    {date(promotion.startsAt)}
+                    {promotion.endsAt ? ' – ' + date(promotion.endsAt) : ' · ' + t('No end date')}
+                  </small>
+                </div>
+                {state === 'Active' || state === 'Scheduled' ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={cancel.isPending}
+                    onClick={() => cancel.mutate(promotion.id)}
+                  >
+                    {t('Cancel promotion')}
+                  </Button>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
       </section>
     </div>
   );
