@@ -1923,5 +1923,14 @@
   "off": "скидка",
   "No end date": "Без даты окончания",
   "No promotions yet.": "Акций пока нет.",
-  "Create one-use barcode labels for specific physical items.": "Создайте отдельную одноразовую этикетку со штрихкодом для каждой выбранной упаковки."
+  "Create one-use barcode labels for specific physical items.": "Создайте отдельную одноразовую этикетку со штрихкодом для каждой выбранной упаковки.",
+  "Markdown labels": "Этикетки уценки",
+  "Each label is for one physical item. Print it and attach it to the matching package.": "Каждая этикетка предназначена для одной упаковки. Распечатайте её и наклейте на нужный товар.",
+  "No markdown labels found.": "Этикетки уценки не найдены.",
+  "No markdown labels waiting to print.": "Нет доступных этикеток уценки.",
+  "Copy barcode": "Скопировать штрихкод",
+  "Barcode copied: {value0}": "Штрихкод скопирован: {value0}",
+  "Could not copy automatically. Select the barcode number to copy it.": "Не удалось скопировать автоматически. Выделите номер штрихкода и скопируйте его.",
+  "Print selected labels": "Печать выбранных этикеток",
+  "Selected markdown label for {value0}": "Выбрана этикетка уценки для {value0}"
 }

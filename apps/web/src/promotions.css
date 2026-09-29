@@ -168,7 +168,7 @@
   height: 16px;
   accent-color: var(--green);
 }
-.promotion-step .field + .field {
+.promotion-step > .field + .field {
   margin-top: 14px;
 }
 .promotion-save {

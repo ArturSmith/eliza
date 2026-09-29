@@ -7,7 +7,7 @@ import {
   type TagDesign,
 } from '@eliza/contracts';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { LockKeyhole, Printer } from 'lucide-react';
+import { Copy, LockKeyhole, Printer } from 'lucide-react';
 import { api, queryClient } from './api';
 import { t, useLanguage } from './i18n';
 import { Button } from './components/ui/button';
@@ -44,6 +44,17 @@ type Product = {
 
 type WeightLabel = { barcode: string; name: string; sku: string; price: string; weight: string };
 type PrintItem = { product: Product; weightLabel?: WeightLabel };
+type MarkdownLabel = {
+  id: string;
+  productId: string;
+  name: string;
+  sku: string;
+  barcode: string;
+  price: string;
+  regularPrice: string;
+  expiryDate: string | null;
+  validUntil: string | null;
+};
 
 export function PriceTagsPage() {
   useLanguage();
@@ -57,11 +68,24 @@ export function PriceTagsPage() {
     queryFn: () => api<Product[]>('/price-tags/products'),
     enabled: !!context.data?.operator,
   });
-  const [tab, setTab] = useState<'changed' | 'all'>('changed');
+  const markdownLabels = useQuery({
+    queryKey: ['price-tags-markdown-labels'],
+    queryFn: () => api<MarkdownLabel[]>('/price-tags/markdown-labels'),
+    enabled: !!context.data?.operator,
+    refetchOnWindowFocus: true,
+    refetchInterval: 15_000,
+  });
+  const [tab, setTab] = useState<'changed' | 'all' | 'markdowns'>('changed');
   const [completingPrint, setCompletingPrint] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [packageWeights, setPackageWeights] = useState<Record<string, string>>({});
   const [printItems, setPrintItems] = useState<PrintItem[]>([]);
+  const [markdownPrintItems, setMarkdownPrintItems] = useState<MarkdownLabel[]>([]);
+  const [selectedMarkdownIds, setSelectedMarkdownIds] = useState<string[]>([]);
+  const [copyFeedback, setCopyFeedback] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
   const [search, setSearch] = useState('');
   const [scanFeedback, setScanFeedback] = useState<{
     type: 'success' | 'error';
@@ -102,6 +126,19 @@ export function PriceTagsPage() {
   }
   function selectScannedProduct(code: string) {
     setSearch(code);
+    const markdown = (markdownLabels.data ?? []).find((label) => label.barcode === code);
+    if (markdown) {
+      setTab('markdowns');
+      setSelectedMarkdownIds((before) =>
+        before.includes(markdown.id) ? before : [...before, markdown.id],
+      );
+      setScanFeedback({
+        type: 'success',
+        text: t('Selected markdown label for {value0}', { value0: markdown.name }),
+      });
+      playScanSound(true);
+      return;
+    }
     const matching = (products.data ?? []).filter(
       (product) => (product.barcodes ?? []).includes(code) || product.barcode === code,
     );
@@ -175,6 +212,7 @@ export function PriceTagsPage() {
     },
     onSuccess: (job) => {
       setCompletingPrint(true);
+      setMarkdownPrintItems([]);
       setPrintItems(job.items);
       requestAnimationFrame(() =>
         requestAnimationFrame(async () => {
@@ -194,7 +232,34 @@ export function PriceTagsPage() {
       );
     },
   });
+  const printMarkdowns = useMutation({
+    mutationFn: (unitIds: string[]) =>
+      api<{ labels: MarkdownLabel[] }>('/price-tags/markdown-prints', { unitIds }),
+    onSuccess: ({ labels }) => {
+      setCompletingPrint(true);
+      setPrintItems([]);
+      setMarkdownPrintItems(labels);
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          window.print();
+          setCompletingPrint(false);
+          void queryClient.invalidateQueries({ queryKey: ['price-tags-markdown-labels'] });
+        }),
+      );
+    },
+  });
   const [printError, setPrintError] = useState<unknown>(null);
+  async function copyBarcode(code: string) {
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopyFeedback({ type: 'success', text: t('Barcode copied: {value0}', { value0: code }) });
+    } catch {
+      setCopyFeedback({
+        type: 'error',
+        text: t('Could not copy automatically. Select the barcode number to copy it.'),
+      });
+    }
+  }
 
   const lock = useMutation({
     mutationFn: () => api('/price-tags/lock', {}),
@@ -202,6 +267,8 @@ export function PriceTagsPage() {
       setSelected([]);
       setPackageWeights({});
       setPrintItems([]);
+      setMarkdownPrintItems([]);
+      setSelectedMarkdownIds([]);
       void queryClient.invalidateQueries({ queryKey: ['price-tags-context'] });
     },
   });
@@ -270,6 +337,7 @@ export function PriceTagsPage() {
       </div>
     );
   const all = products.data ?? [];
+  const allMarkdowns = markdownLabels.data ?? [];
   const changedCount = all.filter((product) => product.priceChanged).length;
   const visible = all
     .filter((product) => tab === 'all' || product.priceChanged)
@@ -281,6 +349,14 @@ export function PriceTagsPage() {
   const chosen = selected
     .map((id) => all.find((product) => product.id === id))
     .filter((product): product is Product => !!product);
+  const visibleMarkdowns = allMarkdowns.filter((label) =>
+    [label.name, label.sku, label.barcode].some((text) =>
+      text.toLowerCase().includes(search.toLowerCase()),
+    ),
+  );
+  const chosenMarkdowns = selectedMarkdownIds.filter((id) =>
+    allMarkdowns.some((label) => label.id === id),
+  );
   const price = (amount: string) =>
     new Intl.NumberFormat(undefined, { style: 'currency', currency: value.store.currency }).format(
       Number(amount),
@@ -315,6 +391,9 @@ export function PriceTagsPage() {
         <button role="tab" aria-selected={tab === 'all'} onClick={() => setTab('all')}>
           {t('All products')}
         </button>
+        <button role="tab" aria-selected={tab === 'markdowns'} onClick={() => setTab('markdowns')}>
+          {t('Markdown labels')} <span className="price-tags-counter">{allMarkdowns.length}</span>
+        </button>
       </div>
       <div className="price-tags-controls">
         <div className="price-tags-search-field">
@@ -326,6 +405,7 @@ export function PriceTagsPage() {
               onChange={(event) => {
                 setSearch(event.target.value);
                 setScanFeedback(null);
+                setCopyFeedback(null);
               }}
               placeholder={t('Name, SKU, PLU or barcode')}
             />
@@ -344,8 +424,28 @@ export function PriceTagsPage() {
           {scanFeedback.text}
         </p>
       )}
-      <ErrorMessage error={products.error ?? print.error ?? printError} />
-      {!products.isPending && !products.error && !visible.length && (
+      {copyFeedback && (
+        <p className={'price-tags-scan-feedback ' + copyFeedback.type} role="status">
+          {copyFeedback.text}
+        </p>
+      )}
+      <ErrorMessage
+        error={
+          products.error ??
+          markdownLabels.error ??
+          print.error ??
+          printMarkdowns.error ??
+          printError
+        }
+      />
+      {tab === 'markdowns' && (
+        <p className="price-tags-list-description muted">
+          {t(
+            'Each label is for one physical item. Print it and attach it to the matching package.',
+          )}
+        </p>
+      )}
+      {tab !== 'markdowns' && !products.isPending && !products.error && !visible.length && (
         <p className="price-tags-empty">
           {t(
             tab === 'changed' && !search
@@ -354,84 +454,176 @@ export function PriceTagsPage() {
           )}
         </p>
       )}
-      <div className="price-tags-product-list" role="tabpanel">
-        {visible.map((product) => (
-          <div key={product.id} className="price-tags-product-entry">
-            <label className="price-tags-product">
-              <input
-                type="checkbox"
-                checked={selected.includes(product.id)}
-                onChange={(event) =>
-                  setSelected((before) =>
-                    event.target.checked
-                      ? [...before, product.id]
-                      : before.filter((id) => id !== product.id),
-                  )
-                }
-              />
-              <span>
-                <strong>{product.name}</strong>
-                <small>
-                  {product.sku} ·{' '}
-                  {product.unit === 'kilogram'
-                    ? `PLU ${product.plu || '—'}`
-                    : product.barcode || product.plu}
-                </small>
-              </span>
-              <b>
-                {price(product.price)}
-                {product.unit === 'kilogram' ? `/${t('kg')}` : ''}
-              </b>
-            </label>
-            {product.unit === 'kilogram' && selected.includes(product.id) && (
-              <div className="price-tags-weight-details">
+      {tab === 'markdowns' &&
+        !markdownLabels.isPending &&
+        !markdownLabels.error &&
+        !visibleMarkdowns.length && (
+          <p className="price-tags-empty">
+            {t(search ? 'No markdown labels found.' : 'No markdown labels waiting to print.')}
+          </p>
+        )}
+      {tab === 'markdowns' ? (
+        <div className="price-tags-product-list" role="tabpanel">
+          {visibleMarkdowns.map((label) => (
+            <div key={label.id} className="price-tags-markdown-entry">
+              <label className="price-tags-product">
                 <input
-                  aria-label={`${t('Enter package weight')} — ${product.name}`}
-                  inputMode="decimal"
-                  placeholder={t('Enter package weight')}
-                  value={packageWeights[product.id] ?? ''}
+                  type="checkbox"
+                  checked={selectedMarkdownIds.includes(label.id)}
                   onChange={(event) =>
-                    setPackageWeights((before) => ({ ...before, [product.id]: event.target.value }))
+                    setSelectedMarkdownIds((before) =>
+                      event.target.checked
+                        ? [...before, label.id]
+                        : before.filter((id) => id !== label.id),
+                    )
                   }
                 />
-                {!value.store.scaleBarcode.enabled || value.store.scaleBarcode.mode !== 'weight' ? (
-                  <p className="price-tags-scan-feedback error">
-                    {t('Ask a manager to enable weight barcodes in Store settings.')}
-                  </p>
-                ) : !/^\d+$/.test(product.plu) ? (
-                  <p className="price-tags-scan-feedback error">
-                    {t('Add a numeric PLU to this product before creating a weight barcode.')}
-                  </p>
-                ) : null}
+                <span>
+                  <strong>{label.name}</strong>
+                  <small>{label.sku}</small>
+                  <small className="price-tags-markdown-code">{label.barcode}</small>
+                  {label.expiryDate && (
+                    <small>
+                      {t('Expires')} {label.expiryDate}
+                    </small>
+                  )}
+                </span>
+                <b>{price(label.price)}</b>
+              </label>
+              <div className="price-tags-markdown-actions">
+                <small>
+                  {t('Discount from')} <s>{price(label.regularPrice)}</s>
+                </small>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void copyBarcode(label.barcode)}
+                >
+                  <Copy size={15} /> {t('Copy barcode')}
+                </Button>
               </div>
-            )}
-          </div>
-        ))}
-      </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="price-tags-product-list" role="tabpanel">
+          {visible.map((product) => (
+            <div key={product.id} className="price-tags-product-entry">
+              <label className="price-tags-product">
+                <input
+                  type="checkbox"
+                  checked={selected.includes(product.id)}
+                  onChange={(event) =>
+                    setSelected((before) =>
+                      event.target.checked
+                        ? [...before, product.id]
+                        : before.filter((id) => id !== product.id),
+                    )
+                  }
+                />
+                <span>
+                  <strong>{product.name}</strong>
+                  <small>
+                    {product.sku} ·{' '}
+                    {product.unit === 'kilogram'
+                      ? `PLU ${product.plu || '—'}`
+                      : product.barcode || product.plu}
+                  </small>
+                </span>
+                <b>
+                  {price(product.price)}
+                  {product.unit === 'kilogram' ? `/${t('kg')}` : ''}
+                </b>
+              </label>
+              {product.unit === 'kilogram' && selected.includes(product.id) && (
+                <div className="price-tags-weight-details">
+                  <input
+                    aria-label={`${t('Enter package weight')} — ${product.name}`}
+                    inputMode="decimal"
+                    placeholder={t('Enter package weight')}
+                    value={packageWeights[product.id] ?? ''}
+                    onChange={(event) =>
+                      setPackageWeights((before) => ({
+                        ...before,
+                        [product.id]: event.target.value,
+                      }))
+                    }
+                  />
+                  {!value.store.scaleBarcode.enabled ||
+                  value.store.scaleBarcode.mode !== 'weight' ? (
+                    <p className="price-tags-scan-feedback error">
+                      {t('Ask a manager to enable weight barcodes in Store settings.')}
+                    </p>
+                  ) : !/^\d+$/.test(product.plu) ? (
+                    <p className="price-tags-scan-feedback error">
+                      {t('Add a numeric PLU to this product before creating a weight barcode.')}
+                    </p>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
       <div className="price-tags-print-action">
-        <Button
-          onClick={() => {
-            setPrintError(null);
-            print.mutate(chosen);
-          }}
-          disabled={
-            !chosen.length ||
-            !weightReady ||
-            print.isPending ||
-            completingPrint ||
-            chosen.some(
-              (product) =>
-                product.unit === 'kilogram' &&
-                (!value.store.scaleBarcode.enabled ||
-                  value.store.scaleBarcode.mode !== 'weight' ||
-                  !/^\d+$/.test(product.plu)),
-            )
-          }
-        >
-          <Printer size={17} /> {t('Print selected tags')} ({chosen.length})
-        </Button>
+        {tab === 'markdowns' ? (
+          <Button
+            onClick={() => {
+              setPrintError(null);
+              printMarkdowns.mutate(chosenMarkdowns);
+            }}
+            disabled={!chosenMarkdowns.length || printMarkdowns.isPending || completingPrint}
+          >
+            <Printer size={17} /> {t('Print selected labels')} ({chosenMarkdowns.length})
+          </Button>
+        ) : (
+          <Button
+            onClick={() => {
+              setPrintError(null);
+              print.mutate(chosen);
+            }}
+            disabled={
+              !chosen.length ||
+              !weightReady ||
+              print.isPending ||
+              completingPrint ||
+              chosen.some(
+                (product) =>
+                  product.unit === 'kilogram' &&
+                  (!value.store.scaleBarcode.enabled ||
+                    value.store.scaleBarcode.mode !== 'weight' ||
+                    !/^\d+$/.test(product.plu)),
+              )
+            }
+          >
+            <Printer size={17} /> {t('Print selected tags')} ({chosen.length})
+          </Button>
+        )}
       </div>
       <div className="price-tags-print-sheet" style={{ gap: `${design.gapMm}mm` }}>
+        {markdownPrintItems.map((label) => (
+          <article
+            key={label.id}
+            className="price-tag price-tag-weight price-tag-markdown"
+            style={{ width: `${design.weightWidthMm}mm`, height: `${design.weightHeightMm}mm` }}
+          >
+            {design.showStoreName && <small>{value.store.name}</small>}
+            <strong style={{ fontSize: `${design.nameFontPt}pt` }}>{label.name}</strong>
+            {design.showSku && <small>{label.sku}</small>}
+            <div className="price-tag-price" style={{ fontSize: `${design.priceFontPt}pt` }}>
+              {price(label.price)}
+            </div>
+            <small>
+              {t('Discount from')} <s>{price(label.regularPrice)}</s>
+            </small>
+            {label.expiryDate && (
+              <small>
+                {t('Expires')} {label.expiryDate}
+              </small>
+            )}
+            <Ean13Barcode code={label.barcode} showDigits={design.showBarcodeNumber} />
+          </article>
+        ))}
         {printItems.map(({ product, weightLabel }) =>
           weightLabel ? (
             <article

@@ -23,6 +23,28 @@ import { resolvePrice } from './pricing-engine.js';
 @Controller('price-tags')
 export class PriceTagsController {
   constructor(private database: Database) {}
+  private async availableMarkdownLabels(store: string, ids: string[] | null = null) {
+    return (
+      await this.database.pool.query(
+        `SELECT u.id,u.barcode,p.id AS "productId",p.name,p.sku,
+          m.final_unit_price::text AS price,m.base_unit_price::text AS "regularPrice",
+          b.expiry_date AS "expiryDate",m.valid_until AS "validUntil"
+         FROM markdown_units u
+         JOIN markdowns m ON m.id=u.markdown_id AND m.store_id=u.store_id
+         JOIN products p ON p.id=u.product_id AND p.store_id=u.store_id
+         JOIN stock_batches b ON b.id=u.batch_id AND b.store_id=u.store_id
+         JOIN stores s ON s.id=u.store_id
+         WHERE u.store_id=$1 AND ($2::uuid[] IS NULL OR u.id=ANY($2::uuid[]))
+           AND u.status='AVAILABLE' AND u.cancelled_at IS NULL
+           AND m.cancelled_at IS NULL AND m.valid_from<=now()
+           AND (m.valid_until IS NULL OR m.valid_until>now())
+           AND p.active AND b.quantity>=1
+           AND (b.expiry_date IS NULL OR b.expiry_date>(now() AT TIME ZONE s.timezone)::date)
+         ORDER BY m.created_at DESC,u.created_at DESC,u.id`,
+        [store, ids],
+      )
+    ).rows;
+  }
   private async priced(store: string, rows: any[]) {
     return Promise.all(
       rows.map(async (row) => {
@@ -182,6 +204,23 @@ export class PriceTagsController {
       )
     ).rows;
     return this.priced(device.store_id, rows);
+  }
+  @Get('markdown-labels') async markdownLabels(@Req() req: Request) {
+    const { device } = await this.operator(req);
+    return this.availableMarkdownLabels(device.store_id);
+  }
+  @Post('markdown-prints') async markdownPrints(@Req() req: Request, @Body() input: unknown) {
+    const body = parse(z.object({ unitIds: z.array(z.uuid()).min(1).max(100) }), input);
+    const { device } = await this.operator(req);
+    const ids = [...new Set(body.unitIds)];
+    if (ids.length !== body.unitIds.length)
+      throw new BadRequestException('Choose each markdown label only once.');
+    const labels = await this.availableMarkdownLabels(device.store_id, ids);
+    if (labels.length !== ids.length)
+      throw new ForbiddenException(
+        'One or more markdown labels are no longer available. Refresh the list.',
+      );
+    return { labels };
   }
   @Post('weight-barcode') async weightBarcode(@Req() req: Request, @Body() input: unknown) {
     const body = parse(

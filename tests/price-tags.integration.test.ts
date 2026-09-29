@@ -96,6 +96,35 @@ describe.sequential('Price Tags station', () => {
       plu: '',
     });
     expect(product.status).toBe(201);
+    await db.pool.query('UPDATE products SET stock=2 WHERE id=$1', [product.body.id]);
+    const batch = (
+      await db.pool.query(
+        `INSERT INTO stock_batches(store_id,product_id,quantity,unit_cost,cost_source)
+         VALUES($1,$2,2,8,'adjustment') RETURNING id`,
+        [session.store.id, product.body.id],
+      )
+    ).rows[0].id;
+    const markdown = (
+      await db.pool.query(
+        `INSERT INTO markdowns(store_id,product_id,quantity,reason,base_unit_price,final_unit_price)
+         VALUES($1,$2,2,'EXPIRING_SOON',12,9) RETURNING id`,
+        [session.store.id, product.body.id],
+      )
+    ).rows[0].id;
+    const activeLabel = (
+      await db.pool.query(
+        `INSERT INTO markdown_units(store_id,markdown_id,product_id,batch_id,barcode)
+         VALUES($1,$2,$3,$4,next_markdown_barcode()) RETURNING id,barcode`,
+        [session.store.id, markdown, product.body.id, batch],
+      )
+    ).rows[0];
+    const cancelledLabel = (
+      await db.pool.query(
+        `INSERT INTO markdown_units(store_id,markdown_id,product_id,batch_id,barcode,status)
+         VALUES($1,$2,$3,$4,next_markdown_barcode(),'CANCELLED') RETURNING id`,
+        [session.store.id, markdown, product.body.id, batch],
+      )
+    ).rows[0];
     const weighed = await manager.request('/products', {
       name: 'Apples by weight',
       sku: 'APPLES-WEIGHT',
@@ -152,6 +181,7 @@ describe.sequential('Price Tags station', () => {
     ]);
     expect(context.body.operator).toBeNull();
     expect((await manager.request('/price-tags/products')).status).toBe(401);
+    expect((await manager.request('/price-tags/markdown-labels')).status).toBe(401);
     expect(
       (await manager.request('/price-tags/login', { employeeCode: 'SAM', pin: '654321' })).status,
     ).toBe(401);
@@ -173,6 +203,38 @@ describe.sequential('Price Tags station', () => {
         expect.objectContaining({ id: weighed.body.id, unit: 'kilogram', plu: '42' }),
       ]),
     );
+    const markdownLabels = await manager.request('/price-tags/markdown-labels');
+    expect(markdownLabels.status).toBe(200);
+    expect(markdownLabels.body).toEqual([
+      expect.objectContaining({
+        id: activeLabel.id,
+        barcode: activeLabel.barcode,
+        price: '9.00',
+        regularPrice: '12.00',
+      }),
+    ]);
+    expect(
+      (await manager.request('/price-tags/markdown-prints', { unitIds: [activeLabel.id] })).body
+        .labels,
+    ).toEqual(markdownLabels.body);
+    expect(
+      (await manager.request('/price-tags/markdown-prints', { unitIds: [cancelledLabel.id] }))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await manager.request('/price-tags/markdown-prints', {
+          unitIds: [activeLabel.id, activeLabel.id],
+        })
+      ).status,
+    ).toBe(400);
+    await db.pool.query("UPDATE markdown_units SET status='SOLD',sold_at=now() WHERE id=$1", [
+      activeLabel.id,
+    ]);
+    expect((await manager.request('/price-tags/markdown-labels')).body).toEqual([]);
+    expect(
+      (await manager.request('/price-tags/markdown-prints', { unitIds: [activeLabel.id] })).status,
+    ).toBe(403);
     const generated = await manager.request('/price-tags/weight-barcode', {
       productId: weighed.body.id,
       weight: '0.532',
@@ -241,6 +303,10 @@ describe.sequential('Price Tags station', () => {
     expect((await changed(product.body.id)).priceChanged).toBe(false);
     expect((await manager.request('/price-tags/lock', {})).status).toBe(200);
     expect((await manager.request('/price-tags/products')).status).toBe(401);
+    expect((await manager.request('/price-tags/markdown-labels')).status).toBe(401);
+    expect(
+      (await manager.request('/price-tags/markdown-prints', { unitIds: [activeLabel.id] })).status,
+    ).toBe(401);
     expect(
       (await manager.request('/price-tags/prints/' + printed.body.id + '/complete', {})).status,
     ).toBe(401);
