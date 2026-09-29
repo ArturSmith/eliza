@@ -4,6 +4,9 @@ body:has(.pos-shell) #root {
   flex-direction: column;
   overflow: hidden;
 }
+body:has(.pos-shell) #root > .language-bar {
+  display: none;
+}
 .pos-shell {
   flex: 1;
   min-height: 0;
@@ -416,6 +419,15 @@ body:has(.pos-shell) #root {
 }
 .pos-footer .text-link {
   display: inline-flex;
+}
+.pos-footer .language-bar {
+  padding: 0;
+  margin-left: auto;
+  border: 0;
+  background: transparent;
+}
+.pos-footer .language-switcher select {
+  min-height: 30px;
 }
 .register-welcome {
   max-width: 455px;
@@ -830,6 +842,21 @@ body:has(.pos-shell) #root {
   .pos-footer .text-link {
     min-height: 28px;
     padding: 5px 7px;
+    font-size: 10px;
+  }
+  .pos-footer .language-bar {
+    margin-left: 0;
+  }
+  .pos-footer .language-switcher {
+    gap: 4px;
+  }
+  .pos-footer .language-switcher > span {
+    display: none;
+  }
+  .pos-footer .language-switcher select {
+    min-width: 95px;
+    min-height: 28px;
+    padding: 4px 23px 4px 6px;
     font-size: 10px;
   }
   .pos-footer > div:last-child {

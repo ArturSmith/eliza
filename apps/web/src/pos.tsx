@@ -1,4 +1,5 @@
 import { t, useLanguage, translateError } from './i18n';
+import { LanguageSwitcher } from './i18n/LanguageSwitcher';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
 import { EmployeeQrUnlock } from './employee-qr-unlock';
 import { ReceiptSearch } from './refunds';
@@ -1203,6 +1204,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
           <a href="/" className="text-link">
             {t('Management ')}
           </a>
+          <LanguageSwitcher />
         </div>
       </footer>
       <Dialog

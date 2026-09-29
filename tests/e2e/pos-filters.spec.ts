@@ -83,6 +83,8 @@ test('filters, favorites and paginates the checkout catalog', async ({ page }) =
   await post('/pos/shifts', { openingCash: '0', requestId: crypto.randomUUID() });
   await page.goto('/pos');
   await expect(page.getByLabel('Scan or search products')).toBeFocused();
+  await expect(page.locator('#root > .language-bar')).toBeHidden();
+  await expect(page.locator('.pos-footer .language-switcher')).toBeVisible();
 
   await expect(page.locator('.pos-product-card')).toHaveCount(20);
   const desktopLayout = await page.evaluate(() => ({
