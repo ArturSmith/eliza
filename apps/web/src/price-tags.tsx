@@ -33,6 +33,7 @@ type Product = {
   name: string;
   sku: string;
   price: string;
+  regularPrice: string | null;
   unit: string;
   plu: string;
   barcode: string;
@@ -447,6 +448,12 @@ export function PriceTagsPage() {
               <small>
                 {price(weightLabel.price)}/{t('kg')}
               </small>
+              {product.regularPrice && (
+                <small>
+                  {t('Discount from')}{' '}
+                  <s>{price(packagePrice({ ...weightLabel, price: product.regularPrice }))}</s>
+                </small>
+              )}
               <b style={{ fontSize: `${design.priceFontPt}pt` }}>
                 {price(packagePrice(weightLabel))}
               </b>
@@ -463,6 +470,11 @@ export function PriceTagsPage() {
               <div className="price-tag-price" style={{ fontSize: `${design.priceFontPt}pt` }}>
                 {price(product.price)}
               </div>
+              {product.regularPrice && (
+                <small>
+                  {t('Discount from')} <s>{price(product.regularPrice)}</s>
+                </small>
+              )}
               {design.showSku && <small>{product.sku}</small>}
               {design.showUnit && <small>{product.unit}</small>}
               {design.showBarcodeNumber && product.barcode && <small>{product.barcode}</small>}

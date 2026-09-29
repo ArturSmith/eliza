@@ -581,21 +581,25 @@ SELECT phase,category,sum(revenue)::text AS revenue,sum(quantity)::text AS units
         `WITH ${financialEntries}, bounds AS (
  SELECT ($2::date::timestamp AT TIME ZONE $4) AS start,(($3::date+1)::timestamp AT TIME ZONE $4) AS finish
 ), sold AS (
- SELECT product_id,sum(quantity) AS units,sum(revenue) AS revenue,sum(cost) AS cost,sum(missing) AS missing
- FROM financial_entries CROSS JOIN bounds b WHERE created_at>=b.start AND created_at<b.finish GROUP BY product_id
+ SELECT COALESCE(p.base_product_id,f.product_id) AS product_id,sum(f.quantity) AS units,sum(f.revenue) AS revenue,sum(f.cost) AS cost,sum(f.missing) AS missing
+ FROM financial_entries f JOIN products p ON p.id=f.product_id AND p.store_id=$1 CROSS JOIN bounds b
+ WHERE f.created_at>=b.start AND f.created_at<b.finish GROUP BY 1
 ), returned AS (
- SELECT l.product_id,sum(l.total) AS total,sum(l.quantity) AS units
+ SELECT COALESCE(p.base_product_id,l.product_id) AS product_id,sum(l.total) AS total,sum(l.quantity) AS units
  FROM refund_lines l JOIN refunds r ON r.id=l.refund_id AND r.store_id=l.store_id CROSS JOIN bounds b
- WHERE l.store_id=$1 AND r.created_at>=b.start AND r.created_at<b.finish GROUP BY l.product_id
+ JOIN products p ON p.id=l.product_id AND p.store_id=l.store_id
+ WHERE l.store_id=$1 AND r.created_at>=b.start AND r.created_at<b.finish GROUP BY 1
 ), last_sale AS (
- SELECT i.product_id,max(s.created_at) AS sold_at FROM sale_items i
- JOIN sales s ON s.id=i.sale_id AND s.store_id=$1 WHERE i.store_id=$1 GROUP BY i.product_id
+ SELECT COALESCE(p.base_product_id,i.product_id) AS product_id,max(s.created_at) AS sold_at FROM sale_items i
+ JOIN sales s ON s.id=i.sale_id AND s.store_id=$1 JOIN products p ON p.id=i.product_id AND p.store_id=i.store_id
+ WHERE i.store_id=$1 GROUP BY 1
 ), week AS (
- SELECT i.product_id,sum(i.quantity) AS units,sum(i.total) AS revenue
+ SELECT COALESCE(p.base_product_id,i.product_id) AS product_id,sum(i.quantity) AS units,sum(i.total) AS revenue
  FROM sale_items i JOIN sales s ON s.id=i.sale_id AND s.store_id=$1
- WHERE i.store_id=$1 AND s.created_at>=now()-interval '7 days' GROUP BY i.product_id
+ JOIN products p ON p.id=i.product_id AND p.store_id=i.store_id
+ WHERE i.store_id=$1 AND s.created_at>=now()-interval '7 days' GROUP BY 1
 )
-SELECT p.id,p.name,p.sku,p.category,p.unit,p.stock::text,p.min_stock::text AS "minStock",
+SELECT p.id,p.name,p.sku,p.category,p.unit,(p.stock+COALESCE((SELECT sum(child.stock) FROM products child WHERE child.store_id=p.store_id AND child.base_product_id=p.id),0))::text AS stock,p.min_stock::text AS "minStock",
  p.price::text,p.tax_rate::text AS "taxRate",p.active,
  ((now() AT TIME ZONE $4)::date-(p.created_at AT TIME ZONE $4)::date)::int AS "productAgeDays",
  CASE WHEN $5 THEN p.cost::text END AS cost,
@@ -610,7 +614,7 @@ SELECT p.id,p.name,p.sku,p.category,p.unit,p.stock::text,p.min_stock::text AS "m
  LEFT JOIN returned ON returned.product_id=p.id
  LEFT JOIN last_sale ON last_sale.product_id=p.id
  LEFT JOIN week ON week.product_id=p.id
- WHERE p.store_id=$1`,
+ WHERE p.store_id=$1 AND p.base_product_id IS NULL`,
         [store.id, range.from, range.to, store.timezone, margin],
       )
     ).rows;
@@ -1164,7 +1168,7 @@ SELECT COALESCE(s.phase,f.phase) AS phase,
  count(*) FILTER(WHERE category='' OR category IS NULL)::text AS "missingCategory",
  count(*) FILTER(WHERE NOT EXISTS(SELECT 1 FROM barcodes b WHERE b.product_id=p.id) AND (plu IS NULL OR plu=''))::text AS "missingCode",
  count(*) FILTER(WHERE NOT EXISTS(SELECT 1 FROM movements m WHERE m.product_id=p.id AND m.reason='opening_balance'))::text AS uncounted
- FROM products p WHERE p.store_id=$1`,
+ FROM products p WHERE p.store_id=$1 AND p.base_product_id IS NULL`,
         [store.id],
       )
     ).rows[0];
@@ -1405,14 +1409,17 @@ SELECT m.month,COALESCE(sold.revenue,0)::text AS revenue,
     const rows = (
       await this.database.pool.query(
         `WITH last_sale AS (
-        SELECT i.product_id,max(s.created_at) AS sold_at FROM sale_items i JOIN sales s ON s.id=i.sale_id AND s.store_id=$1
-        WHERE i.store_id=$1 GROUP BY i.product_id
+        SELECT COALESCE(p.base_product_id,i.product_id) AS product_id,max(s.created_at) AS sold_at
+        FROM sale_items i JOIN sales s ON s.id=i.sale_id AND s.store_id=$1
+        JOIN products p ON p.id=i.product_id AND p.store_id=i.store_id
+        WHERE i.store_id=$1 GROUP BY 1
       ), batches AS (
-        SELECT product_id,sum(quantity) AS quantity,sum(round(quantity*unit_cost,2)) AS value,
+        SELECT COALESCE(p.base_product_id,b.product_id) AS product_id,sum(b.quantity) AS quantity,sum(round(b.quantity*b.unit_cost,2)) AS value,
           bool_or(cost_source='legacy_estimate') AS estimated,bool_or(unit_cost=0) AS missing
-        FROM stock_batches WHERE store_id=$1 AND quantity>0 GROUP BY product_id
+        FROM stock_batches b JOIN products p ON p.id=b.product_id AND p.store_id=b.store_id
+        WHERE b.store_id=$1 AND b.quantity>0 GROUP BY 1
       )
-      SELECT p.id,p.name,p.sku,p.category,p.stock::text AS quantity,p.price::text AS "sellingPrice",
+      SELECT p.id,p.name,p.sku,p.category,b.quantity::text AS quantity,p.price::text AS "sellingPrice",
         l.sold_at AS "lastSaleAt",p.created_at AS "createdAt",b.value::text AS "inventoryValue",round(b.value/nullif(b.quantity,0),2)::text AS "unitCost",
         b.estimated AS "costEstimated",b.missing AS "costMissing",
         floor(extract(epoch FROM ($3::date::timestamp AT TIME ZONE $4)-COALESCE(l.sold_at,p.created_at))/86400)::int AS "daysWithoutSale",
@@ -1423,7 +1430,7 @@ SELECT m.month,COALESCE(sold.revenue,0)::text AS revenue,
         FROM supplier_products link JOIN suppliers s ON s.id=link.supplier_id AND s.store_id=link.store_id
         WHERE link.store_id=$1 AND link.product_id=p.id AND link.active
       ) sp ON true
-      WHERE p.store_id=$1 AND p.active AND p.stock>0
+      WHERE p.store_id=$1 AND p.base_product_id IS NULL AND p.active AND b.quantity>0
         AND COALESCE(l.sold_at,p.created_at)<(($3::date::timestamp AT TIME ZONE $4)-($2||' days')::interval)
       ORDER BY "daysWithoutSale" DESC,p.name`,
         [store.id, threshold, today, store.timezone],

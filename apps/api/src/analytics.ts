@@ -51,7 +51,9 @@ WITH bounds AS (
  CROSS JOIN LATERAL (
   SELECT jsonb_agg(j) AS lines,sum((j->>'total')::numeric) AS total,
    sum((j->>'tax')::numeric) AS tax,sum((j->>'discount')::numeric) AS discount
-  FROM jsonb_array_elements(s.receipt->'lines') j WHERE $5='' OR j->>'productId'=$5
+  FROM jsonb_array_elements(s.receipt->'lines') j WHERE $5='' OR EXISTS (
+   SELECT 1 FROM products pr WHERE pr.store_id=$1 AND pr.id=(j->>'productId')::uuid
+   AND (pr.id::text=$5 OR pr.base_product_id::text=$5))
  ) l
  LEFT JOIN LATERAL (
   SELECT sum(amount) FILTER(WHERE method='cash') AS cash,sum(amount) FILTER(WHERE method='card') AS card
@@ -81,8 +83,10 @@ WITH bounds AS (
  CASE WHEN d.dimension='product' THEN (j->>'quantity')::numeric END,
  CASE WHEN d.dimension='product' THEN j->>'unit' END,s.cashier,s.register,s.opened_at
  FROM matched s CROSS JOIN LATERAL jsonb_array_elements(s.lines) j
+ LEFT JOIN products pr ON pr.id=(j->>'productId')::uuid AND pr.store_id=$1
+ LEFT JOIN products bp ON bp.id=pr.base_product_id AND bp.store_id=$1
  CROSS JOIN LATERAL (VALUES
- ('product',j->>'productId',(j->>'name')||' · '||(j->>'sku')),
+ ('product',COALESCE(pr.base_product_id::text,j->>'productId'),COALESCE(bp.name,j->>'name')||' · '||COALESCE(bp.sku,j->>'sku')),
  ('category',COALESCE(j->>'category','Unrecorded category'),COALESCE(j->>'category','Unrecorded category'))
  ) d(dimension,bucket,label)
  UNION ALL
@@ -102,7 +106,7 @@ WITH bounds AS (
  FROM refunds r JOIN refund_lines l ON l.refund_id=r.id AND l.store_id=r.store_id
  JOIN sales s ON s.id=r.sale_id AND s.store_id=r.store_id CROSS JOIN bounds b
  WHERE r.store_id=$1 AND r.created_at>=b.start AND r.created_at<b.finish
- AND ($5='' OR l.product_id::text=$5) AND ($6='' OR s.shift_id::text=$6)
+ AND ($5='' OR l.product_id IN (SELECT id FROM products WHERE store_id=$1 AND (id::text=$5 OR base_product_id::text=$5))) AND ($6='' OR s.shift_id::text=$6)
 )
 SELECT
  (SELECT jsonb_build_object('transactions',count(*)::text,'total',COALESCE(sum(total),0)::text,
@@ -114,7 +118,7 @@ SELECT
  'net',(COALESCE(sum(total),0)-(SELECT total FROM returns))::text) FROM matched) AS totals,
  (SELECT COALESCE(jsonb_agg(aggregates ORDER BY bucket),'[]') FROM aggregates) AS rows,
  (SELECT COALESCE(jsonb_agg(jsonb_build_object('id',id,'label',name||' · '||sku,'unit',unit,'active',active) ORDER BY name),'[]')
- FROM products WHERE store_id=$1 AND (created_at<(SELECT finish FROM bounds) OR id::text=$5)) AS products,
+ FROM products WHERE store_id=$1 AND base_product_id IS NULL AND (created_at<(SELECT finish FROM bounds) OR id::text=$5)) AS products,
  (SELECT COALESCE(jsonb_agg(jsonb_build_object('id',h.id,'cashier',e.name,'register',d.name,'openedAt',h.opened_at) ORDER BY h.opened_at DESC),'[]')
  FROM shifts h JOIN employees e ON e.id=h.employee_id AND e.store_id=h.store_id
  JOIN device_records d ON d.id=h.device_id AND d.store_id=h.store_id CROSS JOIN bounds b

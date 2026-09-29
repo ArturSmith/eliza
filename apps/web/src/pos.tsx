@@ -31,6 +31,7 @@ import {
   scalePriceQuantity,
   type ScaleBarcodeSettings,
   calculateLine,
+  calculatePricedLine,
   fromScaled,
   toScaled,
   money,
@@ -55,6 +56,8 @@ const draftLine = z.object({
     sku: z.string(),
     unit: z.string(),
     price: money,
+    regularPrice: money.nullable().optional(),
+    priceKind: z.enum(['standard', 'discount_all', 'limited_discount']).optional(),
     taxRate: money,
     category: z.string(),
     stock: quantity,
@@ -571,8 +574,9 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   }, []);
   const totals = draft.lines.reduce(
     (s, l) => {
-      const a = calculateLine(
+      const a = calculatePricedLine(
         l.product.price,
+        l.product.regularPrice,
         l.quantity,
         l.product.taxRate,
         draft.pending?.discountPercent ?? '0',
@@ -1003,6 +1007,11 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                       {formatMoney(p.price, currency)}
                       <small>/ {t(p.unit ?? '')}</small>
                     </span>
+                    {p.regularPrice && (
+                      <small className="pos-discount-price">
+                        {t('Discount from')} <s>{formatMoney(p.regularPrice, currency)}</s>
+                      </small>
+                    )}
                     <span className="pos-stock">
                       {Number(p.stock)} {t(' on hand')}
                     </span>
@@ -1449,6 +1458,12 @@ function CartLine({
       </div>
       <small>
         {formatMoney(line.product.price, currency)} / {t(line.product.unit ?? '')}
+        {line.product.regularPrice && (
+          <span className="pos-regular-price">
+            {' '}
+            · {t('Discount from')} <s>{formatMoney(line.product.regularPrice, currency)}</s>
+          </span>
+        )}
       </small>
       <div className="cart-line-bottom">
         <input
@@ -1469,7 +1484,13 @@ function CartLine({
         <span>{t(line.product.unit ?? '')}</span>
         <strong>
           {formatMoney(
-            calculateLine(line.product.price, line.quantity, line.product.taxRate, discount).total,
+            calculatePricedLine(
+              line.product.price,
+              line.product.regularPrice,
+              line.quantity,
+              line.product.taxRate,
+              discount,
+            ).total,
             currency,
           )}
         </strong>

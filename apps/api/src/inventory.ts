@@ -94,6 +94,8 @@ export class InventoryController {
         .where(and(eq(products.id, body.productId), eq(products.storeId, store.id)))
         .for('update');
       if (!product) throw new NotFoundException('Product not found.');
+      if (product.baseProductId)
+        throw new BadRequestException('Discounted-label stock can only change through its original batch sale or refund.');
       if (!product.active)
         throw new BadRequestException('Activate this product before changing its stock.');
       const change = toScaled(body.quantity, 3);

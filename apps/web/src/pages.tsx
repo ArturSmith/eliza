@@ -56,6 +56,7 @@ import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
 import { ProductBarcode } from './product-barcode';
+import { PriceActions } from './price-actions';
 const navGroups = [
   {
     label: 'Workspace',
@@ -670,6 +671,7 @@ export function ProductsPage() {
   const [status, setStatus] = useState<Product | null>(null);
   const [remove, setRemove] = useState<Product | null>(null);
   const [barcodeFor, setBarcodeFor] = useState<Product | null>(null);
+  const [pricingFor, setPricingFor] = useState<Product | null>(null);
   const removal = useMutation({
     mutationFn: (product: Product) => api('/products/' + product.id, undefined, 'DELETE'),
     onSuccess: () => {
@@ -807,6 +809,9 @@ export function ProductsPage() {
                           <Button variant="ghost" size="sm" onClick={() => setOffersFor(p)}>
                             {t('Suppliers')}
                           </Button>
+                          <Button variant="ghost" size="sm" onClick={() => setPricingFor(p)}>
+                            {t('Pricing')}
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -853,6 +858,14 @@ export function ProductsPage() {
         )}
       </section>
       <ProductBarcode product={barcodeFor} onClose={() => setBarcodeFor(null)} />
+      <Dialog
+        open={!!pricingFor}
+        onOpenChange={(open) => !open && setPricingFor(null)}
+        title={t('Set prices for {value0}', { value0: pricingFor?.name ?? '' })}
+        description={t('Choose which stock receives the new price.')}
+      >
+        {pricingFor && <PriceActions product={pricingFor} currency={session.store.currency} />}
+      </Dialog>
       <Dialog
         open={!!edit}
         onOpenChange={(v) => !v && setEdit(null)}

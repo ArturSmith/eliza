@@ -84,8 +84,9 @@ export function ReceiptView({
           {Number(receipt.discount) > 0 && (
             <div>
               <dt>
-                {t('Discount (')}
-                {Number(receipt.discountPercent)}%)
+                {Number(receipt.discountPercent) > 0
+                  ? `${t('Discount (')}${Number(receipt.discountPercent)}%)`
+                  : t('Discount')}
               </dt>
               <dd>−{formatMoney(receipt.discount, receipt.currency)}</dd>
             </div>

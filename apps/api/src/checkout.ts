@@ -25,6 +25,7 @@ import {
   cashSchema,
   saleSchema,
   calculateLine,
+  calculatePricedLine,
   toScaled,
   fromScaled,
   type Receipt,
@@ -56,7 +57,7 @@ async function openShift(client: PoolClient, actor: Operator, id?: string) {
     throw new ConflictException('Start your shift before using this register.');
   return shift;
 }
-const posCatalogSql = `SELECT p.id,p.image,p.source,p.name,p.sku,p.category,p.unit,p.price::text,p.tax_rate::text AS "taxRate",
+const posCatalogSql = `SELECT p.id,p.image,p.source,p.name,p.sku,p.category,p.unit,p.price::text,p.regular_price::text AS "regularPrice",p.price_kind AS "priceKind",p.base_product_id AS "baseProductId",p.tax_rate::text AS "taxRate",
           COALESCE((SELECT sum(sb.quantity) FROM stock_batches sb
             WHERE sb.store_id=p.store_id AND sb.product_id=p.id
               AND (sb.expiry_date IS NULL OR sb.expiry_date>(now() AT TIME ZONE
@@ -142,7 +143,7 @@ export class CheckoutController {
         SELECT p.*, EXISTS(SELECT 1 FROM pos_product_favorites f WHERE f.store_id=$1 AND f.employee_id=$2 AND f.product_id=p.id) AS favorite,
         CASE WHEN $6::boolean THEN COALESCE((SELECT sum(i.quantity) FROM sale_items i JOIN sales s ON s.id=i.sale_id AND s.store_id=i.store_id
           WHERE i.store_id=$1 AND i.product_id=p.id AND s.created_at>=now()-interval '30 days'),0) ELSE 0 END AS popularity
-        FROM (${posCatalogSql}) p WHERE p.stock::numeric>0
+        FROM (${posCatalogSql}) p WHERE p.stock::numeric>0 AND p."baseProductId" IS NULL
       ), filtered AS (
         SELECT * FROM available WHERE ($3='' OR category=$3) AND (NOT $4::boolean OR favorite)
         AND ($5='' OR name ILIKE '%'||$5||'%' OR sku ILIKE '%'||$5||'%' OR plu ILIKE '%'||$5||'%'
@@ -411,8 +412,9 @@ export class CheckoutController {
           throw new BadRequestException(`${product.name} requires a whole-number quantity.`);
         if (qty > toScaled(product.stock, 3))
           throw new ConflictException(`Not enough stock for ${product.name}.`);
-        const amounts = calculateLine(
+        const amounts = calculatePricedLine(
           product.price,
+          product.regular_price,
           item.quantity,
           product.tax_rate,
           body.discountPercent,

@@ -535,7 +535,7 @@ export function ProductForm({
             value={cost}
             onChange={(e) => {
               setCost(e.target.value);
-              setManualPrice(false);
+              if (!initial) setManualPrice(false);
             }}
             required
           />

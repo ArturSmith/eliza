@@ -296,7 +296,7 @@ export class PurchasingController {
           );
         const p = (
           await c.query(
-            'SELECT unit FROM products WHERE id=$1 AND store_id=$2 AND active FOR SHARE',
+            'SELECT unit FROM products WHERE id=$1 AND store_id=$2 AND active AND base_product_id IS NULL FOR SHARE',
             [line.productId, store],
           )
         ).rows[0];
@@ -953,7 +953,7 @@ export class PurchasingController {
       tax = 0n;
     for (const line of [...b.lines].sort((a, b) => a.productId.localeCompare(b.productId))) {
       const p = (
-        await c.query('SELECT * FROM products WHERE id=$1 AND store_id=$2 AND active FOR SHARE', [
+        await c.query('SELECT * FROM products WHERE id=$1 AND store_id=$2 AND active AND base_product_id IS NULL FOR SHARE', [
           line.productId,
           store,
         ])
@@ -1195,7 +1195,7 @@ export class PurchasingController {
         const entry = b.lines.find((l) => l.purchaseLineId === line.id);
         if (!entry) continue;
         const product = (
-          await c.query('SELECT * FROM products WHERE id=$1 AND store_id=$2 FOR UPDATE', [
+          await c.query('SELECT * FROM products WHERE id=$1 AND store_id=$2 AND base_product_id IS NULL FOR UPDATE', [
             line.product_id,
             store,
           ])
@@ -1289,12 +1289,10 @@ export class PurchasingController {
             [store, product.id, receiptLine.id, batch.expiryDate ?? null, batch.quantity, cost],
           );
         const balance = fromScaled(toScaled(product.stock, 3) + toScaled(entry.quantity, 3), 3);
-        await c.query('UPDATE products SET stock=$2,cost=$3,price=COALESCE($4,price) WHERE id=$1', [
-          product.id,
-          balance,
-          cost,
-          entry.sellingPrice ?? null,
-        ]);
+        await c.query(
+          "UPDATE products SET stock=$2,cost=$3,price=COALESCE($4,price),regular_price=CASE WHEN $4::numeric IS NULL THEN regular_price ELSE NULL END,price_kind=CASE WHEN $4::numeric IS NULL THEN price_kind ELSE 'standard' END WHERE id=$1",
+          [product.id, balance, cost, entry.sellingPrice ?? null],
+        );
         await c.query(
           'UPDATE purchase_lines SET received_quantity=received_quantity+$2 WHERE id=$1',
           [line.id, entry.quantity],

@@ -23,6 +23,7 @@ import { randomUUID } from 'node:crypto';
 import { Database, DatabaseModule } from './database.js';
 import { AuthModule } from './auth.js';
 import { CatalogModule } from './catalog.js';
+import { PriceActionsModule } from './price-actions.js';
 import { StockCountsModule } from './stock-counts.js';
 import { InventoryModule } from './inventory.js';
 import { ManagementModule } from './management.js';
@@ -116,6 +117,7 @@ class HealthController {
     DatabaseModule,
     AuthModule,
     CatalogModule,
+    PriceActionsModule,
     InventoryModule,
     StockCountsModule,
     ManagementModule,

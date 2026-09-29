@@ -14,7 +14,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { and, eq, asc, sql } from 'drizzle-orm';
+import { and, eq, asc, isNull, sql } from 'drizzle-orm';
 import { productSchema, productSku } from '@eliza/contracts';
 import { z } from 'zod';
 import { Database } from './database.js';
@@ -50,7 +50,7 @@ export class CatalogController {
     const rows = await this.database.db
       .select()
       .from(products)
-      .where(eq(products.storeId, req.context.store.id))
+      .where(and(eq(products.storeId, req.context.store.id), isNull(products.baseProductId)))
       .orderBy(asc(products.name));
     const codes = await this.database.db
       .select()
@@ -162,6 +162,8 @@ export class CatalogController {
         .where(and(eq(products.id, id), eq(products.storeId, store.id)))
         .for('update');
       if (!old) throw new NotFoundException('Product not found.');
+      if (old.baseProductId)
+        throw new BadRequestException('Edit limited-price labels from the parent product.');
       if (old.unit !== body.unit)
         throw new BadRequestException(
           'Unit changes require a stock conversion workflow. Create a separate product instead.',
@@ -180,7 +182,7 @@ export class CatalogController {
           ];
       const [product] = await tx
         .update(products)
-        .set({ ...body, plu: plu || null })
+        .set({ ...body, plu: plu || null, regularPrice: null, priceKind: 'standard' })
         .where(eq(products.id, id))
         .returning();
       await tx

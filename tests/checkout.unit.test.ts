@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { calculateLine, productSchema, saleSchema } from '../packages/contracts/src/index';
+import {
+  calculateLine,
+  calculatePricedLine,
+  productSchema,
+  saleSchema,
+} from '../packages/contracts/src/index';
 describe('checkout arithmetic', () => {
   it('extracts included tax without adding it twice', () =>
     expect(calculateLine('115.00', '1', '15')).toEqual({
@@ -22,6 +27,17 @@ describe('checkout arithmetic', () => {
       total: '0.00',
       tax: '0.00',
     }));
+  it('records a fixed-price markdown without changing tax on the amount actually paid', () => {
+    expect(calculatePricedLine('50.00', '70.00', '3', '10')).toEqual({
+      gross: '210.00',
+      discount: '60.00',
+      total: '150.00',
+      tax: '13.64',
+    });
+    expect(calculatePricedLine('70.00', null, '3', '10')).toEqual(
+      calculateLine('70.00', '3', '10'),
+    );
+  });
   it.each([
     ['-1', '1', '0'],
     ['1', '0', '0'],

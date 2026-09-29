@@ -141,6 +141,9 @@ export const deviceSchema = z.object({
 export type ProductInput = z.infer<typeof productSchema>;
 export type AdjustmentInput = z.infer<typeof adjustmentSchema>;
 export type Product = Omit<ProductInput, 'cost'> & {
+  regularPrice?: string | null;
+  priceKind?: 'standard' | 'discount_all' | 'limited_discount';
+  baseProductId?: string | null;
   stockValue?: string | null;
   cost: string | null;
   id: string;
@@ -320,6 +323,19 @@ export function calculateLine(
     tax: fromScaled(tax, 2),
   };
 }
+/** Tax and revenue use the actual price; markdown remains visible in totals. */
+export function calculatePricedLine(
+  price: string,
+  regularPrice: string | null | undefined,
+  quantity: string,
+  taxRate: string,
+  discountPercent = '0',
+) {
+  const paid = calculateLine(price, quantity, taxRate, discountPercent);
+  if (!regularPrice) return paid;
+  const gross = calculateLine(regularPrice, quantity, taxRate).gross;
+  return { ...paid, gross, discount: fromScaled(toScaled(gross, 2) - toScaled(paid.total, 2), 2) };
+}
 export type Role = { id: string; name: string; permissions: Permission[] };
 export type Shift = {
   id: string;
@@ -344,6 +360,8 @@ export type PosProduct = {
   category: string;
   unit: string;
   price: string;
+  regularPrice?: string | null;
+  priceKind?: 'standard' | 'discount_all' | 'limited_discount';
   taxRate: string;
   stock: string;
   plu: string;

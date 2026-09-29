@@ -5532,3 +5532,66 @@ input.shopping-section-title {
   width: auto;
   min-width: 140px;
 }
+/* Manager pricing and printable labels for quantity-limited markdowns. */
+.price-actions {
+  display: grid;
+  gap: 1rem;
+}
+.price-actions-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.price-actions form {
+  display: grid;
+  gap: 1rem;
+}
+.price-actions form small {
+  color: var(--muted, #62736a);
+}
+.price-action-existing {
+  display: grid;
+  gap: 0.5rem;
+}
+.price-action-print-sheet {
+  display: none;
+}
+@media print {
+  body:has(.price-action-print-sheet) #root,
+  body:has(.price-action-print-sheet) .dialog-overlay,
+  body:has(.price-action-print-sheet) .dialog-content > :not(.price-actions),
+  body:has(.price-action-print-sheet) .price-actions > :not(.price-action-print-sheet) {
+    display: none !important;
+  }
+  body:has(.price-action-print-sheet) .dialog-content {
+    position: static !important;
+    transform: none !important;
+    width: auto !important;
+    max-width: none !important;
+    max-height: none !important;
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+  }
+  .price-action-print-sheet {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 8mm;
+  }
+  .price-action-label {
+    width: 60mm;
+    min-height: 42mm;
+    padding: 3mm;
+    border: 1px solid #aaa;
+    display: flex;
+    flex-direction: column;
+    gap: 2mm;
+    break-inside: avoid;
+    color: #000;
+  }
+  .price-action-label svg {
+    max-width: 100%;
+    height: auto;
+  }
+}
