@@ -152,9 +152,14 @@ ALTER TABLE products ADD COLUMN tag_last_printed_price numeric(14,2);
 UPDATE products SET tag_last_printed_price=price WHERE tag_printed_version>=tag_price_version;
 UPDATE products SET price=regular_price,regular_price=NULL,price_kind='standard'
 WHERE price_kind='discount_all';
+-- Backfill the new snapshot columns while the append-only history guard is
+-- temporarily disabled. The migration runner wraps this in a transaction, so
+-- a failed backfill also rolls back the trigger state.
+ALTER TABLE sale_items DISABLE TRIGGER immutable_sale_items;
 UPDATE sale_items i SET pricing_source=CASE WHEN p.price_kind='limited_discount'
   THEN 'LEGACY_MARKDOWN' ELSE NULL END,base_unit_price=i.price,discount_total=0
 FROM products p WHERE p.id=i.product_id;
+ALTER TABLE sale_items ENABLE TRIGGER immutable_sale_items;
 
 UPDATE roles SET permissions=permissions || '["promotions.manage","markdowns.manage"]'::jsonb
 WHERE name IN ('Owner','Manager')

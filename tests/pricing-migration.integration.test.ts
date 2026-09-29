@@ -10,13 +10,13 @@ beforeAll(async () => {
   await admin.pool.query(`CREATE DATABASE ${name}`);
   const url = new URL(original);
   url.pathname = `/${name}`;
-  process.env.DATABASE_URL=url.toString();
-  db=new Database();
-  client=db.pool;
+  process.env.DATABASE_URL = url.toString();
+  db = new Database();
+  client = db.pool;
 });
 afterAll(async () => {
   if (db) await db.onModuleDestroy();
-  process.env.DATABASE_URL=original;
+  process.env.DATABASE_URL = original;
   await admin.pool.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
   await admin.onModuleDestroy();
 });
@@ -36,9 +36,12 @@ describe('pricing V1 migration', () => {
         [organization],
       )
     ).rows[0].id;
-    await client.query("INSERT INTO roles(store_id,name,permissions) VALUES($1,'Owner','[]')", [
-      store,
-    ]);
+    const roleId = (
+      await client.query(
+        "INSERT INTO roles(store_id,name,permissions) VALUES($1,'Owner','[]') RETURNING id",
+        [store],
+      )
+    ).rows[0].id;
     const parent = (
       await client.query(
         `INSERT INTO products(store_id,name,sku,category,unit,price,cost,min_stock,stock,regular_price,price_kind)
@@ -53,7 +56,54 @@ describe('pricing V1 migration', () => {
         [store, parent],
       )
     ).rows[0].id;
+    const employee = (
+      await client.query(
+        "INSERT INTO employees(store_id,role_id,name,email,password_hash,employee_code) VALUES($1,$2,'Owner','migration@test.local','hash','OWNER') RETURNING id",
+        [store, roleId],
+      )
+    ).rows[0].id;
+    const device = (
+      await client.query(
+        "INSERT INTO devices(store_id,name,token_hash) VALUES($1,'Register','token') RETURNING id",
+        [store],
+      )
+    ).rows[0].id;
+    const shift = (
+      await client.query(
+        "INSERT INTO shifts(store_id,device_id,employee_id,opening_cash,request_id,request_hash) VALUES($1,$2,$3,0,gen_random_uuid(),'open') RETURNING id",
+        [store, device, employee],
+      )
+    ).rows[0].id;
+    const sale = (
+      await client.query(
+        "INSERT INTO sales(store_id,device_id,employee_id,shift_id,request_id,request_hash,receipt_number,total,tax,discount,receipt) VALUES($1,$2,$3,$4,gen_random_uuid(),'sale','MIGRATION-1',40,0,30,'{}') RETURNING id",
+        [store, device, employee, shift],
+      )
+    ).rows[0].id;
+    const historicalLine = (
+      await client.query(
+        'INSERT INTO sale_items(store_id,sale_id,product_id,quantity,price,cost,tax_rate,total) VALUES($1,$2,$3,1,40,30,0,40) RETURNING id',
+        [store, sale, legacy],
+      )
+    ).rows[0].id;
     await client.query(readFileSync(`${dir}/0047_promotions_markdowns.sql`, 'utf8'));
+    expect(
+      (
+        await client.query(
+          'SELECT price::text,total::text,pricing_source,base_unit_price::text,discount_total::text FROM sale_items WHERE id=$1',
+          [historicalLine],
+        )
+      ).rows[0],
+    ).toMatchObject({
+      price: '40.00',
+      total: '40.00',
+      pricing_source: 'LEGACY_MARKDOWN',
+      base_unit_price: '40.00',
+      discount_total: '0.00',
+    });
+    await expect(
+      client.query('UPDATE sale_items SET price=41 WHERE id=$1', [historicalLine]),
+    ).rejects.toThrow('History is append-only');
     const rows = (
       await client.query(
         'SELECT id,price::text,regular_price::text,price_kind,category_id FROM products WHERE store_id=$1 ORDER BY sku',
