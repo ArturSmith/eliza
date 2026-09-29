@@ -414,20 +414,41 @@ body:has(.pos-shell) #root > .language-bar {
 }
 .pos-footer > div {
   display: flex;
-  gap: 14px;
+  gap: 8px;
   align-items: center;
 }
-.pos-footer .text-link {
+.pos-footer > div:last-child > :is(.button, .text-link, .language-bar) {
   display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 8px 12px;
+  border: 1px solid #dfe5dd;
+  border-radius: 8px;
+  background: #fff;
+  color: #354b3c;
+  font-size: 12px;
+  font-weight: 550;
+  white-space: nowrap;
+}
+.pos-footer > div:last-child > :is(.button, .text-link, .language-bar):hover {
+  background: #f4f7f2;
 }
 .pos-footer .language-bar {
-  padding: 0;
   margin-left: auto;
-  border: 0;
-  background: transparent;
+}
+.pos-footer .language-switcher > :is(svg, span) {
+  display: none;
 }
 .pos-footer .language-switcher select {
-  min-height: 30px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 20px 0 4px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
 }
 .register-welcome {
   max-width: 455px;
@@ -838,10 +859,9 @@ body:has(.pos-shell) #root > .language-bar {
     flex-wrap: wrap;
     gap: 4px;
   }
-  .pos-footer .button,
-  .pos-footer .text-link {
-    min-height: 28px;
-    padding: 5px 7px;
+  .pos-footer > div:last-child > :is(.button, .text-link, .language-bar) {
+    min-height: 32px;
+    padding: 5px 8px;
     font-size: 10px;
   }
   .pos-footer .language-bar {
@@ -854,9 +874,7 @@ body:has(.pos-shell) #root > .language-bar {
     display: none;
   }
   .pos-footer .language-switcher select {
-    min-width: 95px;
-    min-height: 28px;
-    padding: 4px 23px 4px 6px;
+    padding: 0 16px 0 2px;
     font-size: 10px;
   }
   .pos-footer > div:last-child {
