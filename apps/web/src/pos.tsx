@@ -529,6 +529,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   const [receipt, setReceipt] = useState<Receipt | null>(null);
   const [confirmClear, setConfirmClear] = useState(false);
   const scan = useRef<HTMLInputElement>(null);
+  const productScroll = useRef<HTMLDivElement>(null);
   const [method, setMethod] = useState<'cash' | 'card'>('cash');
   const [tendered, setTendered] = useState('');
   useEffect(() => {
@@ -834,6 +835,9 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   }
   const visible = catalog.data?.products ?? [];
   const categories = catalog.data?.categories ?? [];
+  useEffect(() => {
+    productScroll.current?.scrollTo({ top: 0 });
+  }, [search, page, category, favorites, popular, catalog.data]);
   return (
     <div className="pos-shell">
       <header className="pos-topbar">
@@ -975,60 +979,62 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
               {translateError(message)}
             </p>
           )}
-          <div className="pos-product-grid">
-            {visible.map((p) => (
-              <div className="pos-product-card" key={p.id}>
-                <button
-                  className="pos-product"
-                  key={p.id}
-                  onClick={() => choose(p)}
-                  disabled={frozen || noShift || Number(p.stock) <= 0}
-                >
-                  <span className={`product-icon color-${p.category.length % 4}`}>
-                    {p.image ? (
-                      <img src={p.image} alt={t('')} loading="lazy" />
-                    ) : (
-                      <Package size={25} />
+          <div className="pos-product-scroll" ref={productScroll}>
+            <div className="pos-product-grid">
+              {visible.map((p) => (
+                <div className="pos-product-card" key={p.id}>
+                  <button
+                    className="pos-product"
+                    key={p.id}
+                    onClick={() => choose(p)}
+                    disabled={frozen || noShift || Number(p.stock) <= 0}
+                  >
+                    <span className={`product-icon color-${p.category.length % 4}`}>
+                      {p.image ? (
+                        <img src={p.image} alt={t('')} loading="lazy" />
+                      ) : (
+                        <Package size={25} />
+                      )}
+                    </span>
+                    <small>{p.category}</small>
+                    <strong>{p.name}</strong>
+                    <span className="pos-product-price">
+                      {formatMoney(p.price, currency)}
+                      <small>/ {t(p.unit ?? '')}</small>
+                    </span>
+                    <span className="pos-stock">
+                      {Number(p.stock)} {t(' on hand')}
+                    </span>
+                  </button>
+                  <button
+                    className="pos-favorite"
+                    aria-label={t(
+                      p.favorite ? 'Remove {name} from favorites' : 'Add {name} to favorites',
+                      { name: p.name },
                     )}
-                  </span>
-                  <small>{p.category}</small>
-                  <strong>{p.name}</strong>
-                  <span className="pos-product-price">
-                    {formatMoney(p.price, currency)}
-                    <small>/ {t(p.unit ?? '')}</small>
-                  </span>
-                  <span className="pos-stock">
-                    {Number(p.stock)} {t(' on hand')}
-                  </span>
-                </button>
-                <button
-                  className="pos-favorite"
-                  aria-label={t(
-                    p.favorite ? 'Remove {name} from favorites' : 'Add {name} to favorites',
-                    { name: p.name },
-                  )}
-                  aria-pressed={p.favorite}
-                  disabled={favorite.isPending}
-                  onClick={() => favorite.mutate({ id: p.id, value: !p.favorite })}
-                >
-                  <Star size={20} fill={p.favorite ? 'currentColor' : 'none'} />
-                </button>
-              </div>
-            ))}
+                    aria-pressed={p.favorite}
+                    disabled={favorite.isPending}
+                    onClick={() => favorite.mutate({ id: p.id, value: !p.favorite })}
+                  >
+                    <Star size={20} fill={p.favorite ? 'currentColor' : 'none'} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            {catalog.isPending ? (
+              <div className="empty">{t('Loading products…')}</div>
+            ) : (
+              !visible.length && (
+                <div className="empty">
+                  <Package size={32} />
+                  <h3>{t('No matching products')}</h3>
+                  <p className="muted">
+                    {t('Try another search, or ask a manager to add products and stock. ')}
+                  </p>
+                </div>
+              )
+            )}
           </div>
-          {catalog.isPending ? (
-            <div className="empty">{t('Loading products…')}</div>
-          ) : (
-            !visible.length && (
-              <div className="empty">
-                <Package size={32} />
-                <h3>{t('No matching products')}</h3>
-                <p className="muted">
-                  {t('Try another search, or ask a manager to add products and stock. ')}
-                </p>
-              </div>
-            )
-          )}
           {!!catalog.data?.total && (
             <nav className="pos-pagination" aria-label={t('Product pages')}>
               <button disabled={page === 1 || catalog.isFetching} onClick={() => setPage(page - 1)}>
@@ -1168,13 +1174,13 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
           </div>
         </aside>
       </div>
-      <ReceiptSearch context={context} />
       <footer className="pos-footer">
         <div>
           <span className="status-dot" />
           {t('Online checkout · drafts saved on this tab ')}
         </div>
         <div>
+          <ReceiptSearch context={context} />
           <Button variant="ghost" size="sm" onClick={() => setModal('history')}>
             <Clock3 size={14} />
             {t('Recent receipts ')}

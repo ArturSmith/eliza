@@ -85,6 +85,16 @@ test('filters, favorites and paginates the checkout catalog', async ({ page }) =
   await expect(page.getByLabel('Scan or search products')).toBeFocused();
 
   await expect(page.locator('.pos-product-card')).toHaveCount(20);
+  const desktopLayout = await page.evaluate(() => ({
+    pageScrolls: document.documentElement.scrollHeight > window.innerHeight + 1,
+    productsScroll:
+      document.querySelector('.pos-product-scroll')!.scrollHeight >
+      document.querySelector('.pos-product-scroll')!.clientHeight,
+    paymentVisible: !!document.querySelector('.pay-button')?.getBoundingClientRect().height,
+  }));
+  expect(desktopLayout.pageScrolls).toBe(false);
+  expect(desktopLayout.productsScroll).toBe(true);
+  expect(desktopLayout.paymentVisible).toBe(true);
   await expect(page.getByText('Unavailable', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(page.locator('.pos-product-card')).toHaveCount(5);
@@ -148,6 +158,25 @@ test('filters, favorites and paginates the checkout catalog', async ({ page }) =
   await page.screenshot({ path: 'test-results/checkout-filters-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole('button', { name: 'Favorites', exact: true })).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollHeight > window.innerHeight + 1),
+  ).toBe(false);
+  await expect(page.locator('.pos-product-card').first()).toBeInViewport();
+  await expect(page.getByRole('button', { name: 'Take payment' })).toBeInViewport();
   await page.screenshot({ path: 'test-results/checkout-filters-mobile.png', fullPage: true });
+  for (let i = 0; i < 8; i++) {
+    await page.getByLabel('Scan or search products').fill('BAR' + i);
+    await page.getByLabel('Scan or search products').press('Enter');
+    await expect(
+      page.getByLabel('Quantity for Product ' + String(i).padStart(2, '0')),
+    ).toBeVisible();
+  }
+  expect(
+    await page.evaluate(() => {
+      const cart = document.querySelector('.cart-lines')!;
+      return cart.scrollHeight > cart.clientHeight;
+    }),
+  ).toBe(true);
+  await expect(page.getByRole('button', { name: 'Take payment' })).toBeInViewport();
   expect(errors).toEqual([]);
 });
