@@ -1858,5 +1858,12 @@
   "Stock batch": "Партия товара",
   "Uses the existing barcode for all stock and shows the regular price and discount at checkout and on receipts. Print a new shelf tag.": "Применяет скидку ко всем остаткам с существующим штрихкодом и показывает обычную цену и скидку на кассе и в чеке. Напечатайте новый ценник.",
   "Uses the existing product barcode for all stock. Purchase costs for each batch stay unchanged. Print a new shelf tag.": "Применяет новую цену ко всем остаткам с существующим штрихкодом. Закупочная стоимость каждой партии не меняется. Напечатайте новый ценник.",
-  "cost each": "закупочная цена за штуку"
+  "cost each": "закупочная цена за штуку",
+  "Discount settings": "Настройки скидки",
+  "Set the final discounted selling price. The regular selling price is above.": "Укажите итоговую цену со скидкой. Обычная цена продажи находится выше.",
+  "Discount scope": "На какие товары действует скидка",
+  "Available batches are used automatically, earliest expiry first. Print and attach every new label.": "Система автоматически выбирает партии, начиная с ближайшего срока годности. Распечатайте и наклейте все новые этикетки.",
+  "All units keep the existing product barcode.": "Все товары сохранят существующий штрихкод.",
+  "Save selling price changes before applying a discount.": "Сначала сохраните изменение обычной цены продажи, затем примените скидку.",
+  "Apply discount": "Применить скидку"
 }

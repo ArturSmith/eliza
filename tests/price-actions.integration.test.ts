@@ -140,33 +140,55 @@ describe.sequential('manager price actions', () => {
       (
         await manager.request(`/products/${productId}/pricing/limited`, {
           requestId: crypto.randomUUID(),
-          batchId: shortBatchId,
-          quantity: 4,
+          quantity: 11,
           price: '50.00',
         })
       ).status,
     ).toBe(409);
     const request = {
       requestId: crypto.randomUUID(),
-      batchId: shortBatchId,
-      quantity: 3,
+      quantity: 4,
       price: '50.00',
     };
     const created = await manager.request(`/products/${productId}/pricing/limited`, request);
     expect(created.status).toBe(201);
-    const offer = created.body;
+    const [offer, secondOffer] = created.body.labels;
+    expect(created.body.labels).toHaveLength(2);
+    expect(offer.quantity).toBe(3);
+    expect(secondOffer.quantity).toBe(1);
+    expect(
+      (
+        await db.pool.query('SELECT origin_batch_id FROM stock_batches WHERE product_id=$1', [
+          offer.id,
+        ])
+      ).rows[0].origin_batch_id,
+    ).toBe(shortBatchId);
+    expect(
+      (
+        await db.pool.query('SELECT unit_cost FROM stock_batches WHERE product_id=$1', [
+          secondOffer.id,
+        ])
+      ).rows[0].unit_cost,
+    ).toBe('59.00');
     expect((await manager.request(`/products/${productId}/pricing/limited`, request)).body).toEqual(
-      offer,
+      created.body,
     );
-    expect((await manager.request('/inventory/adjustments', {
-      productId: offer.id, quantity: '1', reason: 'count_correction', requestId: crypto.randomUUID(),
-    })).status).toBe(400);
+    expect(
+      (
+        await manager.request('/inventory/adjustments', {
+          productId: offer.id,
+          quantity: '1',
+          reason: 'count_correction',
+          requestId: crypto.randomUUID(),
+        })
+      ).status,
+    ).toBe(400);
     expect(offer.barcode).toMatch(/^04\d{11}$/);
     expect((await register.request(`/pos/products?code=${offer.barcode}`)).body).toMatchObject([
       { id: offer.id, price: '50.00', regularPrice: '70.00', stock: '3.000' },
     ]);
     const remaining = await db.pool.query('SELECT stock FROM products WHERE id=$1', [productId]);
-    expect(remaining.rows[0].stock).toBe('7.000');
+    expect(remaining.rows[0].stock).toBe('6.000');
     const first = await register.request(
       '/pos/sales',
       sale(
@@ -234,6 +256,19 @@ describe.sequential('manager price actions', () => {
         })
       ).status,
     ).toBe(201);
+    const editedProduct = (await manager.request('/products')).body.find(
+      (product: { id: string }) => product.id === productId,
+    );
+    expect(editedProduct.regularPrice).toBe('70.00');
+    expect(
+      (
+        await manager.request(
+          `/products/${productId}`,
+          { ...editedProduct, price: editedProduct.regularPrice, description: 'Updated details' },
+          'PATCH',
+        )
+      ).status,
+    ).toBe(200);
     const catalog = await register.request('/pos/products?code=709000000009');
     expect(catalog.body[0]).toMatchObject({ price: '60.00', regularPrice: '70.00' });
     const paid = await register.request(
@@ -269,17 +304,27 @@ describe.sequential('manager price actions', () => {
       await db.pool.query('SELECT tag_price_version FROM products WHERE id=$1', [productId])
     ).rows[0].tag_price_version;
     expect(
-      (await manager.request(`/products/${productId}/pricing`, { kind: 'regular', price: '60.00' }))
-        .status,
-    ).toBe(201);
+      (
+        await manager.request(
+          `/products/${productId}`,
+          { ...editedProduct, price: '60.00' },
+          'PATCH',
+        )
+      ).status,
+    ).toBe(200);
     const changed = (
       await db.pool.query('SELECT tag_price_version FROM products WHERE id=$1', [productId])
     ).rows[0].tag_price_version;
     expect(changed).toBe(version + 1);
     expect(
-      (await manager.request(`/products/${productId}/pricing`, { kind: 'regular', price: '65.00' }))
-        .status,
-    ).toBe(201);
+      (
+        await manager.request(
+          `/products/${productId}`,
+          { ...editedProduct, price: '65.00' },
+          'PATCH',
+        )
+      ).status,
+    ).toBe(200);
     expect((await register.request('/pos/products?code=709000000009')).body[0]).toMatchObject({
       price: '65.00',
       regularPrice: null,

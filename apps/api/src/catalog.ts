@@ -182,7 +182,17 @@ export class CatalogController {
           ];
       const [product] = await tx
         .update(products)
-        .set({ ...body, plu: plu || null, regularPrice: null, priceKind: 'standard' })
+        .set({
+          ...body,
+          plu: plu || null,
+          ...(old.priceKind === 'discount_all' && body.price === old.regularPrice
+            ? {
+                price: old.price,
+                regularPrice: old.regularPrice,
+                priceKind: 'discount_all' as const,
+              }
+            : { regularPrice: null, priceKind: 'standard' as const }),
+        })
         .where(eq(products.id, id))
         .returning();
       await tx

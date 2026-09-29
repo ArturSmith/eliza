@@ -5536,18 +5536,35 @@ input.shopping-section-title {
 .price-actions {
   display: grid;
   gap: 1rem;
+  margin: 1.5rem 0;
+  padding: 1.25rem;
+  border: 1px solid var(--line, #dde5d9);
+  border-radius: 16px;
+  background: var(--surface, #f8faf5);
 }
-.price-actions-tabs {
-  display: flex;
-  flex-wrap: wrap;
+.price-actions-heading h3 {
+  margin: 0 0 0.25rem;
+}
+.price-actions-heading p {
+  margin: 0;
+}
+.price-actions-choices {
+  display: grid;
   gap: 0.5rem;
 }
-.price-actions form {
-  display: grid;
-  gap: 1rem;
+.price-actions-choice {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--line, #dde5d9);
+  border-radius: 10px;
+  background: white;
+  cursor: pointer;
 }
-.price-actions form small {
-  color: var(--muted, #62736a);
+.price-actions-choice input {
+  width: auto;
+  margin: 0;
 }
 .price-action-existing {
   display: grid;
@@ -5557,22 +5574,8 @@ input.shopping-section-title {
   display: none;
 }
 @media print {
-  body:has(.price-action-print-sheet) #root,
-  body:has(.price-action-print-sheet) .dialog-overlay,
-  body:has(.price-action-print-sheet) .dialog-content > :not(.price-actions),
-  body:has(.price-action-print-sheet) .price-actions > :not(.price-action-print-sheet) {
+  body:has(.price-action-print-sheet) #root {
     display: none !important;
-  }
-  body:has(.price-action-print-sheet) .dialog-content {
-    position: static !important;
-    transform: none !important;
-    width: auto !important;
-    max-width: none !important;
-    max-height: none !important;
-    padding: 0 !important;
-    border: 0 !important;
-    box-shadow: none !important;
-    overflow: visible !important;
   }
   .price-action-print-sheet {
     display: flex !important;

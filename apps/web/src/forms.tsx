@@ -31,6 +31,7 @@ import { Dialog } from './components/ui/dialog';
 import { prepareProductImage } from './product-image';
 import { BarcodeLookup } from './barcode-lookup';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
+import { PriceActions } from './price-actions';
 export function ErrorMessage({ error }: { error: unknown }) {
   useLanguage();
   return error ? (
@@ -245,6 +246,7 @@ export function ProductForm({
   initial,
   prefill,
   onCreated,
+  currency,
 }: {
   onDone: () => void;
   initial?: Product;
@@ -252,11 +254,14 @@ export function ProductForm({
     Pick<Product, 'name' | 'description' | 'category' | 'cost' | 'price' | 'barcodes' | 'source'>
   >;
   onCreated?: (product: Product) => void;
+  currency?: string;
 }) {
   useLanguage();
   const formRef = useRef<HTMLFormElement>(null);
   const [cost, setCost] = useState(initial?.cost ?? prefill?.cost ?? '');
-  const [price, setPrice] = useState(initial?.price ?? prefill?.price ?? '');
+  const [price, setPrice] = useState(
+    initial?.regularPrice ?? initial?.price ?? prefill?.price ?? '',
+  );
   const [taxRate, setTaxRate] = useState<string | undefined>(initial?.taxRate);
   const [manualPrice, setManualPrice] = useState(!!initial || !!prefill?.price);
   const [productName, setProductName] = useState(initial?.name ?? prefill?.name ?? '');
@@ -349,7 +354,8 @@ export function ProductForm({
       ...(!initial ? { autoPlu: !manualPlu, autoSku: !manualSku } : {}),
     });
   }
-  if (existingProduct) return <ProductForm initial={existingProduct} onDone={onDone} />;
+  if (existingProduct)
+    return <ProductForm initial={existingProduct} onDone={onDone} currency={currency} />;
   if (!initial && (profile.isPending || nextPlu.isPending))
     return <p>{t('Loading product defaults…')}</p>;
   if (!initial && (profile.error || nextPlu.error))
@@ -579,6 +585,13 @@ export function ProductForm({
           />
         </Field>
       </div>
+      {initial && (
+        <PriceActions
+          product={initial}
+          currency={currency}
+          regularPriceChanged={price !== (initial.regularPrice ?? initial.price)}
+        />
+      )}
       <div className="form-grid">
         <Field label={t('Unit')}>
           <select name="unit" defaultValue={initial?.unit ?? 'piece'}>

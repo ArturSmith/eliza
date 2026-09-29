@@ -25,7 +25,6 @@ const priceInput = z.object({
 });
 const limitedInput = z.object({
   requestId: z.uuid(),
-  batchId: z.uuid(),
   quantity: z.number().int().positive().max(500),
   price: money,
 });
@@ -146,7 +145,6 @@ export class PriceActionsController {
       const digest = hash(
         JSON.stringify({
           productId: id,
-          batchId: body.batchId,
           quantity: body.quantity,
           price: body.price,
         }),
@@ -174,107 +172,120 @@ export class PriceActionsController {
         throw new BadRequestException('Quantity-limited barcode labels require whole units.');
       if (toScaled(body.price, 2) >= toScaled(product.price, 2))
         throw new BadRequestException('Discounted price must be below the current selling price.');
-      const batch = (
+      const batches = (
         await client.query(
-          `SELECT b.*, (b.expiry_date IS NULL OR b.expiry_date>(now() AT TIME ZONE s.timezone)::date) AS sellable
-         FROM stock_batches b JOIN stores s ON s.id=b.store_id
-         WHERE b.id=$1 AND b.store_id=$2 AND b.product_id=$3 FOR UPDATE OF b`,
-          [body.batchId, store, id],
+          `SELECT b.* FROM stock_batches b JOIN stores s ON s.id=b.store_id
+           WHERE b.store_id=$1 AND b.product_id=$2 AND b.quantity>=1
+             AND (b.expiry_date IS NULL OR b.expiry_date>(now() AT TIME ZONE s.timezone)::date)
+           ORDER BY b.expiry_date NULLS LAST,b.created_at,b.id FOR UPDATE OF b`,
+          [store, id],
         )
-      ).rows[0];
-      if (!batch || !batch.sellable)
-        throw new ConflictException('This batch is unavailable or expired.');
-      if (toScaled(batch.quantity, 3) < BigInt(body.quantity) * 1000n)
-        throw new ConflictException('Not enough units remain in this batch.');
-      const offerId = randomUUID();
-      const sku = `${product.sku}-D${offerId.slice(0, 8)}`;
-      const barcode = (
-        await client.query('SELECT next_internal_product_barcode($1) AS value', [store])
-      ).rows[0].value;
-      await client.query(
-        `INSERT INTO products(id,store_id,name,sku,category,unit,price,cost,min_stock,stock,plu,active,image,description,source,tax_rate,base_product_id,regular_price,price_kind)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,0,$9,NULL,true,$10,$11,$12,$13,$14,$15,'limited_discount')`,
-        [
-          offerId,
-          store,
-          product.name,
-          sku,
-          product.category,
-          product.unit,
-          body.price,
-          batch.unit_cost,
-          body.quantity,
-          product.image,
-          product.description,
-          product.source,
-          product.tax_rate,
-          id,
-          product.price,
-        ],
-      );
-      await client.query('INSERT INTO barcodes(store_id,product_id,value) VALUES($1,$2,$3)', [
-        store,
-        offerId,
-        barcode,
-      ]);
-      await client.query(
-        `INSERT INTO stock_batches(store_id,product_id,expiry_date,quantity,unit_cost,cost_source,origin_batch_id)
-         VALUES($1,$2,$3,$4,$5,'adjustment',$6)`,
-        [store, offerId, batch.expiry_date, body.quantity, batch.unit_cost, batch.id],
-      );
-      await client.query('UPDATE stock_batches SET quantity=quantity-$2 WHERE id=$1', [
-        batch.id,
-        body.quantity,
-      ]);
-      await client.query('UPDATE products SET stock=stock-$2 WHERE id=$1', [id, body.quantity]);
-      for (const [productId, delta] of [
-        [id, -body.quantity],
-        [offerId, body.quantity],
-      ] as const) {
-        const balance = productId === id ? Number(product.stock) + delta : body.quantity;
+      ).rows;
+      let remaining = body.quantity;
+      const allocations: { batch: (typeof batches)[number]; quantity: number }[] = [];
+      for (const batch of batches) {
+        const quantity = Math.min(Math.floor(Number(batch.quantity)), remaining);
+        if (quantity > 0) allocations.push({ batch, quantity });
+        remaining -= quantity;
+        if (!remaining) break;
+      }
+      if (remaining) throw new ConflictException('Not enough sellable units remain.');
+      const labels = [];
+      let allocated = 0;
+      for (const { batch, quantity } of allocations) {
+        const offerId = randomUUID();
+        const sku = `${product.sku}-D${offerId.slice(0, 8)}`;
+        const barcode = (
+          await client.query('SELECT next_internal_product_barcode($1) AS value', [store])
+        ).rows[0].value;
         await client.query(
-          `INSERT INTO movements(store_id,product_id,employee_id,device_id,quantity,balance,reason,notes,request_id,request_hash)
-           VALUES($1,$2,$3,$4,$5,$6,'price_relabel',$7,$8,$9)`,
+          `INSERT INTO products(id,store_id,name,sku,category,unit,price,cost,min_stock,stock,plu,active,image,description,source,tax_rate,base_product_id,regular_price,price_kind)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,0,$9,NULL,true,$10,$11,$12,$13,$14,$15,'limited_discount')`,
           [
-            store,
-            productId,
-            req.context.user.id,
-            req.context.device.id,
-            delta,
-            balance,
-            `Relabelled ${body.quantity} units as ${sku}`,
-            randomUUID(),
             offerId,
+            store,
+            product.name,
+            sku,
+            product.category,
+            product.unit,
+            body.price,
+            batch.unit_cost,
+            quantity,
+            product.image,
+            product.description,
+            product.source,
+            product.tax_rate,
+            id,
+            product.price,
           ],
         );
-      }
-      await client.query(
-        'INSERT INTO audits(store_id,employee_id,device_id,action,entity_id,details) VALUES($1,$2,$3,$4,$5,$6)',
-        [
+        await client.query('INSERT INTO barcodes(store_id,product_id,value) VALUES($1,$2,$3)', [
           store,
-          req.context.user.id,
-          req.context.device.id,
-          'Limited price labels created',
           offerId,
-          JSON.stringify({
-            baseProductId: id,
-            sourceBatchId: batch.id,
-            quantity: body.quantity,
-            regularPrice: product.price,
-            discountedPrice: body.price,
-            barcode,
-          }),
-        ],
-      );
-      const result = {
-        id: offerId,
-        barcode,
-        quantity: body.quantity,
-        price: body.price,
-        regularPrice: product.price,
-        expiryDate: batch.expiry_date,
-        name: product.name,
-      };
+          barcode,
+        ]);
+        await client.query(
+          `INSERT INTO stock_batches(store_id,product_id,expiry_date,quantity,unit_cost,cost_source,origin_batch_id)
+         VALUES($1,$2,$3,$4,$5,'adjustment',$6)`,
+          [store, offerId, batch.expiry_date, quantity, batch.unit_cost, batch.id],
+        );
+        await client.query('UPDATE stock_batches SET quantity=quantity-$2 WHERE id=$1', [
+          batch.id,
+          quantity,
+        ]);
+        for (const [productId, delta] of [
+          [id, -quantity],
+          [offerId, quantity],
+        ] as const) {
+          const balance =
+            productId === id ? Number(product.stock) - allocated - quantity : quantity;
+          await client.query(
+            `INSERT INTO movements(store_id,product_id,employee_id,device_id,quantity,balance,reason,notes,request_id,request_hash)
+           VALUES($1,$2,$3,$4,$5,$6,'price_relabel',$7,$8,$9)`,
+            [
+              store,
+              productId,
+              req.context.user.id,
+              req.context.device.id,
+              delta,
+              balance,
+              `Relabelled ${quantity} units as ${sku}`,
+              randomUUID(),
+              offerId,
+            ],
+          );
+        }
+        await client.query(
+          'INSERT INTO audits(store_id,employee_id,device_id,action,entity_id,details) VALUES($1,$2,$3,$4,$5,$6)',
+          [
+            store,
+            req.context.user.id,
+            req.context.device.id,
+            'Limited price labels created',
+            offerId,
+            JSON.stringify({
+              baseProductId: id,
+              sourceBatchId: batch.id,
+              quantity,
+              regularPrice: product.price,
+              discountedPrice: body.price,
+              barcode,
+            }),
+          ],
+        );
+        labels.push({
+          id: offerId,
+          barcode,
+          quantity,
+          price: body.price,
+          regularPrice: product.price,
+          expiryDate: batch.expiry_date,
+          name: product.name,
+        });
+        allocated += quantity;
+      }
+      await client.query('UPDATE products SET stock=stock-$2 WHERE id=$1', [id, body.quantity]);
+      const result = { labels };
       await client.query(
         'INSERT INTO price_action_requests(store_id,request_id,request_hash,result) VALUES($1,$2,$3,$4)',
         [store, body.requestId, digest, JSON.stringify(result)],
