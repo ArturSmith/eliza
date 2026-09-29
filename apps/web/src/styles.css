@@ -5620,3 +5620,39 @@ input.shopping-section-title {
     height: auto;
   }
 }
+
+.price-actions-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--green);
+  text-align: left;
+}
+.price-actions-toggle > span {
+  display: grid;
+  gap: 0.2rem;
+}
+.price-actions-toggle strong {
+  font-size: 1rem;
+}
+.price-actions-toggle small {
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 400;
+}
+.price-actions-toggle svg {
+  transition: transform 160ms ease;
+}
+.price-actions-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+.price-actions-content {
+  display: grid;
+  gap: 1rem;
+  padding-top: 0.35rem;
+}

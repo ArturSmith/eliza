@@ -1922,5 +1922,6 @@
   "Targets unavailable": "Товары и категории недоступны",
   "off": "скидка",
   "No end date": "Без даты окончания",
-  "No promotions yet.": "Акций пока нет."
+  "No promotions yet.": "Акций пока нет.",
+  "Create one-use barcode labels for specific physical items.": "Создайте отдельную одноразовую этикетку со штрихкодом для каждой выбранной упаковки."
 }

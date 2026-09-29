@@ -641,7 +641,7 @@ export function ProductForm({
             placeholder={t('e.g. 4011')}
           />
         </Field>
-        {initial && (
+        {initial && ['piece', 'pack', 'box'].includes(initial.unit) && (
           <PriceActions
             product={initial}
             currency={currency}

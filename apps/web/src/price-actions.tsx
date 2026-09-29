@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import JsBarcode from 'jsbarcode';
+import { ChevronDown } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { type Product } from '@eliza/contracts';
 import { api, refresh } from './api';
@@ -74,7 +75,7 @@ export function PriceActions({
   regularPriceChanged?: boolean;
 }) {
   useLanguage();
-  const [mode, setMode] = useState<'limited' | 'discount_all'>('limited');
+  const [expanded, setExpanded] = useState(false);
   const [price, setPrice] = useState('');
   const [quantity, setQuantity] = useState('1');
   const [reason, setReason] = useState('EXPIRING_SOON');
@@ -101,17 +102,15 @@ export function PriceActions({
   });
   const action = useMutation({
     mutationFn: () =>
-      mode === 'limited'
-        ? api<{ labels: Label[] }>(`/products/${product.id}/pricing/limited`, {
-            requestId,
-            quantity: Number(quantity),
-            price,
-            reason,
-            ...(validUntil ? { validUntilLocal: validUntil } : {}),
-          })
-        : api(`/products/${product.id}/pricing`, { kind: 'discount_all', price }),
+      api<{ labels: Label[] }>(`/products/${product.id}/pricing/limited`, {
+        requestId,
+        quantity: Number(quantity),
+        price,
+        reason,
+        ...(validUntil ? { validUntilLocal: validUntil } : {}),
+      }),
     onSuccess: (result) => {
-      if (mode === 'limited') setLabels((result as { labels: Label[] }).labels);
+      setLabels(result.labels);
       setRequestId(crypto.randomUUID());
       setPrice('');
       void details.refetch();
@@ -130,94 +129,73 @@ export function PriceActions({
     Number.isFinite(Number(price)) &&
     Number(price) >= 0 &&
     price !== '' &&
-    Number(price) < Number(mode === 'limited' ? current?.checkoutPrice : current?.price);
+    Number(price) < Number(current?.checkoutPrice);
   const validQuantity =
     Number.isInteger(Number(quantity)) &&
     Number(quantity) >= 1 &&
     Number(quantity) <= 500 &&
     Number(quantity) <= available;
-  const canApply =
-    !!current &&
-    !regularPriceChanged &&
-    validPrice &&
-    (mode !== 'limited' || (wholeUnit && validQuantity));
+  const canApply = !!current && !regularPriceChanged && validPrice && wholeUnit && validQuantity;
   return (
-    <section className="price-actions" aria-label={t('Discount settings')}>
-      <div className="price-actions-heading">
-        <h3>{t('Discount settings')}</h3>
-        <p className="muted">
-          {t('Set the final discounted selling price. The regular selling price is above.')}
-        </p>
-      </div>
-      {details.error && (
-        <p className="error" role="alert">
-          {translateError(String(details.error))}
-        </p>
-      )}
-      {action.error && (
-        <p className="error" role="alert">
-          {translateError(String(action.error))}
-        </p>
-      )}
-      {labelAction.error && (
-        <p className="error" role="alert">
-          {translateError(String(labelAction.error))}
-        </p>
-      )}
-      {current && (
-        <>
-          <p className="muted">
-            {t('Current checkout price')}:{' '}
-            <strong>{formatMoney(current.checkoutPrice, currency)}</strong>
-            {current.checkoutPrice !== current.price &&
-              ` · ${t('Regular price')}: ${formatMoney(current.price, currency)}`}
-          </p>
-          <label className="field">
-            <span>{t('Discounted selling price')}</span>
-            <input
-              inputMode="decimal"
-              type="number"
-              min="0"
-              step="0.01"
-              value={price}
-              onChange={(event) => {
-                setPrice(event.target.value);
-                setRequestId(crypto.randomUUID());
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  if (canApply && !action.isPending) action.mutate();
-                }
-              }}
-              placeholder={t('0.00')}
-            />
-          </label>
-          <div className="price-actions-choices" role="radiogroup" aria-label={t('Discount scope')}>
-            <label className="price-actions-choice">
-              <input
-                type="radio"
-                name={`discount-scope-${product.id}`}
-                checked={mode === 'limited'}
-                onChange={() => {
-                  setMode('limited');
-                  setRequestId(crypto.randomUUID());
-                }}
-              />
-              <span>{t('Discount selected units')}</span>
-            </label>
-            <label className="price-actions-choice">
-              <input
-                type="radio"
-                name={`discount-scope-${product.id}`}
-                checked={mode === 'discount_all'}
-                onChange={() => setMode('discount_all')}
-              />
-              <span>{t('Discount all units')}</span>
-            </label>
-          </div>
-          {mode === 'limited' && (
+    <section className="price-actions price-actions-collapsible" aria-label={t('Unit markdown')}>
+      <button
+        type="button"
+        className="price-actions-toggle"
+        aria-expanded={expanded}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span>
+          <strong>{t('Unit markdown')}</strong>
+          <small>{t('Create one-use barcode labels for specific physical items.')}</small>
+        </span>
+        <ChevronDown size={20} aria-hidden="true" />
+      </button>
+      {expanded && (
+        <div className="price-actions-content">
+          {details.error && (
+            <p className="error" role="alert">
+              {translateError(String(details.error))}
+            </p>
+          )}
+          {action.error && (
+            <p className="error" role="alert">
+              {translateError(String(action.error))}
+            </p>
+          )}
+          {labelAction.error && (
+            <p className="error" role="alert">
+              {translateError(String(labelAction.error))}
+            </p>
+          )}
+          {current && (
             <>
+              <p className="muted">
+                {t('Current checkout price')}:{' '}
+                <strong>{formatMoney(current.checkoutPrice, currency)}</strong>
+                {current.checkoutPrice !== current.price &&
+                  ` · ${t('Regular price')}: ${formatMoney(current.price, currency)}`}
+              </p>
+              <label className="field">
+                <span>{t('Discounted selling price')}</span>
+                <input
+                  inputMode="decimal"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={price}
+                  onChange={(event) => {
+                    setPrice(event.target.value);
+                    setRequestId(crypto.randomUUID());
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      if (canApply && !action.isPending) action.mutate();
+                    }
+                  }}
+                  placeholder={t('0.00')}
+                />
+              </label>
               <label className="field">
                 <span>{t('Reason')}</span>
                 <select value={reason} onChange={(e) => setReason(e.target.value)}>
@@ -266,116 +244,111 @@ export function PriceActions({
                   {t('Limited labels currently support products sold as whole units.')}
                 </p>
               )}
+              {regularPriceChanged && (
+                <p className="notice">
+                  {t('Save selling price changes before applying a discount.')}
+                </p>
+              )}
+              <Button
+                type="button"
+                disabled={!canApply || action.isPending}
+                onClick={() => action.mutate()}
+              >
+                {action.isPending ? t('Saving…') : t('Create discounted labels')}
+              </Button>
+              {!!details.data?.offers.length && (
+                <div className="price-action-existing">
+                  <h4>{t('Legacy discounted label batches')}</h4>
+                  <p className="muted">
+                    {t(
+                      'Existing shared barcodes remain valid until their stock is sold. New labels use one code per unit.',
+                    )}
+                  </p>
+                  {details.data.offers.map((offer) => (
+                    <div key={offer.id} className="cash-history-row">
+                      <span>
+                        {offer.stock} {t('remaining')} · {formatMoney(offer.price, currency)}
+                        <small>
+                          {offer.barcode}
+                          {offer.expiryDate ? ` · ${t('Expires')} ${offer.expiryDate}` : ''}
+                        </small>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {!!markdowns.data?.length && (
+                <div className="price-action-existing">
+                  <h4>{t('Unit markdown labels')}</h4>
+                  {markdowns.data.map((unit) => (
+                    <div key={unit.id} className="cash-history-row">
+                      <span>
+                        <strong>{unit.barcode}</strong>
+                        <small>
+                          {formatMoney(unit.price, currency)} · {t(unit.status.toLowerCase())}
+                          {unit.expiryDate ? ` · ${t('Expires')} ${unit.expiryDate}` : ''}
+                        </small>
+                      </span>
+                      {unit.status === 'AVAILABLE' && (
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={labelAction.isPending}
+                            onClick={() => labelAction.mutate({ id: unit.id, kind: 'replace' })}
+                          >
+                            {t('Replace label')}
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            disabled={labelAction.isPending}
+                            onClick={() => labelAction.mutate({ id: unit.id, kind: 'cancel' })}
+                          >
+                            {t('Cancel label')}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
-          {mode === 'discount_all' && (
-            <p className="muted">{t('All units keep the existing product barcode.')}</p>
-          )}
-          {regularPriceChanged && (
-            <p className="notice">{t('Save selling price changes before applying a discount.')}</p>
-          )}
-          <Button
-            type="button"
-            disabled={!canApply || action.isPending}
-            onClick={() => action.mutate()}
-          >
-            {action.isPending
-              ? t('Saving…')
-              : mode === 'limited'
-                ? t('Create discounted labels')
-                : t('Apply discount')}
-          </Button>
-          {!!details.data?.offers.length && (
-            <div className="price-action-existing">
-              <h4>{t('Legacy discounted label batches')}</h4>
-              <p className="muted">
-                {t(
-                  'Existing shared barcodes remain valid until their stock is sold. New labels use one code per unit.',
-                )}
-              </p>
-              {details.data.offers.map((offer) => (
-                <div key={offer.id} className="cash-history-row">
-                  <span>
-                    {offer.stock} {t('remaining')} · {formatMoney(offer.price, currency)}
-                    <small>
-                      {offer.barcode}
-                      {offer.expiryDate ? ` · ${t('Expires')} ${offer.expiryDate}` : ''}
-                    </small>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-          {!!markdowns.data?.length && (
-            <div className="price-action-existing">
-              <h4>{t('Unit markdown labels')}</h4>
-              {markdowns.data.map((unit) => (
-                <div key={unit.id} className="cash-history-row">
-                  <span>
-                    <strong>{unit.barcode}</strong>
-                    <small>
-                      {formatMoney(unit.price, currency)} · {t(unit.status.toLowerCase())}
-                      {unit.expiryDate ? ` · ${t('Expires')} ${unit.expiryDate}` : ''}
-                    </small>
-                  </span>
-                  {unit.status === 'AVAILABLE' && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={labelAction.isPending}
-                        onClick={() => labelAction.mutate({ id: unit.id, kind: 'replace' })}
-                      >
-                        {t('Replace label')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={labelAction.isPending}
-                        onClick={() => labelAction.mutate({ id: unit.id, kind: 'cancel' })}
-                      >
-                        {t('Cancel label')}
-                      </Button>
-                    </div>
+          {!!labels.length && (
+            <>
+              {createPortal(
+                <div className="price-action-print-sheet">
+                  {labels.flatMap((label) =>
+                    Array.from({ length: label.quantity }, (_, index) => (
+                      <div className="price-action-label" key={`${label.id}-${index}`}>
+                        <strong>{label.name}</strong>
+                        <span>
+                          {t('Reduced price')} {formatMoney(label.price, currency)}
+                        </span>
+                        <small>
+                          {t('Regular price')} {formatMoney(label.regularPrice, currency)}
+                        </small>
+                        {label.expiryDate && (
+                          <small>
+                            {t('Expires')} {label.expiryDate}
+                          </small>
+                        )}
+                        <PrintedBarcode code={label.barcode} />
+                      </div>
+                    )),
                   )}
-                </div>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-      {!!labels.length && (
-        <>
-          {createPortal(
-            <div className="price-action-print-sheet">
-              {labels.flatMap((label) =>
-                Array.from({ length: label.quantity }, (_, index) => (
-                  <div className="price-action-label" key={`${label.id}-${index}`}>
-                    <strong>{label.name}</strong>
-                    <span>
-                      {t('Reduced price')} {formatMoney(label.price, currency)}
-                    </span>
-                    <small>
-                      {t('Regular price')} {formatMoney(label.regularPrice, currency)}
-                    </small>
-                    {label.expiryDate && (
-                      <small>
-                        {t('Expires')} {label.expiryDate}
-                      </small>
-                    )}
-                    <PrintedBarcode code={label.barcode} />
-                  </div>
-                )),
+                </div>,
+                document.body,
               )}
-            </div>,
-            document.body,
+              <Button type="button" onClick={() => window.print()}>
+                {t('Print {value0} labels', {
+                  value0: String(labels.reduce((sum, label) => sum + label.quantity, 0)),
+                })}
+              </Button>
+            </>
           )}
-          <Button type="button" onClick={() => window.print()}>
-            {t('Print {value0} labels', {
-              value0: String(labels.reduce((sum, label) => sum + label.quantity, 0)),
-            })}
-          </Button>
-        </>
+        </div>
       )}
     </section>
   );
