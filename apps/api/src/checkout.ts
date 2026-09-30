@@ -127,11 +127,11 @@ export class CheckoutController {
       throw new BadRequestException('Invalid PLU.');
     return this.operations.transaction(async (client) => {
       const actor = await this.registers.operator(client, req);
-      if (code) {
+      const markdownProduct = async (barcode: string) => {
         const token = (
           await client.query(
             'SELECT id,product_id FROM markdown_units WHERE store_id=$1 AND barcode=$2',
-            [actor.storeId, code],
+            [actor.storeId, barcode],
           )
         ).rows[0];
         if (token) {
@@ -148,6 +148,11 @@ export class CheckoutController {
             throw new ConflictException('This markdown label is no longer valid.');
           }
         }
+        return null;
+      };
+      if (code) {
+        const exactMarkdown = await markdownProduct(code);
+        if (exactMarkdown) return exactMarkdown;
       }
       const rows = (
         await client.query(
@@ -158,6 +163,12 @@ export class CheckoutController {
           [actor.storeId, code ?? null, plu ?? null],
         )
       ).rows;
+      // EAN-13 labels beginning with 0 can be decoded as 12-digit UPC-A codes.
+      // Preserve exact product barcodes before trying the markdown alias.
+      if (!rows.length && code && /^5\d{11}$/.test(code)) {
+        const upcMarkdown = await markdownProduct('0' + code);
+        if (upcMarkdown) return upcMarkdown;
+      }
       return Promise.all(rows.map((row) => pricedCatalogRow(client, actor.storeId, row)));
     });
   }

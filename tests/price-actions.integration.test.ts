@@ -191,6 +191,20 @@ describe.sequential('manager price actions', () => {
         markdownUnitId: label.id,
       },
     ]);
+    expect((await register.request(`/pos/products?code=${label.barcode.slice(1)}`)).body).toEqual(
+      scan.body,
+    );
+    await db.pool.query(
+      'INSERT INTO barcodes(store_id,product_id,value) SELECT store_id,id,$2 FROM products WHERE id=$1',
+      [productId, label.barcode.slice(1)],
+    );
+    expect(
+      (await register.request(`/pos/products?code=${label.barcode.slice(1)}`)).body,
+    ).toMatchObject([{ id: productId, price: '70.00' }]);
+    await db.pool.query('DELETE FROM barcodes WHERE product_id=$1 AND value=$2', [
+      productId,
+      label.barcode.slice(1),
+    ]);
     expect(
       (await register.request(`/pos/catalog?search=${label.barcode}`)).body.products,
     ).toMatchObject([{ markdownUnitId: label.id, price: '50.00' }]);
@@ -272,6 +286,9 @@ describe.sequential('manager price actions', () => {
       replacementForId: remaining.id,
     });
     expect((await register.request(`/pos/products?code=${remaining.barcode}`)).status).toBe(409);
+    expect(
+      (await register.request(`/pos/products?code=${remaining.barcode.slice(1)}`)).status,
+    ).toBe(409);
     const cancelled = await manager.request(
       `/products/${productId}/pricing/markdowns/${replaced.body.label.id}/cancel`,
       {},
