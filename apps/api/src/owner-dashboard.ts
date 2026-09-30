@@ -248,6 +248,7 @@ export class OwnerDashboardController {
         available: c.available,
       })),
       kpis,
+      financialSummary: current.financialSummary,
       pace: period === 'today' ? this.pace(current, compared, hour) : null,
       insights,
       whatChanged: changed,
@@ -361,8 +362,24 @@ SELECT (SELECT count(*) FROM sold)::text AS transactions,
       grossProfit: profit,
       grossMargin:
         margin && canonical.grossMarginPercent !== null ? num(canonical.grossMarginPercent) : null,
-      averageBasket: averageBasket(revenue, num(row.transactions)),
+      averageBasket: averageBasket(num(canonical.breakdown.completedSales), num(row.transactions)),
       missingCost: missing,
+      financialSummary: {
+        revenue: canonical.revenue,
+        cogs: margin ? canonical.cogs : null,
+        grossProfit: margin ? canonical.grossProfit : null,
+        grossMarginPercent: margin ? canonical.grossMarginPercent : null,
+        inventoryLosses: margin ? canonical.inventoryLosses : null,
+        operatingExpenses: finances.expenses ? canonical.operatingExpenses : null,
+        storeOperatingProfit: margin && finances.expenses ? canonical.storeOperatingProfit : null,
+        dataQuality: margin
+          ? {
+              costComplete: canonical.dataQuality.costComplete,
+              lossCostComplete: canonical.dataQuality.lossCostComplete,
+            }
+          : null,
+        permissions: { margin, expenses: finances.expenses },
+      },
     };
   }
 

@@ -148,12 +148,80 @@ describe.sequential('owner dashboard', () => {
     expect(res.body.kpis.grossMargin.unit).toBe('points');
     expect(res.body.kpis.transactions.value).toBe(1);
     expect(res.body.kpis.averageBasket.value).toBe(200);
+    expect(res.body.financialSummary).toMatchObject({
+      revenue: '200.00',
+      cogs: '120.00',
+      grossProfit: '80.00',
+      grossMarginPercent: '40.00',
+      inventoryLosses: '0.00',
+      operatingExpenses: '0.00',
+      storeOperatingProfit: '80.00',
+      dataQuality: { costComplete: true, lossCostComplete: true },
+    });
   });
 
   it('marks comparisons unavailable instead of inventing a baseline', async () => {
     const res = await owner.request('/reports/owner-dashboard?period=today');
     expect(res.body.kpis.revenue.change).toBeNull();
     expect(res.body.comparisons.some((c: any) => c.available === false)).toBe(true);
+  });
+
+  it('keeps average basket based on completed sales when a receipt is partly refunded', async () => {
+    const session = (await owner.request('/auth/session')).body;
+    const sale = (
+      await db.pool.query(
+        `INSERT INTO sales(store_id,device_id,employee_id,shift_id,request_id,request_hash,receipt_number,total,tax,discount,receipt,created_at)
+         VALUES($1,$2,$3,$4,$5,'fixture','BASKET-2003',100,0,0,$6,'2003-01-01T12:00:00Z') RETURNING id`,
+        [
+          session.store.id,
+          session.device.id,
+          session.user.id,
+          shiftId,
+          crypto.randomUUID(),
+          { lines: [{ productId, category: 'Dairy', quantity: '1', total: '100.00', tax: '0' }] },
+        ],
+      )
+    ).rows[0].id;
+    await db.pool.query(
+      'INSERT INTO sale_items(store_id,sale_id,product_id,quantity,price,cost,tax_rate,total,cost_total) VALUES($1,$2,$3,1,100,60,0,100,60)',
+      [session.store.id, sale, productId],
+    );
+    const refund = (
+      await db.pool.query(
+        `INSERT INTO refunds(store_id,sale_id,shift_id,employee_id,device_id,approver_id,request_id,request_hash,number,method,reason,total,tax,receipt,created_at)
+         VALUES($1,$2,$3,$4,$5,$4,$6,'fixture','BASKET-RF-2003','cash','partial',40,0,'{}','2003-01-01T13:00:00Z') RETURNING id`,
+        [session.store.id, sale, shiftId, session.user.id, session.device.id, crypto.randomUUID()],
+      )
+    ).rows[0].id;
+    await db.pool.query(
+      'INSERT INTO refund_lines(store_id,refund_id,sale_id,product_id,quantity,restock,total,tax,restored_cost) VALUES($1,$2,$3,$4,0.4,true,40,0,24)',
+      [session.store.id, refund, sale, productId],
+    );
+    const report = (
+      await owner.request('/reports/owner-dashboard?period=custom&from=2003-01-01&to=2003-01-01')
+    ).body;
+    expect(report.financialSummary.revenue).toBe('60.00');
+    expect(report.kpis.averageBasket.value).toBe(100);
+  });
+
+  it('does not show estimated profit when a historical receipt has no cost lines', async () => {
+    const session = (await owner.request('/auth/session')).body;
+    await db.pool.query(
+      `INSERT INTO sales(store_id,device_id,employee_id,shift_id,request_id,request_hash,receipt_number,total,tax,discount,receipt,created_at)
+       VALUES($1,$2,$3,$4,$5,'fixture','MISSING-COST-2004',80,0,0,'{"lines":[]}','2004-01-01T12:00:00Z')`,
+      [session.store.id, session.device.id, session.user.id, shiftId, crypto.randomUUID()],
+    );
+    const report = (
+      await owner.request('/reports/owner-dashboard?period=custom&from=2004-01-01&to=2004-01-01')
+    ).body;
+    expect(report.financialSummary).toMatchObject({
+      revenue: '80.00',
+      cogs: null,
+      grossProfit: null,
+      grossMarginPercent: null,
+      storeOperatingProfit: null,
+      dataQuality: { costComplete: false },
+    });
   });
 
   it('includes period expenses and payments without double-counting purchases in profit', async () => {
@@ -206,6 +274,8 @@ describe.sequential('owner dashboard', () => {
     expect(report.kpis.totalSpending.value).toBe(130.75);
     expect(report.kpis.grossProfit.value).toBe(80);
     expect(report.kpis.netProfit.value).toBe(49.5);
+    expect(report.financialSummary.storeOperatingProfit).toBe('49.50');
+    expect(report.financialSummary.operatingExpenses).toBe('30.50');
     expect(report.unavailable.some((u: any) => u.metric === 'operatingExpenses')).toBe(false);
     const historical = (
       await owner.request('/reports/owner-dashboard?period=custom&from=2000-01-02&to=2000-01-02')
@@ -340,12 +410,22 @@ describe.sequential('owner dashboard', () => {
     expect(res.body.kpis.grossMargin.restricted).toBe(true);
     expect(res.body.kpis.netProfit.value).toBeNull();
     expect(res.body.kpis.netProfit.restricted).toBe(true);
+    expect(res.body.financialSummary).toMatchObject({
+      revenue: '200.00',
+      cogs: null,
+      grossProfit: null,
+      inventoryLosses: null,
+      storeOperatingProfit: null,
+      dataQuality: null,
+      permissions: { margin: false },
+    });
     await db.pool.query(
       `UPDATE roles SET permissions=(SELECT COALESCE(jsonb_agg(p),'[]'::jsonb) FROM jsonb_array_elements(permissions) p WHERE p NOT IN ('"expenses.read"'::jsonb,'"purchases.read"'::jsonb)) WHERE id=$1`,
       [manager.id],
     );
     const restricted = (await limited.request('/reports/owner-dashboard?period=today')).body;
     expect(restricted.kpis.operatingExpenses.value).toBeNull();
+    expect(restricted.financialSummary.operatingExpenses).toBeNull();
     expect(restricted.kpis.paidPurchases.value).toBeNull();
     expect(restricted.kpis.totalSpending.value).toBeNull();
     expect(restricted.kpis.totalSpending.restricted).toBe(true);

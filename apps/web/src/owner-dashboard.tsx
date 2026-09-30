@@ -19,6 +19,17 @@ type Change = {
   restricted?: boolean;
 };
 type Dashboard = any;
+type OverviewFinancialSummary = {
+  revenue: string;
+  cogs: string | null;
+  grossProfit: string | null;
+  grossMarginPercent: string | null;
+  inventoryLosses: string | null;
+  operatingExpenses: string | null;
+  storeOperatingProfit: string | null;
+  dataQuality: { costComplete: boolean; lossCostComplete: boolean } | null;
+  permissions: { margin: boolean; expenses: boolean };
+};
 
 const periods: { key: Period; label: string }[] = [
   { key: 'today', label: 'Today' },
@@ -62,9 +73,7 @@ function Kpi({
   useLanguage();
   const value =
     data.value === null
-      ? data.metric === 'grossMargin' && !data.restricted
-        ? '0%'
-        : null
+      ? null
       : money
         ? formatMoney(String(data.value.toFixed(2)), currency)
         : data.unit === 'points'
@@ -82,6 +91,38 @@ function Kpi({
       )}
       {showComparison && <Delta change={data.change} metric={data.metric} unit={data.unit} />}
       {hint && <small className="muted">{hint}</small>}
+    </article>
+  );
+}
+
+function FinancialCard({
+  label,
+  value,
+  currency,
+  percent = false,
+  restricted = false,
+  hint,
+}: {
+  label: string;
+  value: string | null;
+  currency: string;
+  percent?: boolean;
+  restricted?: boolean;
+  hint?: string;
+}) {
+  return (
+    <article className="kpi">
+      <span className="kpi-label">{t(label)}</span>
+      <strong className={'kpi-value' + (value === null ? ' kpi-unavailable' : '')}>
+        {restricted
+          ? t('Restricted')
+          : value === null
+            ? t('Unavailable')
+            : percent
+              ? Number(value).toFixed(1) + '%'
+              : formatMoney(value, currency)}
+      </strong>
+      {hint && !restricted && <small className="muted">{t(hint)}</small>}
     </article>
   );
 }
@@ -346,6 +387,9 @@ export function TodayOperations() {
   const today = q.data;
   if (!today) return null;
   const currency = session.store.currency;
+  const financial = today.financialSummary as OverviewFinancialSummary;
+  const missingCost = financial.permissions.margin && !financial.dataQuality?.costComplete;
+  const missingLoss = financial.permissions.margin && !financial.dataQuality?.lossCostComplete;
   return (
     <div className="dashboard-today">
       <section className="today-overview" aria-label={t('Today at a glance')}>
@@ -360,38 +404,68 @@ export function TodayOperations() {
             <strong className="kpi-value">{today.kpis.transactions.value ?? 0}</strong>
           </article>
           <article className="kpi">
-            <span className="kpi-label">{t('Sales today')}</span>
-            <strong className="kpi-value">
-              {formatMoney(String(today.kpis.revenue.value ?? 0), currency)}
-            </strong>
-          </article>
-          <article className="kpi">
             <span className="kpi-label">{t('Average basket')}</span>
             <strong className="kpi-value">
               {formatMoney(String(today.kpis.averageBasket.value ?? 0), currency)}
             </strong>
           </article>
-          <article className="kpi">
-            <span className="kpi-label">{t('Gross margin')}</span>
-            <strong className="kpi-value">
-              {today.kpis.grossMargin.value === null
-                ? today.kpis.grossMargin.restricted
-                  ? t('Restricted')
-                  : '0%'
-                : today.kpis.grossMargin.value.toFixed(1) + '%'}
-            </strong>
-          </article>
-          <Kpi
-            label="Total spending"
-            data={today.kpis.totalSpending}
+        </div>
+        <h3 className="today-financial-heading">{t('Store profitability')}</h3>
+        <div className="today-metrics" aria-label={t('Store profitability')}>
+          <FinancialCard label="Revenue" value={financial.revenue} currency={currency} />
+          <FinancialCard
+            label="Cost of goods sold"
+            value={financial.cogs}
             currency={currency}
-            showComparison={false}
+            restricted={!financial.permissions.margin}
+            hint={missingCost ? 'Historical sale or refund cost is missing.' : undefined}
           />
-          <Kpi
-            label="Store operating profit"
-            data={today.kpis.netProfit}
+          <FinancialCard
+            label="Gross profit"
+            value={financial.grossProfit}
             currency={currency}
-            showComparison={false}
+            restricted={!financial.permissions.margin}
+            hint={missingCost ? 'Historical sale or refund cost is missing.' : undefined}
+          />
+          <FinancialCard
+            label="Gross margin"
+            value={financial.grossMarginPercent}
+            currency={currency}
+            percent
+            restricted={!financial.permissions.margin}
+            hint={
+              missingCost
+                ? 'Historical sale or refund cost is missing.'
+                : financial.grossMarginPercent === null
+                  ? 'Gross margin requires positive revenue.'
+                  : undefined
+            }
+          />
+          <FinancialCard
+            label="Inventory losses"
+            value={financial.inventoryLosses}
+            currency={currency}
+            restricted={!financial.permissions.margin}
+            hint={missingLoss ? 'Historical inventory loss cost is missing.' : undefined}
+          />
+          <FinancialCard
+            label="Operating expenses"
+            value={financial.operatingExpenses}
+            currency={currency}
+            restricted={!financial.permissions.expenses}
+          />
+          <FinancialCard
+            label="Store operating profit"
+            value={financial.storeOperatingProfit}
+            currency={currency}
+            restricted={!financial.permissions.margin || !financial.permissions.expenses}
+            hint={
+              missingCost
+                ? 'Historical sale or refund cost is missing.'
+                : missingLoss
+                  ? 'Historical inventory loss cost is missing.'
+                  : undefined
+            }
           />
         </div>
         <HourlySales rows={today.hourly} currency={currency} />
