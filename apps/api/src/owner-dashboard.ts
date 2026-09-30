@@ -13,11 +13,11 @@ import {
 } from '@nestjs/common';
 import { z } from 'zod';
 import { AuthModule } from './auth.js';
+import { FinancialMetricsModule, FinancialMetricsService } from './financial-metrics.js';
 import { AccessGuard, Require, parse, type AuthRequest } from './security.js';
 import { Database } from './database.js';
 import type { Insight } from '@eliza/contracts';
 import {
-  calculateLine,
   toScaled,
   fromScaled,
   type DateRange,
@@ -70,7 +70,7 @@ const financialEntries = `original_costs AS (
 ), receipt_lines AS (
  SELECT s.id AS sale_id,s.created_at,(j->>'productId')::uuid AS product_id,
  COALESCE(j->>'category','Uncategorised') AS category,
- (j->>'quantity')::numeric AS quantity,(j->>'total')::numeric-(j->>'tax')::numeric AS revenue
+ (j->>'quantity')::numeric AS quantity,(j->>'total')::numeric AS revenue
  FROM sales s CROSS JOIN LATERAL jsonb_array_elements(s.receipt->'lines') j WHERE s.store_id=$1
 ), snapshots AS (
  SELECT sale_id,product_id,min(category) AS category,sum(quantity) AS quantity,sum(revenue) AS revenue,min(created_at) AS created_at
@@ -86,7 +86,7 @@ const financialEntries = `original_costs AS (
  SELECT s.created_at,s.product_id,s.category,s.quantity,s.revenue,c.cost,COALESCE(c.missing,1) AS missing
  FROM snapshots s LEFT JOIN original_costs c ON c.sale_id=s.sale_id AND c.product_id=s.product_id
  UNION ALL
- SELECT created_at,product_id,category,0,-(total-tax),
+ SELECT created_at,product_id,category,0,-total,
  -COALESCE(restored_cost,CASE WHEN restock THEN round(cost*(prior_restock+quantity)/sold_quantity,2)-round(cost*prior_restock/sold_quantity,2) ELSE 0 END),missing
  FROM refund_history
 )`;
@@ -96,7 +96,10 @@ type Store = { id: string; timezone: string; currency: string };
 @Controller('reports')
 @UseGuards(AccessGuard)
 export class OwnerDashboardController {
-  constructor(private database: Database) {}
+  constructor(
+    private database: Database,
+    private readonly financialMetrics: FinancialMetricsService,
+  ) {}
 
   /**
    * One request serves the whole dashboard. Every block is derived from the same
@@ -302,89 +305,62 @@ export class OwnerDashboardController {
  WHERE s.store_id=$1 AND s.created_at>=b.start AND s.created_at<b.finish
  AND ($5::text IS NULL OR to_char(s.created_at AT TIME ZONE $4,'HH24')<=$5)
 ), items AS (
- SELECT i.product_id,i.quantity,i.cost,i.cost_total,i.price,i.total
- FROM sale_items i JOIN sold s ON s.id=i.sale_id WHERE i.store_id=$1
-), costs AS (
- SELECT COALESCE(sum(COALESCE(i.cost_total,round(i.cost*i.quantity,2))),0) AS cogs,
- count(*) FILTER(WHERE i.cost_total IS NULL AND i.cost IS NULL) AS missing,
- COALESCE(sum(i.quantity),0) AS units FROM items i
-), original_costs AS (
- SELECT sale_id,product_id,sum(quantity) AS quantity,sum(COALESCE(cost_total,round(cost*quantity,2))) AS cost
- FROM sale_items WHERE store_id=$1 GROUP BY sale_id,product_id
-), return_history AS (
- SELECT r.id,r.created_at,l.total,l.tax,l.quantity,l.restock,l.restored_cost,c.cost,c.quantity AS sold_quantity,
- COALESCE(sum(CASE WHEN l.restock THEN l.quantity ELSE 0 END) OVER(PARTITION BY l.sale_id,l.product_id ORDER BY r.created_at,r.id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS prior_restock
- FROM refunds r JOIN refund_lines l ON l.refund_id=r.id AND l.store_id=r.store_id
- LEFT JOIN original_costs c ON c.sale_id=l.sale_id AND c.product_id=l.product_id
- WHERE r.store_id=$1
+ SELECT i.quantity FROM sale_items i JOIN sold s ON s.id=i.sale_id WHERE i.store_id=$1
 ), returned AS (
- SELECT COALESCE(sum(total),0) AS total,COALESCE(sum(tax),0) AS tax,
- COALESCE(sum(quantity),0) AS units,count(DISTINCT id) AS count,
- count(*) FILTER(WHERE cost IS NULL) AS missing,
- COALESCE(sum(COALESCE(restored_cost,CASE WHEN restock THEN round(cost*(prior_restock+quantity)/sold_quantity,2)-round(cost*prior_restock/sold_quantity,2) ELSE 0 END)),0) AS restored
- FROM return_history CROSS JOIN bounds b
- WHERE created_at>=b.start AND created_at<b.finish
- AND ($5::text IS NULL OR to_char(created_at AT TIME ZONE $4,'HH24')<=$5)
+ SELECT COALESCE(sum(l.quantity),0) AS units,count(DISTINCT r.id) AS count
+ FROM refunds r JOIN refund_lines l ON l.refund_id=r.id AND l.store_id=r.store_id CROSS JOIN bounds b
+ WHERE r.store_id=$1 AND r.created_at>=b.start AND r.created_at<b.finish
+ AND ($5::text IS NULL OR to_char(r.created_at AT TIME ZONE $4,'HH24')<=$5)
 )
 SELECT (SELECT count(*) FROM sold)::text AS transactions,
  COALESCE((SELECT sum(total) FROM sold),0)::text AS "grossSales",
  COALESCE((SELECT sum(tax) FROM sold),0)::text AS tax,
  COALESCE((SELECT sum(discount) FROM sold),0)::text AS discount,
- (SELECT units FROM costs)::text AS units,
- (SELECT total FROM returned)::text AS refunds,
- (SELECT tax FROM returned)::text AS "refundTax",
+ COALESCE((SELECT sum(quantity) FROM items),0)::text AS units,
  (SELECT count FROM returned)::text AS "refundCount",
  (SELECT units FROM returned)::text AS "refundUnits",
- ((SELECT missing FROM costs)+(SELECT missing FROM returned)+(SELECT count(*) FROM sold s WHERE NOT EXISTS(SELECT 1 FROM original_costs c WHERE c.sale_id=s.id)))::text AS "missingCost",
- CASE WHEN $6 THEN ((SELECT cogs FROM costs)-(SELECT restored FROM returned))::text END AS cogs,
- CASE WHEN $7 THEN (SELECT COALESCE(sum(amount),0)::text FROM expenses WHERE store_id=$1 AND expense_date BETWEEN $2::date AND $3::date) END AS "operatingExpenses",
- CASE WHEN $8 THEN (SELECT COALESCE(sum(p.total),0)::text FROM purchases p CROSS JOIN bounds b WHERE p.store_id=$1 AND p.payment_status='paid' AND p.paid_at>=b.start AND p.paid_at<b.finish AND ($5::text IS NULL OR to_char(p.paid_at AT TIME ZONE $4,'HH24')<=$5)) END AS "paidPurchases"`,
-        [
-          store.id,
-          range.from,
-          range.to,
-          store.timezone,
-          cutoff,
-          margin,
-          finances.expenses,
-          finances.purchases,
-        ],
+ CASE WHEN $6 THEN (SELECT COALESCE(sum(p.total),0)::text FROM purchases p CROSS JOIN bounds b WHERE p.store_id=$1 AND p.payment_status='paid' AND p.paid_at>=b.start AND p.paid_at<b.finish AND ($5::text IS NULL OR to_char(p.paid_at AT TIME ZONE $4,'HH24')<=$5)) END AS "paidPurchases"`,
+        [store.id, range.from, range.to, store.timezone, cutoff, finances.purchases],
       )
     ).rows[0];
-    // Revenue is net of tax and refunds so it can be compared against cost of goods.
+    const canonical = await this.financialMetrics.getFinancialSummary(
+      store.id,
+      { from: range.from, to: range.to, timezone: store.timezone },
+      { cutoffHour: cutoff === null ? undefined : Number(cutoff) },
+    );
     const cents = (value: unknown) => toScaled(String(value ?? '0'), 2);
     const amount = (value: bigint) => Number(fromScaled(value, 2));
-    const revenueCents =
-      cents(row.grossSales) - cents(row.tax) - cents(row.refunds) + cents(row.refundTax);
-    const revenue = amount(revenueCents);
-    const cogs = margin && row.cogs !== null ? num(row.cogs) : null;
-    const missing = num(row.missingCost);
-    const profitCents = cogs === null || missing > 0 ? null : revenueCents - cents(row.cogs);
-    const profit = profitCents === null ? null : amount(profitCents);
+    const revenue = num(canonical.revenue);
+    const cogs = margin && canonical.cogs !== null ? num(canonical.cogs) : null;
+    const missing =
+      canonical.dataQuality.missingCostSaleItems + canonical.dataQuality.missingCostRefundLines;
+    const profit = margin && canonical.grossProfit !== null ? num(canonical.grossProfit) : null;
+    const expenses = finances.expenses ? num(canonical.operatingExpenses) : null;
     return {
       transactions: num(row.transactions),
-      grossSales: money(row.grossSales),
+      grossSales: canonical.breakdown.completedSales,
       revenue,
       tax: num(row.tax),
       discount: num(row.discount),
       units: num(row.units),
-      refunds: num(row.refunds),
-      refundCount: num(row.refundCount),
+      refunds: num(canonical.adjustments.completedRefunds),
+      refundCount: num(canonical.adjustments.refundCount),
       cogs,
-      operatingExpenses: finances.expenses ? num(row.operatingExpenses) : null,
+      operatingExpenses: expenses,
       paidPurchases: finances.purchases ? num(row.paidPurchases) : null,
       totalSpending:
         finances.expenses && finances.purchases
-          ? amount(cents(row.operatingExpenses) + cents(row.paidPurchases))
+          ? amount(cents(canonical.operatingExpenses) + cents(row.paidPurchases))
           : null,
       netProfit:
-        profitCents !== null && finances.expenses
-          ? amount(profitCents - cents(row.operatingExpenses))
+        margin && finances.expenses && canonical.storeOperatingProfit !== null
+          ? num(canonical.storeOperatingProfit)
           : null,
       netProfitRestricted: !margin || !finances.expenses,
       spendingRestricted: !finances.expenses || !finances.purchases,
       grossProfit: profit,
-      grossMargin: grossMargin(profit, revenue),
+      grossMargin:
+        margin && canonical.grossMarginPercent !== null ? num(canonical.grossMarginPercent) : null,
       averageBasket: averageBasket(revenue, num(row.transactions)),
       missingCost: missing,
     };
@@ -626,8 +602,7 @@ SELECT p.id,p.name,p.sku,p.category,p.unit,(p.stock+COALESCE((SELECT sum(child.s
         soldCost === null
           ? null
           : Number(fromScaled(toScaled(r.revenue, 2) - toScaled(r.soldCost, 2), 2));
-      const unitTax = calculateLine(r.price, '1', r.taxRate, '0').tax;
-      const netUnitPrice = Number(fromScaled(toScaled(r.price, 2) - toScaled(unitTax, 2), 2));
+      const netUnitPrice = num(r.price);
       const unitMargin =
         margin && r.cost !== null && netUnitPrice > 0
           ? ((netUnitPrice - num(r.cost)) / netUnitPrice) * 100
@@ -787,7 +762,7 @@ SELECT
     };
   }
 
-  /** Damaged, expired and internal-use removals valued at product cost. */
+  /** Operational waste uses the recorded batch-cost snapshot, never today's catalog cost. */
   private async waste(store: Store, range: DateRange, previous: DateRange | null, margin: boolean) {
     const rows = (
       await this.database.pool.query(
@@ -797,7 +772,8 @@ SELECT
 )
 SELECT w.phase,m.reason,COALESCE(p.category,'Uncategorised') AS category,
  sum(abs(m.quantity))::text AS units,
- sum(round(abs(m.quantity)*p.cost,2))::text AS value
+ sum(m.cost_total)::text AS value,
+ count(*) FILTER(WHERE m.cost_total IS NULL)::int AS missing
  FROM windows w JOIN movements m ON m.store_id=$1
  AND m.created_at>=(w.from_day::timestamp AT TIME ZONE $4)
  AND m.created_at<((w.to_day+1)::timestamp AT TIME ZONE $4)
@@ -814,23 +790,33 @@ SELECT w.phase,m.reason,COALESCE(p.category,'Uncategorised') AS category,
         ],
       )
     ).rows;
-    const sum = (phase: string) =>
-      rows.filter((r: any) => r.phase === phase).reduce((s: number, r: any) => s + num(r.value), 0);
+    const sum = (phase: string) => {
+      const entries = rows.filter((r: any) => r.phase === phase);
+      return entries.some((r: any) => r.missing > 0)
+        ? null
+        : entries.reduce((s: number, r: any) => s + num(r.value), 0);
+    };
     const current = sum('current');
     const before = previous ? sum('previous') : null;
     const byReason: Record<string, number> = {};
     const byCategory: Record<string, number> = {};
     for (const r of rows.filter((r: any) => r.phase === 'current')) {
-      byReason[r.reason] = (byReason[r.reason] ?? 0) + num(r.value);
-      byCategory[r.category] = (byCategory[r.category] ?? 0) + num(r.value);
+      if (r.missing === 0) {
+        byReason[r.reason] = (byReason[r.reason] ?? 0) + num(r.value);
+        byCategory[r.category] = (byCategory[r.category] ?? 0) + num(r.value);
+      }
     }
     return {
       value: current,
       previous: before,
-      change: before === null ? null : percentChange(current, before),
+      change: before === null || current === null ? null : percentChange(current, before),
       byReason,
       byCategory: Object.entries(byCategory)
-        .map(([category, value]) => ({ category, value, share: ratio(value, current) }))
+        .map(([category, value]) => ({
+          category,
+          value,
+          share: current === null ? null : ratio(value, current),
+        }))
         .sort((a, b) => b.value - a.value)
         .slice(0, 8),
       available: margin,
@@ -1614,5 +1600,5 @@ function scaleTotals(totals: any, divisor: number) {
   };
 }
 
-@Module({ imports: [AuthModule], controllers: [OwnerDashboardController] })
+@Module({ imports: [AuthModule, FinancialMetricsModule], controllers: [OwnerDashboardController] })
 export class OwnerDashboardModule {}

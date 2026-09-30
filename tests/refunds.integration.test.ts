@@ -284,13 +284,13 @@ describe.sequential('receipt search and refunds', () => {
     const before = await manager.request(path);
     expect(before.status).toBe(200);
     expect(before.body).toMatchObject({
-      salesExTax: '0.18',
-      refundsExTax: '0.18',
+      completedSales: '0.18',
+      completedRefunds: '0.18',
       netRevenue: '0.00',
       soldCost: '200.00',
-      restoredCost: '150.00',
-      costOfGoodsSold: '50.00',
-      grossProfit: '-50.00',
+      restoredCost: '200.00',
+      costOfGoodsSold: '0.00',
+      grossProfit: '0.00',
       marginPercent: null,
       missingCostRecords: '0',
     });
@@ -387,7 +387,7 @@ describe.sequential('receipt search and refunds', () => {
       [seed.store_id, seed.device_id, seed.employee_id, seed.shift_id, seed.receipt],
     );
     const r = (await manager.request('/reports/gross-profit?from=2002-01-01&to=2002-01-01')).body;
-    expect(r.salesExTax).toBe('80.00');
+    expect(r.completedSales).toBe('100.00');
     expect(r.grossProfit).toBeNull();
     expect(r.costOfGoodsSold).toBeNull();
     expect(r.missingCostRecords).toBe('1');
@@ -497,9 +497,9 @@ describe.sequential('receipt search and refunds', () => {
     const saleReport = (
       await manager.request(`/reports/owner-dashboard?period=custom&from=${paidDay}&to=${paidDay}`)
     ).body;
-    expect(saleReport.products.byRevenue.find((p: any) => p.id === id).grossProfit).toBe(0.2);
+    expect(saleReport.products.byRevenue.find((p: any) => p.id === id).grossProfit).toBe(0.24);
     expect(saleReport.products.byRevenue.find((p: any) => p.id === id).unitMargin).toBeCloseTo(
-      ((0.09 - 0.01) / 0.09) * 100,
+      ((0.1 - 0.01) / 0.1) * 100,
     );
     expect(saleReport.categories.total).toBe(saleReport.kpis.revenue.value);
 

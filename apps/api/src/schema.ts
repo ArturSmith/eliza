@@ -150,6 +150,7 @@ export const movements = pgTable(
     quantity: numeric('quantity', { precision: 15, scale: 3 }).notNull(),
     balance: numeric('balance', { precision: 15, scale: 3 }).notNull(),
     reason: text('reason').notNull(),
+    costTotal: numeric('cost_total', { precision: 14, scale: 2 }),
     notes: text('notes').notNull(),
     requestId: uuid('request_id').notNull(),
     requestHash: text('request_hash').notNull(),

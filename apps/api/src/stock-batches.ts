@@ -106,7 +106,7 @@ export async function restockSaleBatches(
     const taken = remaining < available ? remaining : available;
     if (taken <= 0n) continue;
     if (row.cost_total === null) legacy = true;
-    else if (restock) {
+    else {
       const cost = toScaled(row.cost_total, 2);
       const sold = toScaled(row.quantity, 3);
       const returned = toScaled(row.returned, 3);
@@ -141,5 +141,5 @@ export async function restockSaleBatches(
       historical?.cost ?? null,
     );
   }
-  return !restock ? '0.00' : legacy ? null : fromScaled(restoredCost, 2);
+  return legacy ? null : fromScaled(restoredCost, 2);
 }

@@ -996,15 +996,35 @@ export function suggestSellingPrice(cost: string, markup: string): string {
   return money.safeParse(result).success ? result : '';
 }
 
-export const expenseSchema = z.object({
-  date: z.iso.date(),
-  description: z.string().trim().min(1).max(200),
-  category: z.string().trim().min(1).max(100),
-  amount: money.refine((value) => Number(value) > 0, 'Amount must be greater than zero'),
-  paymentMethod: z.enum(['cash', 'card', 'bank', 'other']),
-  payee: z.string().trim().max(200).default(''),
-  reference: z.string().trim().max(200).default(''),
-  notes: z.string().trim().max(2000).default(''),
-});
+export const expenseSchema = z
+  .object({
+    date: z.iso.date(),
+    description: z.string().trim().min(1).max(200),
+    category: z.string().trim().min(1).max(100),
+    amount: money.refine((value) => Number(value) > 0, 'Amount must be greater than zero'),
+    paymentMethod: z.enum(['cash', 'card', 'bank', 'other']),
+    payee: z.string().trim().max(200).default(''),
+    reference: z.string().trim().max(200).default(''),
+    notes: z.string().trim().max(2000).default(''),
+    paymentDate: z.iso.date().nullable().default(null),
+    allocationMethod: z.enum(['ONE_TIME', 'EVEN_OVER_PERIOD']).default('ONE_TIME'),
+    periodStart: z.iso.date().nullable().default(null),
+    periodEnd: z.iso.date().nullable().default(null),
+  })
+  .superRefine((value, ctx) => {
+    const period = value.allocationMethod === 'EVEN_OVER_PERIOD';
+    if (period && (!value.periodStart || !value.periodEnd || value.periodStart > value.periodEnd))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['periodEnd'],
+        message: 'Choose a valid economic expense period',
+      });
+    if (!period && (value.periodStart || value.periodEnd))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['allocationMethod'],
+        message: 'One-time expenses cannot have a period',
+      });
+  });
 export type ExpenseInput = z.infer<typeof expenseSchema>;
 export type Expense = ExpenseInput & { id: string; version: number; createdAt: string };

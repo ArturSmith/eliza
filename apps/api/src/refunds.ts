@@ -331,7 +331,7 @@ class RefundController {
           l.saleItemId,
         );
         await c.query(
-          'INSERT INTO refund_lines(id,store_id,refund_id,sale_id,product_id,quantity,restock,total,tax,restored_cost,sale_item_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+          'INSERT INTO refund_lines(id,store_id,refund_id,sale_id,product_id,quantity,restock,total,tax,restored_cost,sale_item_id,loss_cost) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)',
           [
             refundLineId,
             a.storeId,
@@ -344,6 +344,7 @@ class RefundController {
             l.tax,
             restoredCost,
             l.saleItemId ?? null,
+            l.restock ? null : restoredCost,
           ],
         );
         if (l.restock) {

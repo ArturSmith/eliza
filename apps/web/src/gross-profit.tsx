@@ -4,8 +4,8 @@ import { api, useSession } from './api';
 import { ErrorMessage } from './forms';
 import { formatMoney } from './receipts';
 type Profit = {
-  salesExTax: string;
-  refundsExTax: string;
+  completedSales: string;
+  completedRefunds: string;
   netRevenue: string;
   soldCost: string | null;
   restoredCost: string | null;
@@ -49,7 +49,7 @@ export function GrossProfit({
         {from} {t(' through ')}
         {to}
         {t(
-          '. Revenue excludes tax and refunds. Costs use the purchase cost saved at each sale, not today’s product cost. Product and original-sale shift filters apply here too. This is gross profit before operating expenses. ',
+          '. Revenue is completed sales less refunds. Costs use the purchase cost saved at each sale, not today’s product cost. Product and original-sale shift filters apply here too. This is gross profit before inventory losses and operating expenses. ',
         )}
       </p>
       <ErrorMessage error={q.error} />
@@ -71,8 +71,8 @@ export function GrossProfit({
               }}
             >
               {[
-                ['Sales excl. tax', p.salesExTax],
-                ['Refunds excl. tax', p.refundsExTax],
+                ['Completed sales', p.completedSales],
+                ['Completed refunds', p.completedRefunds],
                 ['Net revenue', p.netRevenue],
                 ['Original goods cost', p.soldCost],
                 ['Restocked goods cost', p.restoredCost],
@@ -95,7 +95,7 @@ export function GrossProfit({
             </div>
             <p className="muted">
               {t(
-                'Refunds reduce revenue on the refund date. Saleable returns reverse their original cost; non-saleable returns retain that cost. Stock-count adjustments and other write-offs are not included. Margin is shown only when net revenue is positive. ',
+                'Refunds reduce revenue on the refund date. Returned items reverse their original cost; non-saleable returns become inventory losses. Stock-count adjustments and other write-offs are not included in gross profit. Margin is shown only when net revenue is positive. ',
               )}
             </p>
           </>

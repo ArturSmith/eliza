@@ -55,6 +55,7 @@ export function ExpensesPage() {
       setDeleting(null);
       void queryClient.invalidateQueries({ queryKey: ['expenses'] });
       void queryClient.invalidateQueries({ queryKey: ['owner-dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
     },
   });
@@ -249,6 +250,10 @@ function ExpenseForm({
       payee: '',
       reference: '',
       notes: '',
+      paymentDate: null,
+      allocationMethod: 'ONE_TIME',
+      periodStart: null,
+      periodEnd: null,
     },
   );
   const [error, setError] = useState<unknown>();
@@ -260,6 +265,7 @@ function ExpenseForm({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['expenses'] });
       void queryClient.invalidateQueries({ queryKey: ['owner-dashboard'] });
+      void queryClient.invalidateQueries({ queryKey: ['financial-summary'] });
       void queryClient.invalidateQueries({ queryKey: ['audit'] });
       done();
     },
@@ -309,6 +315,57 @@ function ExpenseForm({
               />
             </Field>
           </div>
+          <div className="form-grid">
+            <Field label={t('Expense allocation')}>
+              <select
+                value={value.allocationMethod}
+                onChange={(event) =>
+                  setValue((before) => ({
+                    ...before,
+                    allocationMethod: event.target.value as ExpenseInput['allocationMethod'],
+                    periodStart: null,
+                    periodEnd: null,
+                  }))
+                }
+              >
+                <option value="ONE_TIME">{t('One-time expense')}</option>
+                <option value="EVEN_OVER_PERIOD">{t('Evenly over a period')}</option>
+              </select>
+            </Field>
+            <Field label={t('Payment date (optional)')}>
+              <input
+                type="date"
+                value={value.paymentDate ?? ''}
+                onChange={(event) =>
+                  setValue((before) => ({ ...before, paymentDate: event.target.value || null }))
+                }
+              />
+            </Field>
+          </div>
+          {value.allocationMethod === 'EVEN_OVER_PERIOD' && (
+            <div className="form-grid">
+              <Field label={t('Economic period start')}>
+                <input
+                  type="date"
+                  required
+                  value={value.periodStart ?? ''}
+                  onChange={(event) =>
+                    setValue((before) => ({ ...before, periodStart: event.target.value || null }))
+                  }
+                />
+              </Field>
+              <Field label={t('Economic period end')}>
+                <input
+                  type="date"
+                  required
+                  value={value.periodEnd ?? ''}
+                  onChange={(event) =>
+                    setValue((before) => ({ ...before, periodEnd: event.target.value || null }))
+                  }
+                />
+              </Field>
+            </div>
+          )}
           <Field label={t('Description')}>
             <input
               required

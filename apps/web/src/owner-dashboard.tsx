@@ -388,7 +388,7 @@ export function TodayOperations() {
             showComparison={false}
           />
           <Kpi
-            label="Net profit"
+            label="Store operating profit"
             data={today.kpis.netProfit}
             currency={currency}
             showComparison={false}
@@ -420,8 +420,8 @@ export function OwnerDashboardPage() {
           discount: string;
           refunds: string;
           netRevenue: string;
-          costOfGoodsSold: string;
-          grossProfit: string;
+          costOfGoodsSold: string | null;
+          grossProfit: string | null;
         }[]
       >('/reports/pricing-sources?period=' + period),
     enabled: session.user.permissions.includes('analytics.margin'),
@@ -478,7 +478,7 @@ export function OwnerDashboardPage() {
               showComparison={false}
             />
             <Kpi
-              label="Net profit"
+              label="Store operating profit"
               data={data.kpis.netProfit}
               currency={currency}
               showComparison={false}
@@ -529,8 +529,8 @@ export function OwnerDashboardPage() {
                 money(row.revenue),
                 money(row.discount),
                 money(row.refunds),
-                money(row.costOfGoodsSold),
-                money(row.grossProfit),
+                row.costOfGoodsSold === null ? t('Unavailable') : money(row.costOfGoodsSold),
+                row.grossProfit === null ? t('Unavailable') : money(row.grossProfit),
               ])}
             />
           )}

@@ -226,7 +226,7 @@ describe.sequential('batch purchase costs', () => {
   });
   it('restores the original costs on partial refunds, including non-restocked returns', async () => {
     expect(await refund('9', true)).toBe('9.00');
-    expect(await refund('1', false)).toBe('0.00');
+    expect(await refund('1', false)).toBe('1.00');
     expect(await refund('2', true)).toBe('2.40');
     const batches = (await manager.request('/inventory/products/' + productId + '/batches')).body
       .batches;
@@ -241,9 +241,9 @@ describe.sequential('batch purchase costs', () => {
     ).body;
     expect(report).toMatchObject({
       soldCost: '12.40',
-      restoredCost: '11.40',
-      costOfGoodsSold: '1.00',
-      grossProfit: '-1.00',
+      restoredCost: '12.40',
+      costOfGoodsSold: '0.00',
+      grossProfit: '0.00',
     });
   });
   it('uses FEFO costs even when the earlier expiry belongs to a newer, more expensive receipt', async () => {

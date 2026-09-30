@@ -19,7 +19,7 @@ import { Database } from './database.js';
 import { AuthModule } from './auth.js';
 import { AccessGuard, Require, parse, type AuthRequest } from './security.js';
 import { Operations, audit } from './operations.js';
-const columns = `id,expense_date::text AS date,description,category,amount::text,payment_method AS "paymentMethod",payee,reference,notes,version,created_at AS "createdAt"`;
+const columns = `id,expense_date::text AS date,description,category,amount::text,payment_method AS "paymentMethod",payee,reference,notes,payment_date::text AS "paymentDate",allocation_method AS "allocationMethod",period_start::text AS "periodStart",period_end::text AS "periodEnd",version,created_at AS "createdAt"`;
 @Controller('expenses')
 @UseGuards(AccessGuard)
 class ExpensesController {
@@ -60,7 +60,7 @@ class ExpensesController {
     return this.operations.transaction(async (c) => {
       const row = (
         await c.query(
-          `INSERT INTO expenses(store_id,expense_date,description,category,amount,payment_method,payee,reference,notes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING ${columns}`,
+          `INSERT INTO expenses(store_id,expense_date,description,category,amount,payment_method,payee,reference,notes,payment_date,allocation_method,period_start,period_end) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING ${columns}`,
           [
             req.context.store.id,
             b.date,
@@ -71,6 +71,10 @@ class ExpensesController {
             b.payee,
             b.reference,
             b.notes,
+            b.paymentDate,
+            b.allocationMethod,
+            b.periodStart,
+            b.periodEnd,
           ],
         )
       ).rows[0];
@@ -107,7 +111,7 @@ class ExpensesController {
         throw new ConflictException('Expense changed. Reload before editing.');
       const row = (
         await c.query(
-          `UPDATE expenses SET expense_date=$3,description=$4,category=$5,amount=$6,payment_method=$7,payee=$8,reference=$9,notes=$10,version=version+1,updated_at=now() WHERE id=$1 AND store_id=$2 RETURNING ${columns}`,
+          `UPDATE expenses SET expense_date=$3,description=$4,category=$5,amount=$6,payment_method=$7,payee=$8,reference=$9,notes=$10,payment_date=$11,allocation_method=$12,period_start=$13,period_end=$14,version=version+1,updated_at=now() WHERE id=$1 AND store_id=$2 RETURNING ${columns}`,
           [
             id,
             req.context.store.id,
@@ -119,6 +123,10 @@ class ExpensesController {
             b.payee,
             b.reference,
             b.notes,
+            b.paymentDate,
+            b.allocationMethod,
+            b.periodStart,
+            b.periodEnd,
           ],
         )
       ).rows[0];

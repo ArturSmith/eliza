@@ -34,6 +34,7 @@ import { RegisterModule } from './register.js';
 import { RefundModule } from './refunds.js';
 import { StoreSettingsModule } from './store-settings.js';
 import { GrossProfitModule } from './gross-profit.js';
+import { FinancialMetricsModule } from './financial-metrics.js';
 import { AnalyticsModule } from './analytics.js';
 import { OwnerDashboardModule } from './owner-dashboard.js';
 import { SalesSummaryModule } from './sales-summary.js';
@@ -139,6 +140,7 @@ class HealthController {
     AnalyticsModule,
     OwnerDashboardModule,
     GrossProfitModule,
+    FinancialMetricsModule,
     StoreSettingsModule,
     RefundModule,
   ],

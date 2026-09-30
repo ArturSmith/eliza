@@ -139,9 +139,17 @@ export class InventoryController {
           );
       }
       const balance = fromScaled(next, 3);
-      await tx.execute(
-        sql`SELECT adjust_stock_batches(${store.id}::uuid,${product.id}::uuid,${body.quantity}::numeric)`,
-      );
+      let costTotal: string | null = null;
+      if (change < 0n) {
+        const valuation = await tx.execute(sql`
+          SELECT consume_adjustment_batches_costed(${store.id}::uuid,${product.id}::uuid,${fromScaled(-change, 3)}::numeric) AS cost
+        `);
+        costTotal = valuation.rows[0].cost === null ? null : String(valuation.rows[0].cost);
+      } else {
+        await tx.execute(
+          sql`SELECT adjust_stock_batches(${store.id}::uuid,${product.id}::uuid,${body.quantity}::numeric)`,
+        );
+      }
       await tx.update(products).set({ stock: balance }).where(eq(products.id, product.id));
       const [movement] = await tx
         .insert(movements)
@@ -151,6 +159,7 @@ export class InventoryController {
           employeeId: user.id,
           deviceId: device.id,
           balance,
+          costTotal,
           requestHash,
         })
         .returning();

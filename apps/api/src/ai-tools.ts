@@ -4,6 +4,7 @@ import type { Database } from './database.js';
 import type { AuthRequest } from './security.js';
 import type { Permission } from '@eliza/contracts';
 import { GrossProfitController } from './gross-profit.js';
+import { FinancialMetricsService } from './financial-metrics.js';
 import { SalesSummaryController } from './sales-summary.js';
 import { canPropose, proposalToolSchema } from './ai-actions.js';
 
@@ -480,7 +481,10 @@ export async function executeAiTool(
     case 'propose_document_product':
       return { error: 'Product proposals are handled by the conversation service.' };
     case 'gross_profit':
-      return new GrossProfitController(database).report({ from: a.from, to: a.to }, req);
+      return new GrossProfitController(new FinancialMetricsService(database)).report(
+        { from: a.from, to: a.to },
+        req,
+      );
     case 'sales_summary': {
       const report = await new SalesSummaryController(database).summary(
         { from: a.from, to: a.to, group: 'day' },
