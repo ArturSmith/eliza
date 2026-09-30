@@ -2795,6 +2795,12 @@ input.shopping-section-title {
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
 }
+.today-financial-metrics .kpi {
+  align-content: start;
+}
+.today-financial-metrics .kpi-label {
+  min-height: 3.75em;
+}
 @media (max-width: 900px) {
   .today-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));

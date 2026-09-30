@@ -415,7 +415,10 @@ export function TodayOperations() {
           </article>
         </div>
         <h3 className="today-financial-heading">{t('Store profitability')}</h3>
-        <div className="today-metrics" aria-label={t('Store profitability')}>
+        <div
+          className="today-metrics today-financial-metrics"
+          aria-label={t('Store profitability')}
+        >
           <FinancialCard label="Revenue" value={financial.revenue} currency={currency} />
           <FinancialCard
             label="Cost of goods sold"
