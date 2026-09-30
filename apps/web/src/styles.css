@@ -2801,6 +2801,14 @@ input.shopping-section-title {
 .today-financial-metrics .kpi-label {
   min-height: 3.75em;
 }
+.analytics-financial {
+  border-top: 1px solid var(--border);
+  margin-top: 24px;
+  padding-top: 20px;
+}
+.analytics-financial-metrics {
+  margin-top: 16px;
+}
 @media (max-width: 900px) {
   .today-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));

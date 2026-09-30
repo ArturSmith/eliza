@@ -215,6 +215,12 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
           {t('Apply filters ')}
         </Button>
       </form>
+      <GrossProfit
+        from={filter.from}
+        to={filter.to}
+        productId={filter.productId}
+        shiftId={filter.shiftId}
+      />
       <ErrorMessage error={query.error} />
       {query.isFetching ? (
         <p className="muted">{t('Loading sales totals…')}</p>
@@ -365,12 +371,6 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
           </>
         )
       )}
-      <GrossProfit
-        from={filter.from}
-        to={filter.to}
-        productId={filter.productId}
-        shiftId={filter.shiftId}
-      />
     </section>
   );
 }

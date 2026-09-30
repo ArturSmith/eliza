@@ -17,7 +17,7 @@ import { AccessGuard, parse, Require, type AuthRequest } from './security.js';
 
 const date = z.iso.date();
 const periodQuery = z
-  .object({ from: date, to: date })
+  .object({ from: date, to: date, productId: z.uuid().optional(), shiftId: z.uuid().optional() })
   .refine((p) => p.from <= p.to, 'Start date must not follow end date');
 export type FinancialPeriod = { from: string; to: string; timezone: string };
 export type FinancialFilters = {
@@ -303,9 +303,10 @@ class FinancialMetricsController {
       throw new ForbiddenException('Expense reporting permission is required.');
     const period = parse(periodQuery, input);
     return this.metrics.getFinancialSummary(req.context.store.id, {
-      ...period,
+      from: period.from,
+      to: period.to,
       timezone: req.context.store.timezone,
-    });
+    }, { productId: period.productId, shiftId: period.shiftId });
   }
 }
 
