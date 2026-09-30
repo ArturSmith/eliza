@@ -33,12 +33,6 @@ type OverviewFinancialSummary = {
     grossMarginPercent: string | null;
     storeOperatingProfit: string | null;
   } | null;
-  dataQuality: {
-    costComplete: boolean;
-    lossCostComplete: boolean;
-    missingSnapshotSaleItems: number;
-    missingSnapshotRefundLines: number;
-  } | null;
   permissions: { margin: boolean; expenses: boolean };
 };
 
@@ -113,7 +107,6 @@ function FinancialCard({
   percent = false,
   estimated = false,
   restricted = false,
-  hint,
 }: {
   label: string;
   value: string | null;
@@ -121,7 +114,6 @@ function FinancialCard({
   percent?: boolean;
   estimated?: boolean;
   restricted?: boolean;
-  hint?: string;
 }) {
   return (
     <article className="kpi">
@@ -136,7 +128,6 @@ function FinancialCard({
               : (estimated ? '≈' : '') + formatMoney(value, currency)}
       </strong>
       {estimated && !restricted && <small className="muted">{t('Estimated')}</small>}
-      {hint && !restricted && <small className="muted">{t(hint)}</small>}
     </article>
   );
 }
@@ -402,19 +393,7 @@ export function TodayOperations() {
   if (!today) return null;
   const currency = session.store.currency;
   const financial = today.financialSummary as OverviewFinancialSummary;
-  const missingCost = financial.permissions.margin && !financial.dataQuality?.costComplete;
-  const missingLoss = financial.permissions.margin && !financial.dataQuality?.lossCostComplete;
   const costEstimate = financial.estimated;
-  const missingSnapshots =
-    (financial.dataQuality?.missingSnapshotSaleItems ?? 0) +
-    (financial.dataQuality?.missingSnapshotRefundLines ?? 0);
-  const costHint = costEstimate
-    ? 'Estimate uses the cost saved at checkout; the original purchase cost is unverified.'
-    : missingSnapshots > 0
-      ? t('No saved cost for {count} sale or refund records.', { count: missingSnapshots })
-      : missingCost
-        ? 'Historical sale or refund cost is missing.'
-        : undefined;
   return (
     <div className="dashboard-today">
       <section className="today-overview" aria-label={t('Today at a glance')}>
@@ -444,7 +423,6 @@ export function TodayOperations() {
             currency={currency}
             estimated={financial.cogs === null && costEstimate !== null}
             restricted={!financial.permissions.margin}
-            hint={costHint}
           />
           <FinancialCard
             label="Gross profit"
@@ -452,7 +430,6 @@ export function TodayOperations() {
             currency={currency}
             estimated={financial.grossProfit === null && costEstimate !== null}
             restricted={!financial.permissions.margin}
-            hint={costHint}
           />
           <FinancialCard
             label="Gross margin"
@@ -463,21 +440,12 @@ export function TodayOperations() {
               financial.grossMarginPercent === null && costEstimate?.grossMarginPercent != null
             }
             restricted={!financial.permissions.margin}
-            hint={
-              financial.revenue === '0.00' || Number(financial.revenue) < 0
-                ? 'Gross margin requires positive revenue.'
-                : (costHint ??
-                  (financial.grossMarginPercent === null
-                    ? 'Gross margin requires positive revenue.'
-                    : undefined))
-            }
           />
           <FinancialCard
             label="Inventory losses"
             value={financial.inventoryLosses}
             currency={currency}
             restricted={!financial.permissions.margin}
-            hint={missingLoss ? 'Historical inventory loss cost is missing.' : undefined}
           />
           <FinancialCard
             label="Operating expenses"
@@ -493,7 +461,6 @@ export function TodayOperations() {
               financial.storeOperatingProfit === null && costEstimate?.storeOperatingProfit != null
             }
             restricted={!financial.permissions.margin || !financial.permissions.expenses}
-            hint={missingLoss ? 'Historical inventory loss cost is missing.' : costHint}
           />
         </div>
         <HourlySales rows={today.hourly} currency={currency} />
