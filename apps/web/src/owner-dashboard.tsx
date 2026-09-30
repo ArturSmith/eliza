@@ -10,14 +10,6 @@ import { SalesSummary } from './sales-summary';
 import { t, useLanguage, getLocale } from './i18n';
 import { tone, type Period, type Severity } from '@eliza/contracts';
 
-type Change = {
-  value: number | null;
-  previous: number | null;
-  change: number | null;
-  metric: string;
-  unit?: string;
-  restricted?: boolean;
-};
 type Dashboard = any;
 type OverviewFinancialSummary = {
   revenue: string;
@@ -57,46 +49,6 @@ function Delta({ change, metric, unit }: { change: number | null; metric: string
     <span className={'delta delta-' + quality}>
       {arrow} {signed(change, unit === 'points' ? ' ' + t('percentage points') : '%')}
     </span>
-  );
-}
-
-function Kpi({
-  label,
-  data,
-  currency,
-  money = true,
-  hint,
-  showComparison = true,
-}: {
-  label: string;
-  data: Change;
-  currency: string;
-  money?: boolean;
-  hint?: string;
-  showComparison?: boolean;
-}) {
-  useLanguage();
-  const value =
-    data.value === null
-      ? null
-      : money
-        ? formatMoney(String(data.value.toFixed(2)), currency)
-        : data.unit === 'points'
-          ? data.value.toFixed(1) + '%'
-          : Math.round(data.value).toLocaleString(getLocale());
-  return (
-    <article className="kpi">
-      <span className="kpi-label">{t(label)}</span>
-      {value === null ? (
-        <strong className="kpi-value kpi-unavailable">
-          {data.restricted ? t('Restricted') : t('Unavailable')}
-        </strong>
-      ) : (
-        <strong className="kpi-value">{value}</strong>
-      )}
-      {showComparison && <Delta change={data.change} metric={data.metric} unit={data.unit} />}
-      {hint && <small className="muted">{hint}</small>}
-    </article>
   );
 }
 
@@ -539,37 +491,6 @@ export function OwnerDashboardPage() {
           )}
 
           {data.summary && <p className="owner-summary">{dashboardSummary(data.summary)}</p>}
-
-          <div className="kpi-row">
-            <Kpi label="Sales" data={data.kpis.revenue} currency={currency} />
-            <Kpi label="Gross profit" data={data.kpis.grossProfit} currency={currency} />
-            <Kpi
-              label="Total spending"
-              data={data.kpis.totalSpending}
-              currency={currency}
-              showComparison={false}
-            />
-            <Kpi
-              label="Store operating profit"
-              data={data.kpis.netProfit}
-              currency={currency}
-              showComparison={false}
-            />
-            <Kpi
-              label="Gross margin"
-              data={data.kpis.grossMargin}
-              currency={currency}
-              money={false}
-            />
-            <Kpi
-              label="Transactions"
-              data={data.kpis.transactions}
-              currency={currency}
-              money={false}
-            />
-            <Kpi label="Average basket" data={data.kpis.averageBasket} currency={currency} />
-            <Kpi label="Refunds" data={data.kpis.refunds} currency={currency} />
-          </div>
 
           {!!pricingSources.data?.length && (
             <Table

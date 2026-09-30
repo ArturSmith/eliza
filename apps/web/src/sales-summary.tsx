@@ -246,13 +246,7 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                   'Amounts are payments collected, excluding change. Tax and discounts are not allocated between payment methods.',
                 )}
             </p>
-            <div
-              className="form-grid"
-              style={{
-                marginBlock: 20,
-                gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))',
-              }}
-            >
+            <div className="analytics-sales-metrics">
               {[
                 ['Sales before refunds', data.totals.total],
                 ['Refunds', data.totals.refunds],
@@ -266,16 +260,16 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                   data.totals.average,
                 ],
               ].map(([label, value]) => (
-                <div key={label}>
-                  <small>{t(label ?? '')}</small>
-                  <strong style={{ display: 'block', fontSize: 20 }}>
+                <div className="analytics-sales-metric" key={label}>
+                  <small className="analytics-sales-metric-label">{t(label ?? '')}</small>
+                  <strong className="analytics-sales-metric-value">
                     {value === null ? t('Not allocated') : formatMoney(value, data.currency)}
                   </strong>
                 </div>
               ))}
-              <div>
-                <small>{t('Transactions')}</small>
-                <strong style={{ display: 'block', fontSize: 20 }}>
+              <div className="analytics-sales-metric">
+                <small className="analytics-sales-metric-label">{t('Transactions')}</small>
+                <strong className="analytics-sales-metric-value">
                   {data.totals.transactions}
                 </strong>
               </div>

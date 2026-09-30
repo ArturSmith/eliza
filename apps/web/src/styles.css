@@ -2383,6 +2383,32 @@ select {
   flex-wrap: wrap;
   margin: 18px 0;
 }
+.analytics-sales-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-block: 20px;
+}
+.analytics-sales-metric {
+  display: grid;
+  grid-template-rows: minmax(4.2em, auto) auto;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #fff;
+}
+.analytics-sales-metric-label {
+  line-height: 1.4;
+  color: var(--muted);
+}
+.analytics-sales-metric-value {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 /* Product photos retain their proportions in catalog and checkout tiles. */
 .product-icon img {
   width: 100%;
