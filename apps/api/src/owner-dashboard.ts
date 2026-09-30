@@ -372,10 +372,22 @@ SELECT (SELECT count(*) FROM sold)::text AS transactions,
         inventoryLosses: margin ? canonical.inventoryLosses : null,
         operatingExpenses: finances.expenses ? canonical.operatingExpenses : null,
         storeOperatingProfit: margin && finances.expenses ? canonical.storeOperatingProfit : null,
+        estimated: margin
+          ? canonical.estimated && {
+              ...canonical.estimated,
+              storeOperatingProfit: finances.expenses
+                ? canonical.estimated.storeOperatingProfit
+                : null,
+            }
+          : null,
         dataQuality: margin
           ? {
               costComplete: canonical.dataQuality.costComplete,
               lossCostComplete: canonical.dataQuality.lossCostComplete,
+              estimatedCostSaleItems: canonical.dataQuality.estimatedCostSaleItems,
+              estimatedCostRefundLines: canonical.dataQuality.estimatedCostRefundLines,
+              missingSnapshotSaleItems: canonical.dataQuality.missingSnapshotSaleItems,
+              missingSnapshotRefundLines: canonical.dataQuality.missingSnapshotRefundLines,
             }
           : null,
         permissions: { margin, expenses: finances.expenses },

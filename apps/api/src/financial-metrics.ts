@@ -74,6 +74,7 @@ export class FinancialMetricsService {
         AND ($8::text IS NULL OR COALESCE(i.pricing_source,CASE WHEN p.price_kind='limited_discount' THEN 'LEGACY_MARKDOWN' ELSE 'LEGACY_UNCLASSIFIED' END)=$8)))
 ), sold_lines AS (
   SELECT i.sale_id,i.total,
+    COALESCE(i.cost_total,round(i.cost*i.quantity,2)) AS snapshot_cost,
     CASE WHEN i.cost_total IS NULL AND i.cost IS NULL THEN NULL
          WHEN EXISTS(SELECT 1 FROM sale_batch_allocations a
            JOIN stock_batches b ON b.id=a.batch_id AND b.store_id=a.store_id
@@ -99,6 +100,7 @@ export class FinancialMetricsService {
         AND ($8::text IS NULL OR COALESCE(i.pricing_source,'LEGACY_UNCLASSIFIED')=$8)))
 ), original_lines AS (
   SELECT i.sale_id,i.product_id,i.quantity,
+    COALESCE(i.cost_total,round(i.cost*i.quantity,2)) AS snapshot_cost,
     CASE WHEN i.cost_total IS NULL AND i.cost IS NULL THEN NULL
       WHEN EXISTS(SELECT 1 FROM sale_batch_allocations a JOIN stock_batches b
         ON b.id=a.batch_id AND b.store_id=a.store_id
@@ -108,10 +110,12 @@ export class FinancialMetricsService {
 ), original_costs AS (
   SELECT sale_id,product_id,sum(quantity) AS quantity,
     CASE WHEN count(*) FILTER(WHERE historical_cost IS NULL)>0 THEN NULL
-      ELSE sum(historical_cost) END AS cost
+      ELSE sum(historical_cost) END AS cost,
+    CASE WHEN count(*) FILTER(WHERE snapshot_cost IS NULL)>0 THEN NULL
+      ELSE sum(snapshot_cost) END AS snapshot_cost
   FROM original_lines GROUP BY sale_id,product_id
 ), return_history AS (
-  SELECT h.id AS refund_id,l.total,l.restock,l.loss_cost,l.restored_cost,l.quantity,c.cost,c.quantity AS original_quantity,
+  SELECT h.id AS refund_id,l.total,l.restock,l.loss_cost,l.restored_cost,l.quantity,c.cost,c.snapshot_cost,c.quantity AS original_quantity,
     COALESCE(i.pricing_source,'LEGACY_UNCLASSIFIED') AS pricing_source,
     COALESCE(sum(l.quantity) OVER(PARTITION BY l.sale_id,l.product_id ORDER BY h.created_at,h.id,l.id
       ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS prior_returned
@@ -122,11 +126,17 @@ export class FinancialMetricsService {
   WHERE l.store_id=$1 AND ($5::uuid IS NULL OR l.product_id=$5::uuid OR p.base_product_id=$5::uuid)
 ), returned_lines AS (
   SELECT h.total,h.restock,h.loss_cost,
-    CASE WHEN NOT h.restock AND h.loss_cost IS NULL THEN NULL
+    CASE WHEN h.cost IS NULL THEN NULL
       WHEN h.restored_cost IS NOT NULL THEN h.restored_cost
-      WHEN h.cost IS NOT NULL AND h.original_quantity>0 AND h.restock THEN
+      WHEN h.original_quantity>0 THEN
         round(h.cost*(h.prior_returned+h.quantity)/h.original_quantity,2)-round(h.cost*h.prior_returned/h.original_quantity,2)
-      ELSE NULL END AS historical_cost
+      ELSE NULL END AS historical_cost,
+    CASE WHEN h.snapshot_cost IS NULL THEN NULL
+      WHEN h.restored_cost IS NOT NULL THEN h.restored_cost
+      WHEN h.original_quantity>0 THEN
+        round(h.snapshot_cost*(h.prior_returned+h.quantity)/h.original_quantity,2)-round(h.snapshot_cost*h.prior_returned/h.original_quantity,2)
+      ELSE NULL END AS snapshot_cost,
+    h.cost IS NULL AND h.snapshot_cost IS NOT NULL AND NOT h.restock AS estimated_loss_cost
   FROM return_history h JOIN returned r ON r.id=h.refund_id
   WHERE $8::text IS NULL OR h.pricing_source=$8
 ), lost AS (
@@ -140,17 +150,23 @@ SELECT
   (SELECT COALESCE(sum(total),0)::text FROM sold) AS sales,
   (SELECT count(*)::int FROM sold) AS transactions,
   (SELECT COALESCE(sum(historical_cost),0)::text FROM sold_lines) AS sold_cost,
+  (SELECT COALESCE(sum(snapshot_cost),0)::text FROM sold_lines) AS snapshot_sold_cost,
   (SELECT count(*)::int FROM sold_lines WHERE historical_cost IS NULL) AS missing_sale_cost,
+  (SELECT count(*)::int FROM sold_lines WHERE historical_cost IS NULL AND snapshot_cost IS NOT NULL) AS estimated_sale_cost,
+  (SELECT count(*)::int FROM sold_lines WHERE snapshot_cost IS NULL) AS missing_snapshot_sale_cost,
   (SELECT COALESCE(sum(total) FILTER(WHERE historical_cost IS NULL),0)::text FROM sold_lines) AS missing_cost_revenue,
   (SELECT count(*)::int FROM sold s WHERE NOT EXISTS(SELECT 1 FROM sold_lines i WHERE i.sale_id=s.id)) AS sales_without_lines,
   (SELECT COALESCE(sum(total),0)::text FROM returned) AS refunds,
   (SELECT count(*)::int FROM returned) AS refund_count,
   (SELECT COALESCE(sum(historical_cost),0)::text FROM returned_lines) AS returned_cost,
+  (SELECT COALESCE(sum(snapshot_cost),0)::text FROM returned_lines) AS snapshot_returned_cost,
   (SELECT count(*)::int FROM returned_lines WHERE historical_cost IS NULL) AS missing_refund_cost,
+  (SELECT count(*)::int FROM returned_lines WHERE historical_cost IS NULL AND snapshot_cost IS NOT NULL) AS estimated_refund_cost,
+  (SELECT count(*)::int FROM returned_lines WHERE snapshot_cost IS NULL) AS missing_snapshot_refund_cost,
   (SELECT COALESCE(sum(cost_total),0)::text FROM lost) AS movement_losses,
   (SELECT count(*)::int FROM lost WHERE cost_total IS NULL) AS missing_movement_loss_cost,
   (SELECT COALESCE(sum(loss_cost),0)::text FROM returned_lines WHERE NOT restock) AS return_losses,
-  (SELECT count(*)::int FROM returned_lines WHERE NOT restock AND loss_cost IS NULL) AS missing_return_loss_cost`,
+  (SELECT count(*)::int FROM returned_lines WHERE NOT restock AND (loss_cost IS NULL OR estimated_loss_cost)) AS missing_return_loss_cost`,
           [
             storeId,
             period.from,
@@ -183,8 +199,15 @@ SELECT
       const missingSaleCost = facts.missing_sale_cost + facts.sales_without_lines;
       const missingRefundCost = facts.missing_refund_cost;
       const costComplete = missingSaleCost === 0 && missingRefundCost === 0;
+      const snapshotCostComplete =
+        facts.missing_snapshot_sale_cost + facts.sales_without_lines === 0 &&
+        facts.missing_snapshot_refund_cost === 0;
       const cogs = costComplete ? cents(facts.sold_cost) - cents(facts.returned_cost) : null;
       const grossProfit = cogs === null ? null : revenue - cogs;
+      const snapshotCogs = snapshotCostComplete
+        ? cents(facts.snapshot_sold_cost) - cents(facts.snapshot_returned_cost)
+        : null;
+      const snapshotGrossProfit = snapshotCogs === null ? null : revenue - snapshotCogs;
       const missingLossCost = facts.missing_movement_loss_cost + facts.missing_return_loss_cost;
       const inventoryLosses =
         filtered || missingLossCost > 0
@@ -198,6 +221,10 @@ SELECT
         grossProfit === null || inventoryLosses === null
           ? null
           : grossProfit - inventoryLosses - operatingExpenses;
+      const snapshotOperatingProfit =
+        snapshotGrossProfit === null || inventoryLosses === null
+          ? null
+          : snapshotGrossProfit - inventoryLosses - operatingExpenses;
       const expenseByCategory = new Map<string, bigint>();
       for (const expense of expenses)
         expenseByCategory.set(
@@ -214,6 +241,16 @@ SELECT
         inventoryLosses: inventoryLosses === null ? null : money(inventoryLosses),
         operatingExpenses: filtered ? null : money(operatingExpenses),
         storeOperatingProfit: operatingProfit === null ? null : money(operatingProfit),
+        estimated:
+          !costComplete && snapshotCostComplete
+            ? {
+                cogs: money(snapshotCogs!),
+                grossProfit: money(snapshotGrossProfit!),
+                grossMarginPercent: percent(snapshotGrossProfit!, revenue),
+                storeOperatingProfit:
+                  snapshotOperatingProfit === null ? null : money(snapshotOperatingProfit),
+              }
+            : null,
         transactionCount: facts.transactions,
         adjustments: { completedRefunds: money(refunds), refundCount: facts.refund_count },
         breakdown: {
@@ -230,6 +267,10 @@ SELECT
           costComplete,
           missingCostSaleItems: missingSaleCost,
           missingCostRefundLines: missingRefundCost,
+          estimatedCostSaleItems: facts.estimated_sale_cost,
+          estimatedCostRefundLines: facts.estimated_refund_cost,
+          missingSnapshotSaleItems: facts.missing_snapshot_sale_cost + facts.sales_without_lines,
+          missingSnapshotRefundLines: facts.missing_snapshot_refund_cost,
           revenueMissingCost: money(cents(facts.missing_cost_revenue)),
           saleCostCoveragePercent: percent(sales - cents(facts.missing_cost_revenue), sales),
           lossCostComplete: missingLossCost === 0,

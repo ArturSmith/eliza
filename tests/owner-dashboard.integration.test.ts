@@ -220,6 +220,7 @@ describe.sequential('owner dashboard', () => {
       grossProfit: null,
       grossMarginPercent: null,
       storeOperatingProfit: null,
+      estimated: null,
       dataQuality: { costComplete: false },
     });
   });

@@ -133,6 +133,58 @@ describe('canonical store financial summary', () => {
       timezone: 'Europe/Oslo',
     });
     expect(previous.revenue).toBe('0.00');
+    const legacyBatch = (
+      await db.pool.query(
+        "INSERT INTO stock_batches(store_id,product_id,expiry_date,quantity,unit_cost,cost_source) VALUES($1,$2,'2026-12-02',1,60,'legacy_estimate') RETURNING id",
+        [actor.store, product],
+      )
+    ).rows[0].id;
+    const legacySale = (
+      await db.pool.query(
+        "INSERT INTO sales(store_id,device_id,employee_id,shift_id,request_id,request_hash,receipt_number,total,tax,discount,receipt,created_at) VALUES($1,$2,$3,$4,$5,'test','TEST-LEGACY',100,0,0,'{}','2026-10-02T10:00:00Z') RETURNING id",
+        [actor.store, actor.device, actor.employee, shift, crypto.randomUUID()],
+      )
+    ).rows[0].id;
+    const legacyItem = (
+      await db.pool.query(
+        'INSERT INTO sale_items(store_id,sale_id,product_id,quantity,price,cost,tax_rate,total,cost_total) VALUES($1,$2,$3,1,100,60,0,100,60) RETURNING id',
+        [actor.store, legacySale, product],
+      )
+    ).rows[0].id;
+    await db.pool.query(
+      'INSERT INTO sale_batch_allocations(store_id,sale_item_id,batch_id,quantity,unit_cost,cost_total) VALUES($1,$2,$3,1,60,60)',
+      [actor.store, legacyItem, legacyBatch],
+    );
+    const legacyRefund = (
+      await db.pool.query(
+        "INSERT INTO refunds(store_id,sale_id,shift_id,employee_id,device_id,approver_id,request_id,request_hash,number,method,reason,total,tax,receipt,created_at) VALUES($1,$2,$3,$4,$5,$4,$6,'test','RF-LEGACY','cash','partial',20,0,'{}','2026-10-02T11:00:00Z') RETURNING id",
+        [actor.store, legacySale, shift, actor.employee, actor.device, crypto.randomUUID()],
+      )
+    ).rows[0].id;
+    await db.pool.query(
+      'INSERT INTO refund_lines(store_id,refund_id,sale_id,sale_item_id,product_id,quantity,restock,total,tax,restored_cost) VALUES($1,$2,$3,$4,$5,0.2,true,20,0,12)',
+      [actor.store, legacyRefund, legacySale, legacyItem, product],
+    );
+    const provisional = await metrics.getFinancialSummary(actor.store, {
+      from: '2026-10-02',
+      to: '2026-10-02',
+      timezone: 'Europe/Oslo',
+    });
+    expect(provisional.revenue).toBe('80.00');
+    expect(provisional.cogs).toBeNull();
+    expect(provisional.grossProfit).toBeNull();
+    expect(provisional.estimated).toEqual({
+      cogs: '48.00',
+      grossProfit: '32.00',
+      grossMarginPercent: '40.00',
+      storeOperatingProfit: '-68.00',
+    });
+    expect(provisional.dataQuality).toMatchObject({
+      estimatedCostSaleItems: 1,
+      estimatedCostRefundLines: 1,
+      missingSnapshotSaleItems: 0,
+      missingSnapshotRefundLines: 0,
+    });
     await db.pool.query(
       "INSERT INTO stock_batches(store_id,product_id,expiry_date,quantity,unit_cost,cost_source) VALUES($1,$2,'2026-12-01',2,4,'adjustment')",
       [actor.store, product],

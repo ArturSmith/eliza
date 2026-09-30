@@ -27,7 +27,18 @@ type OverviewFinancialSummary = {
   inventoryLosses: string | null;
   operatingExpenses: string | null;
   storeOperatingProfit: string | null;
-  dataQuality: { costComplete: boolean; lossCostComplete: boolean } | null;
+  estimated: {
+    cogs: string;
+    grossProfit: string;
+    grossMarginPercent: string | null;
+    storeOperatingProfit: string | null;
+  } | null;
+  dataQuality: {
+    costComplete: boolean;
+    lossCostComplete: boolean;
+    missingSnapshotSaleItems: number;
+    missingSnapshotRefundLines: number;
+  } | null;
   permissions: { margin: boolean; expenses: boolean };
 };
 
@@ -100,6 +111,7 @@ function FinancialCard({
   value,
   currency,
   percent = false,
+  estimated = false,
   restricted = false,
   hint,
 }: {
@@ -107,6 +119,7 @@ function FinancialCard({
   value: string | null;
   currency: string;
   percent?: boolean;
+  estimated?: boolean;
   restricted?: boolean;
   hint?: string;
 }) {
@@ -119,9 +132,10 @@ function FinancialCard({
           : value === null
             ? t('Unavailable')
             : percent
-              ? Number(value).toFixed(1) + '%'
-              : formatMoney(value, currency)}
+              ? (estimated ? '≈' : '') + Number(value).toFixed(1) + '%'
+              : (estimated ? '≈' : '') + formatMoney(value, currency)}
       </strong>
+      {estimated && !restricted && <small className="muted">{t('Estimated')}</small>}
       {hint && !restricted && <small className="muted">{t(hint)}</small>}
     </article>
   );
@@ -390,6 +404,17 @@ export function TodayOperations() {
   const financial = today.financialSummary as OverviewFinancialSummary;
   const missingCost = financial.permissions.margin && !financial.dataQuality?.costComplete;
   const missingLoss = financial.permissions.margin && !financial.dataQuality?.lossCostComplete;
+  const costEstimate = financial.estimated;
+  const missingSnapshots =
+    (financial.dataQuality?.missingSnapshotSaleItems ?? 0) +
+    (financial.dataQuality?.missingSnapshotRefundLines ?? 0);
+  const costHint = costEstimate
+    ? 'Estimate uses the cost saved at checkout; the original purchase cost is unverified.'
+    : missingSnapshots > 0
+      ? t('No saved cost for {count} sale or refund records.', { count: missingSnapshots })
+      : missingCost
+        ? 'Historical sale or refund cost is missing.'
+        : undefined;
   return (
     <div className="dashboard-today">
       <section className="today-overview" aria-label={t('Today at a glance')}>
@@ -415,30 +440,36 @@ export function TodayOperations() {
           <FinancialCard label="Revenue" value={financial.revenue} currency={currency} />
           <FinancialCard
             label="Cost of goods sold"
-            value={financial.cogs}
+            value={financial.cogs ?? costEstimate?.cogs ?? null}
             currency={currency}
+            estimated={financial.cogs === null && costEstimate !== null}
             restricted={!financial.permissions.margin}
-            hint={missingCost ? 'Historical sale or refund cost is missing.' : undefined}
+            hint={costHint}
           />
           <FinancialCard
             label="Gross profit"
-            value={financial.grossProfit}
+            value={financial.grossProfit ?? costEstimate?.grossProfit ?? null}
             currency={currency}
+            estimated={financial.grossProfit === null && costEstimate !== null}
             restricted={!financial.permissions.margin}
-            hint={missingCost ? 'Historical sale or refund cost is missing.' : undefined}
+            hint={costHint}
           />
           <FinancialCard
             label="Gross margin"
-            value={financial.grossMarginPercent}
+            value={financial.grossMarginPercent ?? costEstimate?.grossMarginPercent ?? null}
             currency={currency}
             percent
+            estimated={
+              financial.grossMarginPercent === null && costEstimate?.grossMarginPercent != null
+            }
             restricted={!financial.permissions.margin}
             hint={
-              missingCost
-                ? 'Historical sale or refund cost is missing.'
-                : financial.grossMarginPercent === null
-                  ? 'Gross margin requires positive revenue.'
-                  : undefined
+              financial.revenue === '0.00' || Number(financial.revenue) < 0
+                ? 'Gross margin requires positive revenue.'
+                : (costHint ??
+                  (financial.grossMarginPercent === null
+                    ? 'Gross margin requires positive revenue.'
+                    : undefined))
             }
           />
           <FinancialCard
@@ -456,16 +487,13 @@ export function TodayOperations() {
           />
           <FinancialCard
             label="Store operating profit"
-            value={financial.storeOperatingProfit}
+            value={financial.storeOperatingProfit ?? costEstimate?.storeOperatingProfit ?? null}
             currency={currency}
-            restricted={!financial.permissions.margin || !financial.permissions.expenses}
-            hint={
-              missingCost
-                ? 'Historical sale or refund cost is missing.'
-                : missingLoss
-                  ? 'Historical inventory loss cost is missing.'
-                  : undefined
+            estimated={
+              financial.storeOperatingProfit === null && costEstimate?.storeOperatingProfit != null
             }
+            restricted={!financial.permissions.margin || !financial.permissions.expenses}
+            hint={missingLoss ? 'Historical inventory loss cost is missing.' : costHint}
           />
         </div>
         <HourlySales rows={today.hourly} currency={currency} />
