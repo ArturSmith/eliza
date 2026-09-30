@@ -52,6 +52,7 @@ type Order = {
   supplierName: string;
   supplierCode: string;
   supplierPhone: string;
+  supplierWhatsAppPhone: string;
   supplierCompanyNumber: string;
   supplierContactName: string;
   supplierContactPhone: string;
@@ -202,6 +203,7 @@ function SupplierSummary({ supplier }: { supplier: Supplier }) {
     ['Representative phone', supplier.contactPhone],
     ['Email', supplier.email],
     ['Supplier phone', supplier.phone],
+    ['WhatsApp number', supplier.whatsappPhone],
     ['Address', supplier.address],
     ['Company number', supplier.companyNumber],
     ['Payment terms', supplier.paymentTerms],
@@ -275,9 +277,16 @@ export function SuppliersPage() {
     (s) =>
       (status === 'all' || s.active === (status === 'active')) &&
       (!tag || (s.tags ?? []).some((value) => value.toLowerCase() === tag.toLowerCase())) &&
-      [s.name, s.code, s.contactName, s.contactPhone, s.email, s.phone, ...(s.tags ?? [])].some(
-        (value) => (value ?? '').toLowerCase().includes(search.trim().toLowerCase()),
-      ),
+      [
+        s.name,
+        s.code,
+        s.contactName,
+        s.contactPhone,
+        s.email,
+        s.phone,
+        s.whatsappPhone,
+        ...(s.tags ?? []),
+      ].some((value) => (value ?? '').toLowerCase().includes(search.trim().toLowerCase())),
   );
   return (
     <>
@@ -525,6 +534,7 @@ export function SupplierForm({
             'contactPhone',
             'email',
             'phone',
+            'whatsappPhone',
             'address',
             'companyNumber',
             'paymentTerms',
@@ -568,6 +578,11 @@ export function SupplierForm({
           ) : (
             <Field
               key={key}
+              hint={
+                key === 'whatsappPhone'
+                  ? t('Use a full international number starting with +.')
+                  : undefined
+              }
               label={t(
                 {
                   code: 'Supplier code',
@@ -578,6 +593,7 @@ export function SupplierForm({
                   paymentTerms: 'Payment terms',
                   email: 'Email',
                   phone: 'Supplier phone',
+                  whatsappPhone: 'WhatsApp number',
                   address: 'Address',
                   notes: 'Notes',
                 }[key],
@@ -585,7 +601,8 @@ export function SupplierForm({
             >
               <input
                 required={key === 'name'}
-                type={key === 'email' ? 'email' : 'text'}
+                type={key === 'email' ? 'email' : key === 'whatsappPhone' ? 'tel' : 'text'}
+                placeholder={key === 'whatsappPhone' ? '+4791234567' : undefined}
                 value={value[key]}
                 onChange={(e) => setValue({ ...value, [key]: e.target.value })}
               />
@@ -1683,6 +1700,7 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
                   ['Supplier name', p.supplierName],
                   ['Supplier code', p.supplierCode],
                   ['Supplier phone', p.supplierPhone],
+                  ['WhatsApp number', p.supplierWhatsAppPhone],
                   ['Company number', p.supplierCompanyNumber],
                   ['Sales representative', p.supplierContactName],
                   ['Representative phone', p.supplierContactPhone],
@@ -1951,7 +1969,9 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
 }
 function WhatsAppOrderShare({ order, close }: { order: Order; close: () => void }) {
   useLanguage();
-  const [phone, setPhone] = useState(order.supplierContactPhone || order.supplierPhone || '');
+  const [phone, setPhone] = useState(
+    order.supplierWhatsAppPhone || order.supplierContactPhone || order.supplierPhone || '',
+  );
   const [message, setMessage] = useState(() =>
     formatWhatsAppOrder(order, {
       order: t('Purchase order'),
@@ -1971,8 +1991,17 @@ function WhatsAppOrderShare({ order, close }: { order: Order; close: () => void 
         close();
       }}
     >
-      {(order.supplierContactPhone || order.supplierPhone) && (
+      {(order.supplierWhatsAppPhone || order.supplierContactPhone || order.supplierPhone) && (
         <div className="purchase-whatsapp-contacts">
+          {order.supplierWhatsAppPhone && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPhone(order.supplierWhatsAppPhone)}
+            >
+              {t('WhatsApp number')}: {order.supplierWhatsAppPhone}
+            </Button>
+          )}
           {order.supplierContactPhone && (
             <Button
               type="button"
@@ -2016,6 +2045,9 @@ function WhatsAppOrderShare({ order, close }: { order: Order; close: () => void 
         {t('WhatsApp opens with this message. Send it there to complete the order.')}
       </p>
       <div className="dialog-actions">
+        <Button type="submit" disabled={!url}>
+          {t('Open WhatsApp')}
+        </Button>
         <Button
           type="button"
           variant="outline"
@@ -2030,9 +2062,6 @@ function WhatsAppOrderShare({ order, close }: { order: Order; close: () => void 
         </Button>
         <Button type="button" variant="ghost" onClick={close}>
           {t('Cancel')}
-        </Button>
-        <Button type="submit" disabled={!url}>
-          {t('Open WhatsApp')}
         </Button>
       </div>
     </form>

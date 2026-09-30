@@ -446,6 +446,11 @@ export const supplierSchema = z.object({
   contactPhone: z.string().trim().max(40).default(''),
   email: z.union([z.email().max(254), z.literal('')]).default(''),
   phone: z.string().trim().max(40).default(''),
+  whatsappPhone: z
+    .string()
+    .trim()
+    .regex(/^$|^\+[1-9]\d{6,14}$/, 'Use an international WhatsApp number, for example +4791234567')
+    .default(''),
   address: z.string().trim().max(400).default(''),
   companyNumber: z.string().trim().max(100).default(''),
   paymentTerms: z.string().trim().max(200).default(''),

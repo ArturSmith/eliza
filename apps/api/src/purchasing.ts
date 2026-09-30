@@ -44,7 +44,7 @@ import type { PoolClient } from 'pg';
 import { shoppingProducts } from './shopping-list-data.js';
 import { answerPurchaseDocumentQuestion, extractPurchaseDocument } from './purchase-extraction.js';
 const command = z.object({ requestId: z.uuid(), version: z.number().int().positive() });
-const supplierColumns = `id,code,name,contact_name AS "contactName",contact_phone AS "contactPhone",email,phone,address,company_number AS "companyNumber",payment_terms AS "paymentTerms",notes,tags,active,version,created_at AS "createdAt"`;
+const supplierColumns = `id,code,name,contact_name AS "contactName",contact_phone AS "contactPhone",email,phone,whatsapp_phone AS "whatsappPhone",address,company_number AS "companyNumber",payment_terms AS "paymentTerms",notes,tags,active,version,created_at AS "createdAt"`;
 @Controller()
 @UseGuards(AccessGuard)
 export class PurchasingController {
@@ -462,6 +462,7 @@ export class PurchasingController {
         b.contactPhone,
         b.email,
         b.phone,
+        b.whatsappPhone,
         b.address,
         b.companyNumber,
         b.paymentTerms,
@@ -475,7 +476,7 @@ export class PurchasingController {
       if (b.id) {
         row = (
           await c.query(
-            `UPDATE suppliers SET code=$2,name=$3,contact_name=$4,contact_phone=$5,email=$6,phone=$7,address=$8,company_number=$9,payment_terms=$10,notes=$11,active=$12,tags=COALESCE($13::jsonb,tags),version=version+1 WHERE store_id=$1 AND id=$14 AND version=$15 RETURNING ${supplierColumns}`,
+            `UPDATE suppliers SET code=$2,name=$3,contact_name=$4,contact_phone=$5,email=$6,phone=$7,whatsapp_phone=$8,address=$9,company_number=$10,payment_terms=$11,notes=$12,active=$13,tags=COALESCE($14::jsonb,tags),version=version+1 WHERE store_id=$1 AND id=$15 AND version=$16 RETURNING ${supplierColumns}`,
             [...values, b.id, b.version],
           )
         ).rows[0];
@@ -483,7 +484,7 @@ export class PurchasingController {
       } else
         row = (
           await c.query(
-            `INSERT INTO suppliers(store_id,code,name,contact_name,contact_phone,email,phone,address,company_number,payment_terms,notes,active,tags) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb) RETURNING ${supplierColumns}`,
+            `INSERT INTO suppliers(store_id,code,name,contact_name,contact_phone,email,phone,whatsapp_phone,address,company_number,payment_terms,notes,active,tags) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb) RETURNING ${supplierColumns}`,
             values,
           )
         ).rows[0];
@@ -781,7 +782,7 @@ export class PurchasingController {
     const p = (
       await c.query(
         `SELECT p.*,(SELECT name FROM employees WHERE id=p.closed_by) AS closed_by_name,p.payment_due_date::text,
-(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received','closed') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,s.name AS "supplierName",s.code AS "supplierCode",s.phone AS "supplierPhone",s.company_number AS "supplierCompanyNumber",s.contact_name AS "supplierContactName",s.contact_phone AS "supplierContactPhone" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.id=$1 AND p.store_id=$2`,
+(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received','closed') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,s.name AS "supplierName",s.code AS "supplierCode",s.phone AS "supplierPhone",s.whatsapp_phone AS "supplierWhatsAppPhone",s.company_number AS "supplierCompanyNumber",s.contact_name AS "supplierContactName",s.contact_phone AS "supplierContactPhone" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.id=$1 AND p.store_id=$2`,
         [id, store],
       )
     ).rows[0];

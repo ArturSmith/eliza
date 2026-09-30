@@ -97,6 +97,32 @@ describe.sequential('purchasing and receiving', () => {
       (await db.pool.query('SELECT stock FROM products WHERE id=$1', [productId])).rows[0].stock,
     ).toBe('0.000');
   });
+  it('saves a dedicated supplier WhatsApp number and exposes it on purchase orders', async () => {
+    const updated = await manager.request('/suppliers', {
+      ...supplier,
+      whatsappPhone: '+4791234567',
+      requestId: requestId(),
+    });
+    expect(updated.status).toBe(201);
+    expect(updated.body.whatsappPhone).toBe('+4791234567');
+    supplier = updated.body;
+    expect((await manager.request('/purchases/' + order.id)).body.supplierWhatsAppPhone).toBe(
+      '+4791234567',
+    );
+    expect(
+      (await manager.request('/suppliers')).body.find((s: any) => s.id === supplier.id)
+        .whatsappPhone,
+    ).toBe('+4791234567');
+    expect(
+      (
+        await manager.request('/suppliers', {
+          ...supplier,
+          whatsappPhone: '91234567',
+          requestId: requestId(),
+        })
+      ).status,
+    ).toBe(400);
+  });
   it('places once and rejects stale order changes', async () => {
     const body = { requestId: requestId(), version: order.version, status: 'ordered' };
     const response = await manager.request('/purchases/' + order.id + '/status', body);

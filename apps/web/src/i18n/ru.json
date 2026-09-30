@@ -1971,5 +1971,8 @@
   "Copy message": "Скопировать сообщение",
   "Open WhatsApp": "Открыть WhatsApp",
   "Purchase order": "Заказ поставщику",
-  "Copied": "Скопировано"
+  "Copied": "Скопировано",
+  "WhatsApp number": "Номер WhatsApp",
+  "Use a full international number starting with +.": "Укажите полный международный номер, начиная с +.",
+  "Use an international WhatsApp number, for example +4791234567": "Укажите международный номер WhatsApp, например +4791234567"
 }
