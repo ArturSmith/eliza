@@ -2126,6 +2126,17 @@ tr:last-child td {
   border-top: 1px solid var(--border);
   background: #f7f9f5;
 }
+.purchase-whatsapp-contacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+.purchase-whatsapp-contacts .button {
+  max-width: 100%;
+  white-space: normal;
+  text-align: left;
+}
 .order-detail-section {
   padding: 20px 22px;
   border-top: 1px solid var(--border);

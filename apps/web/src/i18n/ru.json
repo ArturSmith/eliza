@@ -1959,5 +1959,17 @@
   "Barcode copied: {value0}": "Штрихкод скопирован: {value0}",
   "Could not copy automatically. Select the barcode number to copy it.": "Не удалось скопировать автоматически. Выделите номер штрихкода и скопируйте его.",
   "Print selected labels": "Печать выбранных этикеток",
-  "Selected markdown label for {value0}": "Выбрана этикетка уценки для {value0}"
+  "Selected markdown label for {value0}": "Выбрана этикетка уценки для {value0}",
+  "Send via WhatsApp": "Отправить через WhatsApp",
+  "Send purchase order via WhatsApp": "Отправить заказ поставщику через WhatsApp",
+  "Review the recipient and message before opening WhatsApp.": "Проверьте получателя и текст перед открытием WhatsApp.",
+  "WhatsApp recipient number": "Номер получателя в WhatsApp",
+  "International number, for example +4791234567": "Международный номер, например +4791234567",
+  "Enter a full international phone number and a message.": "Укажите полный международный номер и текст сообщения.",
+  "Message to supplier": "Сообщение поставщику",
+  "WhatsApp opens with this message. Send it there to complete the order.": "Сообщение откроется в WhatsApp. Нажмите «Отправить» там, чтобы завершить отправку.",
+  "Copy message": "Скопировать сообщение",
+  "Open WhatsApp": "Открыть WhatsApp",
+  "Purchase order": "Заказ поставщику",
+  "Copied": "Скопировано"
 }

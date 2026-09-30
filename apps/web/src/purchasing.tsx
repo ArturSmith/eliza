@@ -21,6 +21,7 @@ import { Dialog } from './components/ui/dialog';
 import { SupplierCatalog } from './supplier-products';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
 import { formatMoney } from './receipts';
+import { formatWhatsAppOrder, whatsappOrderUrl } from './purchase-whatsapp';
 type Order = {
   close_reason: string;
   closed_at: string | null;
@@ -1627,6 +1628,7 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
   const [editing, setEditing] = useState(false);
   const [reason, setReason] = useState('');
   const [cancel, setCancel] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const currency = useSession().data!.store.currency;
   const status = useMutation({
     mutationFn: (next: string) =>
@@ -1804,6 +1806,11 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
               </Button>
             )}
             {['ordered', 'partially_received'].includes(p.status) && (
+              <Button variant="outline" onClick={() => setSharing(true)}>
+                {t('Send via WhatsApp')}
+              </Button>
+            )}
+            {['ordered', 'partially_received'].includes(p.status) && (
               <Button onClick={() => setReceiving(true)}>{t('Receive delivery')}</Button>
             )}
             {p.status === 'partially_received' && (
@@ -1879,6 +1886,14 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
             )}
           </div>
           <Dialog
+            open={sharing}
+            onOpenChange={setSharing}
+            title={t('Send purchase order via WhatsApp')}
+            description={t('Review the recipient and message before opening WhatsApp.')}
+          >
+            {sharing && <WhatsAppOrderShare order={p} close={() => setSharing(false)} />}
+          </Dialog>
+          <Dialog
             open={cancel}
             onOpenChange={setCancel}
             title={t('Cancel this order')}
@@ -1932,6 +1947,95 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
         </>
       )}
     </section>
+  );
+}
+function WhatsAppOrderShare({ order, close }: { order: Order; close: () => void }) {
+  useLanguage();
+  const [phone, setPhone] = useState(order.supplierContactPhone || order.supplierPhone || '');
+  const [message, setMessage] = useState(() =>
+    formatWhatsAppOrder(order, {
+      order: t('Purchase order'),
+      supplier: t('Supplier'),
+      delivery: t('Expected delivery'),
+      items: t('Products'),
+    }),
+  );
+  const [copied, setCopied] = useState(false);
+  const url = whatsappOrderUrl(phone, message);
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!url) return;
+        window.open(url, '_blank', 'noopener,noreferrer');
+        close();
+      }}
+    >
+      {(order.supplierContactPhone || order.supplierPhone) && (
+        <div className="purchase-whatsapp-contacts">
+          {order.supplierContactPhone && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPhone(order.supplierContactPhone)}
+            >
+              {t('Representative phone')}: {order.supplierContactPhone}
+            </Button>
+          )}
+          {order.supplierPhone && (
+            <Button type="button" variant="outline" onClick={() => setPhone(order.supplierPhone)}>
+              {t('Supplier phone')}: {order.supplierPhone}
+            </Button>
+          )}
+        </div>
+      )}
+      <Field label={t('WhatsApp recipient number')}>
+        <input
+          type="tel"
+          autoComplete="tel"
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+          placeholder={t('International number, for example +4791234567')}
+          required
+        />
+      </Field>
+      {phone && !url && (
+        <p className="muted" role="alert">
+          {t('Enter a full international phone number and a message.')}
+        </p>
+      )}
+      <Field label={t('Message to supplier')}>
+        <textarea
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          rows={10}
+          required
+        />
+      </Field>
+      <p className="muted">
+        {t('WhatsApp opens with this message. Send it there to complete the order.')}
+      </p>
+      <div className="dialog-actions">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() =>
+            void navigator.clipboard
+              .writeText(message)
+              .then(() => setCopied(true))
+              .catch(() => setCopied(false))
+          }
+        >
+          {copied ? t('Copied') : t('Copy message')}
+        </Button>
+        <Button type="button" variant="ghost" onClick={close}>
+          {t('Cancel')}
+        </Button>
+        <Button type="submit" disabled={!url}>
+          {t('Open WhatsApp')}
+        </Button>
+      </div>
+    </form>
   );
 }
 function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
