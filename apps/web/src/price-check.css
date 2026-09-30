@@ -3,7 +3,7 @@
   display: grid;
   place-items: center;
   padding: clamp(20px, 4vw, 64px);
-  background: #f4f6f1;
+  background: var(--color-background-f4f6f1);
 }
 .price-check-content {
   width: min(100%, 760px);
@@ -20,12 +20,12 @@
   display: grid;
   place-items: center;
   border-radius: 20px;
-  background: #e4ecdb;
-  color: #315b45;
+  background: var(--color-background-e4ecdb);
+  color: var(--color-text-315b45);
 }
 .price-check-store {
   margin: 0 0 4px;
-  color: #708073;
+  color: var(--color-text-708073);
   font-size: 16px;
 }
 .price-check-header h1 {
@@ -35,22 +35,22 @@
 }
 .price-check-form {
   padding: clamp(24px, 4vw, 38px);
-  border: 1px solid #e0e7da;
+  border: 1px solid var(--color-border-e0e7da);
   border-radius: 24px;
-  background: #fff;
+  background: var(--color-background-fff);
 }
 .price-check-scanner {
   margin-bottom: 26px;
 }
 .price-check-scanner .camera-scan-inline {
   padding: 18px;
-  border: 1px solid #dce7da;
+  border: 1px solid var(--color-border-dce7da);
   border-radius: 18px;
-  background: #f7faf6;
+  background: var(--color-background-f7faf6);
 }
 .price-check-scanner .camera-scan-inline > p {
   margin: 0 0 14px;
-  color: #4d6654;
+  color: var(--color-text-4d6654);
   font-size: 18px;
   font-weight: 600;
 }
@@ -66,7 +66,7 @@
 }
 .price-check-scanner .camera-scan-retry {
   margin-top: 14px;
-  color: #9b382d;
+  color: var(--color-text-9b382d);
 }
 .price-check-scanner .camera-scan-retry p {
   margin: 0 0 10px;
@@ -75,7 +75,7 @@
   padding: 10px 16px;
   border: 1px solid currentColor;
   border-radius: 10px;
-  background: white;
+  background: var(--color-background-fff);
   color: inherit;
   font: inherit;
   cursor: pointer;
@@ -91,13 +91,13 @@
   align-items: center;
   gap: 16px;
   padding: 9px 14px 9px 20px;
-  border: 2px solid #a8bcaa;
+  border: 2px solid var(--color-border-a8bcaa);
   border-radius: 16px;
-  color: #315b45;
+  color: var(--color-text-315b45);
 }
 .price-check-input-row:focus-within {
-  border-color: #315b45;
-  box-shadow: 0 0 0 3px #dce9dc;
+  border-color: var(--color-border-315b45);
+  box-shadow: 0 0 0 3px var(--color-shadow-dce9dc);
 }
 .price-check-input-row input {
   width: 100%;
@@ -117,8 +117,8 @@
   margin-top: 18px;
   border: 0;
   border-radius: 14px;
-  background: #315b45;
-  color: #fff;
+  background: var(--color-background-315b45);
+  color: var(--on-accent);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -133,14 +133,14 @@
   min-height: 275px;
   margin-top: 20px;
   padding: 32px;
-  border: 1px solid #e0e7da;
+  border: 1px solid var(--color-border-e0e7da);
   border-radius: 24px;
-  background: #fff;
+  background: var(--color-background-fff);
   text-align: center;
 }
 .price-check-placeholder {
   margin: 0;
-  color: #718074;
+  color: var(--color-text-718074);
   font-size: 20px;
 }
 .price-check-product h2 {
@@ -163,8 +163,8 @@
   aspect-ratio: 1;
   overflow: hidden;
   border-radius: 18px;
-  background: #f3f6ef;
-  color: #8da395;
+  background: var(--color-background-f3f6ef);
+  color: var(--color-text-8da395);
 }
 .price-check-photo img {
   width: 100%;
@@ -176,12 +176,12 @@
 }
 .price-check-brand {
   margin: 14px 0 0;
-  color: #536958;
+  color: var(--color-text-536958);
   font-weight: 700;
 }
 .price-check-description {
   margin: 0 0 14px;
-  color: #536558;
+  color: var(--color-text-536558);
   line-height: 1.5;
   overflow-wrap: anywhere;
 }
@@ -194,27 +194,27 @@
 .price-check-metadata span {
   padding: 6px 10px;
   border-radius: 8px;
-  background: #f0f4ec;
-  color: #4b6251;
+  background: var(--color-background-f0f4ec);
+  color: var(--color-text-4b6251);
   font-size: 15px;
 }
 .price-check-badge {
   display: inline-block;
   padding: 7px 14px;
   border-radius: 100px;
-  background: #eaf1df;
-  color: #315b45;
+  background: var(--color-background-eaf1df);
+  color: var(--color-text-315b45);
   font-size: 15px;
   font-weight: 700;
 }
 .price-check-regular {
   margin: 0 0 10px;
-  color: #758276;
+  color: var(--color-text-758276);
   font-size: 19px;
 }
 .price-check-price {
   margin: 0;
-  color: #234936;
+  color: var(--color-text-234936);
   font-size: clamp(42px, 8vw, 70px);
   line-height: 1.1;
   font-weight: 800;
@@ -230,14 +230,14 @@
 }
 .price-check-barcode {
   margin: 22px 0 0;
-  color: #758276;
+  color: var(--color-text-758276);
   font-size: 14px;
   overflow-wrap: anywhere;
 }
 .price-check-error {
-  border-color: #eac8c3;
-  background: #fff5f3;
-  color: #a33127;
+  border-color: var(--color-border-eac8c3);
+  background: var(--color-background-fff5f3);
+  color: var(--color-text-a33127);
   font-size: 22px;
   font-weight: 700;
 }

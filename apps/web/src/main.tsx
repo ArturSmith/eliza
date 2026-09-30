@@ -14,8 +14,11 @@ import {
 import { api, queryClient } from './api';
 import { Shell, Overview, ProductsPage, InventoryPage, AuditPage, DevicesPage } from './pages';
 import { LanguageSwitcher } from './i18n/LanguageSwitcher';
+import { applyTheme, initialTheme } from './theme';
+import './theme.css';
 import './styles.css';
 import './pos.css';
+applyTheme(initialTheme());
 const PosPage = lazy(() => import('./pos').then((module) => ({ default: module.PosPage })));
 function CheckoutRoute() {
   useLanguage();

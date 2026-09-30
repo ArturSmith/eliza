@@ -56,6 +56,7 @@ import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
 import { ProductBarcode } from './product-barcode';
+import { ThemeSwitcher } from './theme';
 const navGroups = [
   {
     label: 'Workspace',
@@ -321,6 +322,7 @@ export function Shell() {
           {t('Local workspace ')}
           <span>{t('v0.1')}</span>
         </div>
+        <ThemeSwitcher />
       </aside>
       {mobile && (
         <button

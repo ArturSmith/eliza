@@ -23,7 +23,7 @@
   padding: 20px;
   border: 1px solid var(--border);
   border-radius: 14px;
-  background: #fafbf8;
+  background: var(--color-background-fafbf8);
 }
 .promotion-step-title {
   display: flex;
@@ -38,7 +38,7 @@
   height: 28px;
   flex: 0 0 28px;
   border-radius: 50%;
-  background: #e5eee3;
+  background: var(--color-background-e5eee3);
   color: var(--green);
   font-weight: 700;
 }
@@ -65,13 +65,13 @@
   text-align: center;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: white;
+  background: var(--color-background-fff);
   font-weight: 600;
   cursor: pointer;
 }
 .promotion-segmented label.selected {
-  border-color: #7ba68a;
-  background: #eaf3e9;
+  border-color: var(--color-border-7ba68a);
+  background: var(--color-background-eaf3e9);
   color: var(--green);
 }
 .promotion-segmented input {
@@ -81,7 +81,7 @@
   height: 1px;
 }
 .promotion-segmented label:focus-within {
-  outline: 2px solid #a9c4ac;
+  outline: 2px solid var(--color-border-a9c4ac);
   outline-offset: 2px;
 }
 .promotion-search {
@@ -100,7 +100,7 @@
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: white;
+  background: var(--color-background-fff);
 }
 .promotion-target-row {
   display: flex;
@@ -114,10 +114,10 @@
   border-bottom: 0;
 }
 .promotion-target-row:hover {
-  background: #f4f8f2;
+  background: var(--color-background-f4f8f2);
 }
 .promotion-target-row:has(input:checked) {
-  background: #edf5ec;
+  background: var(--color-background-edf5ec);
 }
 .promotion-target-row input {
   width: 17px;
@@ -195,7 +195,7 @@
 }
 .promotion-list-heading > span {
   color: var(--green);
-  background: #eaf3e9;
+  background: var(--color-background-eaf3e9);
   border-radius: 100px;
   padding: 6px 12px;
   font-weight: 600;
@@ -245,17 +245,17 @@
   text-transform: uppercase;
 }
 .promotion-status-active {
-  color: #275b39;
-  background: #e7f4e8;
+  color: var(--color-text-275b39);
+  background: var(--color-background-e7f4e8);
 }
 .promotion-status-scheduled {
-  color: #775707;
-  background: #fff3d2;
+  color: var(--color-text-775707);
+  background: var(--color-background-fff3d2);
 }
 .promotion-status-ended,
 .promotion-status-cancelled {
-  color: #6d776e;
-  background: #edf0ec;
+  color: var(--color-text-6d776e);
+  background: var(--color-background-edf0ec);
 }
 .promotion-empty {
   padding: 18px;

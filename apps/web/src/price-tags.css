@@ -3,7 +3,7 @@
   padding: 2rem 2rem 7rem;
   max-width: 1100px;
   margin: auto;
-  color: #243b2f;
+  color: var(--color-text-243b2f);
 }
 .price-tags-header,
 .price-tags-controls,
@@ -46,13 +46,13 @@
   flex: 0 0 100%;
   min-width: 0;
   padding: 1rem;
-  border: 1px solid #dce5dc;
+  border: 1px solid var(--color-border-dce5dc);
   border-radius: 0.75rem;
-  background: #f7faf6;
+  background: var(--color-background-f7faf6);
 }
 .price-tags-search-row .camera-scan-inline p {
   margin: 0 0 0.75rem;
-  color: #516755;
+  color: var(--color-text-516755);
 }
 .price-tags-search-row .camera-scan-preview video {
   max-height: 320px;
@@ -63,12 +63,12 @@
   margin: 0 0 1rem;
 }
 .price-tags-scan-feedback.success {
-  background: #e9f6ea;
-  color: #245e36;
+  background: var(--color-background-e9f6ea);
+  color: var(--color-text-245e36);
 }
 .price-tags-scan-feedback.error {
-  background: #fff1ee;
-  color: #a64033;
+  background: var(--color-background-fff1ee);
+  color: var(--color-text-a64033);
 }
 .price-tags-shell label {
   display: grid;
@@ -77,12 +77,12 @@
 .price-tags-shell input:not([type='checkbox']),
 .price-tags-shell select {
   padding: 0.75rem;
-  border: 1px solid #cad9ca;
+  border: 1px solid var(--color-border-cad9ca);
   border-radius: 0.5rem;
   width: 100%;
 }
 .price-tags-product-list {
-  border: 1px solid #dce5dc;
+  border: 1px solid var(--color-border-dce5dc);
   border-radius: 0.75rem;
   overflow: hidden;
 }
@@ -92,10 +92,10 @@
   cursor: pointer;
 }
 .price-tags-product-list > *:not(:last-child) {
-  border-bottom: 1px solid #dce5dc;
+  border-bottom: 1px solid var(--color-border-dce5dc);
 }
 .price-tags-product-entry:has(input:checked) {
-  background: #f3f8f2;
+  background: var(--color-background-f3f8f2);
 }
 .price-tags-weight-details {
   padding: 0 1rem 1rem 3.25rem;
@@ -116,7 +116,7 @@
 }
 .price-tags-product small {
   display: block;
-  color: #66776a;
+  color: var(--color-text-66776a);
 }
 .price-tags-login {
   max-width: 440px;
@@ -155,7 +155,7 @@
 }
 @media print {
   body {
-    background: #fff !important;
+    background: var(--color-background-fff) !important;
   }
   .price-tags-shell {
     padding: 0;
@@ -171,7 +171,7 @@
     gap: 4mm;
   }
   .price-tag {
-    border: 1px solid #222;
+    border: 1px solid var(--color-border-222);
     box-sizing: border-box;
     min-height: 0;
     padding: 4mm;
@@ -180,7 +180,7 @@
     flex-direction: column;
     justify-content: space-between;
     break-inside: avoid;
-    color: #000;
+    color: var(--color-text-000);
   }
   .price-tag strong {
     font-size: 12pt;
@@ -222,27 +222,27 @@
   align-items: center;
   gap: 0.6rem;
   padding: 0.75rem 1rem;
-  border: 1px solid #cad9ca;
+  border: 1px solid var(--color-border-cad9ca);
   border-radius: 0.65rem;
-  background: white;
-  color: #516755;
+  background: var(--color-background-fff);
+  color: var(--color-text-516755);
   font-weight: 600;
   cursor: pointer;
 }
 .price-tags-tabs button[aria-selected='true'] {
-  background: #244e3c;
-  border-color: #244e3c;
-  color: white;
+  background: var(--color-background-244e3c);
+  border-color: var(--color-border-244e3c);
+  color: var(--on-accent);
 }
 .price-tags-counter {
   padding: 0.1rem 0.5rem;
   border-radius: 1rem;
-  background: #eaf0e7;
-  color: #244e3c;
+  background: var(--color-background-eaf0e7);
+  color: var(--color-text-244e3c);
 }
 .price-tags-empty {
   padding: 1rem 0;
-  color: #66776a;
+  color: var(--color-text-66776a);
 }
 
 .price-tags-list-description {
@@ -252,7 +252,7 @@
   padding-bottom: 0.4rem;
 }
 .price-tags-markdown-code {
-  color: #254f3c !important;
+  color: var(--color-text-254f3c) !important;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   user-select: text;
 }
@@ -264,7 +264,7 @@
   padding: 0 1rem 0.8rem 3.3rem;
 }
 .price-tags-markdown-actions small {
-  color: #66776a;
+  color: var(--color-text-66776a);
 }
 .price-tags-markdown-actions .button {
   min-height: 34px;

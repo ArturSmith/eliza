@@ -138,9 +138,9 @@ export function AnalyticsCharts({ data }: { data: Summary }) {
                 x2="925"
                 y1={220 - fraction * 175}
                 y2={220 - fraction * 175}
-                stroke="#dfe6d7"
+                stroke="var(--color-border-dfe6d7)"
               />
-              <text x="58" y={224 - fraction * 175} textAnchor="end" fill="#637359" fontSize="12">
+              <text x="58" y={224 - fraction * 175} textAnchor="end" fill="var(--color-text-637359)" fontSize="12">
                 {new Intl.NumberFormat(getLocale(), { notation: 'compact' }).format(max * fraction)}
               </text>
             </g>
@@ -148,12 +148,12 @@ export function AnalyticsCharts({ data }: { data: Summary }) {
           <polyline
             points={points}
             fill="none"
-            stroke="#245a42"
+            stroke="var(--accent)"
             strokeWidth="3"
             vectorEffect="non-scaling-stroke"
           />
           {rows.length === 1 && (
-            <circle cx={point(rows[0], 0)[0]} cy={point(rows[0], 0)[1]} r="5" fill="#245a42" />
+            <circle cx={point(rows[0], 0)[0]} cy={point(rows[0], 0)[1]} r="5" fill="var(--accent)" />
           )}
           {ticks.map((i) => (
             <text
@@ -161,7 +161,7 @@ export function AnalyticsCharts({ data }: { data: Summary }) {
               x={point(rows[i], i)[0]}
               y="247"
               textAnchor={i === 0 ? 'start' : i === rows.length - 1 ? 'end' : 'middle'}
-              fill="#637359"
+              fill="var(--color-text-637359)"
               fontSize="12"
             >
               {rows[i].bucket}

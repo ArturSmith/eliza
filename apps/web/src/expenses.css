@@ -15,7 +15,7 @@
 }
 .expenses-summary strong {
   font-size: 1.7rem;
-  color: #254938;
+  color: var(--color-text-254938);
 }
 .expenses-note {
   margin-bottom: 1.5rem;
@@ -40,7 +40,7 @@
   max-width: 420px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  color: #6b7c70;
+  color: var(--color-text-6b7c70);
 }
 .expenses-amount {
   white-space: nowrap;

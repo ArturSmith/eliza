@@ -180,7 +180,7 @@ function HourlySales({ rows, currency }: { rows: any[]; currency: string }) {
         <svg viewBox="0 0 1000 245" role="group" aria-label={t('Sales by hour')}>
           {[min, (min + max) / 2, max].map((value) => (
             <g key={value}>
-              <line x1="80" x2="980" y1={y(value)} y2={y(value)} stroke="#e4e9df" />
+              <line x1="80" x2="980" y1={y(value)} y2={y(value)} stroke="var(--color-border-e4e9df)" />
               <text x="70" y={y(value) + 4} textAnchor="end" className="hour-line-label">
                 {formatMoney(String(value), currency)}
               </text>
@@ -190,7 +190,7 @@ function HourlySales({ rows, currency }: { rows: any[]; currency: string }) {
             <path
               d={path('comparison')}
               fill="none"
-              stroke="#b77a28"
+              stroke="var(--color-text-b77a28)"
               strokeWidth="2"
               strokeDasharray="6 5"
               vectorEffect="non-scaling-stroke"
@@ -211,7 +211,7 @@ function HourlySales({ rows, currency }: { rows: any[]; currency: string }) {
                 x2={x(selected!)}
                 y1="30"
                 y2="210"
-                stroke="#8c9f85"
+                stroke="var(--color-text-8c9f85)"
                 strokeDasharray="4 4"
               />
               {current.elapsed && (
@@ -220,7 +220,7 @@ function HourlySales({ rows, currency }: { rows: any[]; currency: string }) {
                   cy={y(Number(current.total) || 0)}
                   r="5"
                   fill="var(--green)"
-                  stroke="white"
+                  stroke="var(--surface)"
                   strokeWidth="2"
                 />
               )}
