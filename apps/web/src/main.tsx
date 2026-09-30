@@ -47,6 +47,7 @@ import { TeamManagementPage } from './team';
 import { OwnerDashboardPage } from './owner-dashboard';
 import { ActionCenterPage } from './action-center';
 import { PriceTagsPage } from './price-tags';
+import { PriceCheckPage } from './price-check';
 import { PromotionsPage } from './promotions';
 import { ManagementAccessPage } from './management-access';
 import { SalesPage, ShiftsPage } from './reports';
@@ -68,6 +69,7 @@ function Root() {
       !location.pathname.startsWith('/pos/') &&
       location.pathname !== '/pos' &&
       location.pathname !== '/price-tags' &&
+      location.pathname !== '/price-check' &&
       location.pathname !== '/management-access',
   });
   React.useEffect(() => {
@@ -75,15 +77,18 @@ function Root() {
     if (location.pathname.startsWith('/pos/')) return;
     if (environment.data?.type === 'pos') window.location.replace('/pos');
     if (environment.data?.type === 'price_tags') window.location.replace('/price-tags');
+    if (environment.data?.type === 'price_check') window.location.replace('/price-check');
   }, [environment.data?.type, location.pathname]);
   if (
     !location.pathname.startsWith('/pos/') &&
     location.pathname !== '/pos' &&
     location.pathname !== '/price-tags' &&
+    location.pathname !== '/price-check' &&
     location.pathname !== '/management-access' &&
     (environment.isPending ||
       environment.data?.type === 'pos' ||
-      environment.data?.type === 'price_tags')
+      environment.data?.type === 'price_tags' ||
+      environment.data?.type === 'price_check')
   )
     return <div className="loading">{t('Loading…')}</div>;
   return (
@@ -92,6 +97,7 @@ function Root() {
       {location.pathname === '/pos' ||
       location.pathname.startsWith('/pos/') ||
       location.pathname === '/price-tags' ||
+      location.pathname === '/price-check' ||
       location.pathname === '/management-access' ? (
         <Outlet />
       ) : (
@@ -141,6 +147,7 @@ const routes = [
     component: () => <ReceiptDetailPage checkout refund />,
   }),
   createRoute({ getParentRoute: () => root, path: '/price-tags', component: PriceTagsPage }),
+  createRoute({ getParentRoute: () => root, path: '/price-check', component: PriceCheckPage }),
   createRoute({
     getParentRoute: () => root,
     path: '/management-access',

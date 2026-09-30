@@ -43,6 +43,7 @@ import { AiAgentModule } from './ai-agent.js';
 import { CheckoutModule } from './checkout.js';
 import { ExpensesModule } from './expenses.js';
 import { PriceTagsModule } from './price-tags.js';
+import { PriceCheckModule } from './price-check.js';
 @Catch()
 class Errors implements ExceptionFilter {
   catch(error: unknown, host: ArgumentsHost) {
@@ -129,6 +130,7 @@ class HealthController {
     RegisterModule,
     CheckoutModule,
     PriceTagsModule,
+    PriceCheckModule,
     ExpensesModule,
     PurchasingModule,
     ScannedDocumentsModule,

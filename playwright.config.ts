@@ -17,7 +17,8 @@ export default defineConfig({
       timeout: 30000,
     },
     {
-      command: 'pnpm --filter @eliza/web exec vite --host 127.0.0.1 --port 5174',
+      command: '../../node_modules/.bin/vite --host 127.0.0.1 --port 5174',
+      cwd: './apps/web',
       url: 'http://localhost:5174',
       env: { ELIZA_API_TARGET: 'http://127.0.0.1:3002' },
       reuseExistingServer: false,

@@ -138,7 +138,7 @@ export class ManagementController {
       z.object({
         name: z.string().trim().min(1).max(120),
         active: z.boolean(),
-        type: z.enum(['management', 'pos', 'price_tags']).optional(),
+        type: z.enum(['management', 'pos', 'price_tags', 'price_check']).optional(),
       }),
       input,
     );

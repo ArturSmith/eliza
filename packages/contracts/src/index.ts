@@ -138,7 +138,7 @@ export const adjustmentSchema = z.object({
 });
 export const deviceSchema = z.object({
   name: short,
-  type: z.enum(['management', 'pos', 'inventory']),
+  type: z.enum(['management', 'pos', 'price_tags', 'price_check']),
 });
 export type ProductInput = z.infer<typeof productSchema>;
 export type AdjustmentInput = z.infer<typeof adjustmentSchema>;
@@ -157,7 +157,7 @@ export type Product = Omit<ProductInput, 'cost'> & {
 export type Session = {
   user: { id: string; name: string; email: string; role: string; permissions: Permission[] };
   store: { id: string; name: string; currency: string; timezone: string };
-  device: { id: string; name: string; type: 'management' | 'pos' | 'price_tags' };
+  device: { id: string; name: string; type: 'management' | 'pos' | 'price_tags' | 'price_check' };
 };
 export type Movement = {
   id: string;
@@ -184,7 +184,7 @@ export type AuditEvent = {
 export type Device = {
   id: string;
   name: string;
-  type: 'management' | 'pos' | 'price_tags';
+  type: 'management' | 'pos' | 'price_tags' | 'price_check';
   active: boolean;
   createdAt: string;
 };

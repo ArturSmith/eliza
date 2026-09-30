@@ -1194,7 +1194,13 @@ export function DevicesPage() {
     onSuccess: () => {
       if (edit?.id === session.device.id && edit.type !== session.device.type) {
         window.location.assign(
-          edit.type === 'price_tags' ? '/price-tags' : edit.type === 'pos' ? '/pos' : '/',
+          edit.type === 'price_tags'
+            ? '/price-tags'
+            : edit.type === 'price_check'
+              ? '/price-check'
+              : edit.type === 'pos'
+                ? '/pos'
+                : '/',
         );
         return;
       }
@@ -1233,7 +1239,9 @@ export function DevicesPage() {
                 ? t('Management browser')
                 : d.type === 'price_tags'
                   ? t('Price Tags')
-                  : t('Checkout')}
+                  : d.type === 'price_check'
+                    ? t('Price checker')
+                    : t('Checkout')}
               {d.id === session.device.id ? t(' · This device') : ''}
             </p>
             <small>
@@ -1301,6 +1309,7 @@ export function DevicesPage() {
                 <option value="management">{t('Management')}</option>
                 <option value="pos">{t('Checkout')}</option>
                 <option value="price_tags">{t('Price Tags')}</option>
+                <option value="price_check">{t('Price checker')}</option>
               </select>
             </Field>
             <ErrorMessage error={mutation.error} />
