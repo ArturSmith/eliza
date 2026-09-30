@@ -27,7 +27,7 @@ export class PriceTagsController {
     return (
       await this.database.pool.query(
         `SELECT u.id,u.barcode,p.id AS "productId",p.name,p.sku,
-          m.final_unit_price::text AS price,m.base_unit_price::text AS "regularPrice",
+          m.final_unit_price::text AS price,m.original_unit_price::text AS "regularPrice",
           b.expiry_date AS "expiryDate",m.valid_until AS "validUntil"
          FROM markdown_units u
          JOIN markdowns m ON m.id=u.markdown_id AND m.store_id=u.store_id

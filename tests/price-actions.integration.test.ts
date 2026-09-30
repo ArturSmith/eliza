@@ -371,6 +371,65 @@ describe.sequential('manager price actions', () => {
       discount: '14.00',
       grossProfit: String(56 - Number(snapshot.cost_total) - 0) + '.00',
     });
+    const markdown = await manager.request(`/products/${productId}/pricing/limited`, {
+      requestId: crypto.randomUUID(),
+      quantity: 1,
+      price: '50.00',
+      reason: 'EXPIRING_SOON',
+    });
+    expect(markdown.status).toBe(201);
+    expect(markdown.body.labels[0]).toMatchObject({ price: '50.00', regularPrice: '70.00' });
+    const markdownPrice = (
+      await db.pool.query(
+        'SELECT base_unit_price::text,original_unit_price::text FROM markdowns WHERE id=$1',
+        [markdown.body.markdownId],
+      )
+    ).rows[0];
+    expect(markdownPrice).toMatchObject({
+      base_unit_price: '60.00',
+      original_unit_price: '70.00',
+    });
+    expect(
+      (await register.request(`/pos/products?code=${markdown.body.labels[0].barcode}`)).body,
+    ).toMatchObject([
+      {
+        price: '50.00',
+        regularPrice: '70.00',
+        markdownUnitId: markdown.body.labels[0].id,
+      },
+    ]);
+    const markedSale = await register.request(
+      '/pos/sales',
+      sale(
+        [
+          {
+            productId,
+            quantity: '1',
+            expectedPrice: '50.00',
+            expectedTaxRate: '0.00',
+            markdownUnitId: markdown.body.labels[0].id,
+          },
+        ] as any,
+        '50.00',
+      ),
+    );
+    expect(markedSale.status).toBe(201);
+    expect(markedSale.body).toMatchObject({ subtotal: '70.00', discount: '20.00', total: '50.00' });
+    expect(markedSale.body.lines[0]).toMatchObject({
+      baseUnitPrice: '70.00',
+      gross: '70.00',
+      discount: '20.00',
+      total: '50.00',
+    });
+    const markedSnapshot = (
+      await db.pool.query(
+        'SELECT base_unit_price::text,cost_total::text,discount_total::text FROM sale_items WHERE sale_id=$1',
+        [markedSale.body.id],
+      )
+    ).rows[0];
+    expect(markedSnapshot.base_unit_price).toBe('70.00');
+    expect(markedSnapshot.discount_total).toBe('20.00');
+    expect(['59.00', '60.00']).toContain(markedSnapshot.cost_total);
   });
   it('applies category rules to later products and never raises a cheap item price', async () => {
     const store = (await db.pool.query('SELECT store_id FROM products WHERE id=$1', [productId]))

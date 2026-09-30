@@ -138,5 +138,28 @@ describe('pricing V1 migration', () => {
     ).rows[0];
     expect(role.permissions).toContain('promotions.manage');
     expect(role.permissions).toContain('markdowns.manage');
+    const markdown = (
+      await client.query(
+        `INSERT INTO markdowns(store_id,product_id,quantity,reason,base_unit_price,final_unit_price)
+         VALUES($1,$2,1,'EXPIRING_SOON',60,50) RETURNING id`,
+        [store, parent],
+      )
+    ).rows[0].id;
+    await client.query(readFileSync(`${dir}/0048_markdown_regular_price.sql`, 'utf8'));
+    expect(
+      (
+        await client.query(
+          'SELECT base_unit_price::text,original_unit_price::text FROM markdowns WHERE id=$1',
+          [markdown],
+        )
+      ).rows[0],
+    ).toMatchObject({ base_unit_price: '60.00', original_unit_price: '70.00' });
+    expect(
+      (
+        await client.query('SELECT price::text,total::text FROM sale_items WHERE id=$1', [
+          historicalLine,
+        ])
+      ).rows[0],
+    ).toMatchObject({ price: '40.00', total: '40.00' });
   });
 });

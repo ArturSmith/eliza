@@ -63,12 +63,16 @@ export function ReceiptView({
             <div>
               <strong>{l.name}</strong>
               <small>
-                {l.quantity} {t(l.unit ?? '')} × {formatMoney(l.price, receipt.currency)}{' '}
+                {l.quantity} {t(l.unit ?? '')} ×{' '}
+                {formatMoney(
+                  Number(l.discount) > 0 && l.baseUnitPrice ? l.baseUnitPrice : l.price,
+                  receipt.currency,
+                )}{' '}
                 {t(' · tax')} {Number(l.taxRate)}%
               </small>
               {Number(l.discount) > 0 && (
                 <small>
-                  {t('Discount −')}
+                  {l.pricingSource === 'MARKDOWN' ? `${t('Unit markdown')} −` : t('Discount −')}
                   {formatMoney(l.discount, receipt.currency)}
                 </small>
               )}

@@ -186,7 +186,7 @@ export class PriceActionsController {
       await this.database.pool.query(
         `SELECT u.id,u.barcode,u.status,u.batch_id AS "batchId",u.sold_at AS "soldAt",
         u.replacement_for_id AS "replacementForId",
-        m.final_unit_price::text AS price,m.base_unit_price::text AS "regularPrice",
+        m.final_unit_price::text AS price,m.original_unit_price::text AS "regularPrice",
         b.expiry_date AS "expiryDate",m.valid_until AS "validUntil"
        FROM markdown_units u JOIN markdowns m ON m.id=u.markdown_id
        JOIN stock_batches b ON b.id=u.batch_id
@@ -267,8 +267,8 @@ export class PriceActionsController {
         throw new ConflictException('Not enough unreserved sellable units remain.');
       const markdownId = randomUUID();
       await client.query(
-        `INSERT INTO markdowns(id,store_id,product_id,quantity,reason,base_unit_price,final_unit_price,valid_until,created_by)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        `INSERT INTO markdowns(id,store_id,product_id,quantity,reason,base_unit_price,original_unit_price,final_unit_price,valid_until,created_by)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [
           markdownId,
           store,
@@ -276,6 +276,7 @@ export class PriceActionsController {
           body.quantity,
           body.reason,
           base.price,
+          product.price,
           body.price,
           validUntil,
           req.context.user.id,
@@ -298,7 +299,7 @@ export class PriceActionsController {
           barcode,
           quantity: 1,
           price: body.price,
-          regularPrice: base.price,
+          regularPrice: product.price,
           expiryDate: batch.expiry_date,
           name: product.name,
         });
@@ -398,7 +399,7 @@ export class PriceActionsController {
       if (!product) throw new NotFoundException('Product not found.');
       const old = (
         await client.query(
-          `SELECT u.*,m.final_unit_price::text AS price,m.base_unit_price::text AS "regularPrice",
+          `SELECT u.*,m.final_unit_price::text AS price,m.original_unit_price::text AS "regularPrice",
           m.valid_until,b.expiry_date AS "expiryDate"
          FROM markdown_units u JOIN markdowns m ON m.id=u.markdown_id
          JOIN stock_batches b ON b.id=u.batch_id

@@ -28,7 +28,7 @@ export async function resolvePrice(
   if (markdownUnitId) {
     const unit = (
       await client.query(
-        `SELECT u.id,u.status,m.final_unit_price::text AS price,m.base_unit_price::text AS base_price,
+        `SELECT u.id,u.status,m.final_unit_price::text AS price,m.original_unit_price::text AS base_price,
         (m.valid_from<=now() AND (m.valid_until IS NULL OR m.valid_until>now())) AS time_valid,m.cancelled_at,
         (b.quantity>=1 AND (b.expiry_date IS NULL OR
           b.expiry_date>(now() AT TIME ZONE s.timezone)::date)) AS batch_sellable

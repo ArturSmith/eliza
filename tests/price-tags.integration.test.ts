@@ -106,8 +106,8 @@ describe.sequential('Price Tags station', () => {
     ).rows[0].id;
     const markdown = (
       await db.pool.query(
-        `INSERT INTO markdowns(store_id,product_id,quantity,reason,base_unit_price,final_unit_price)
-         VALUES($1,$2,2,'EXPIRING_SOON',12,9) RETURNING id`,
+        `INSERT INTO markdowns(store_id,product_id,quantity,reason,base_unit_price,original_unit_price,final_unit_price)
+         VALUES($1,$2,2,'EXPIRING_SOON',12,12,9) RETURNING id`,
         [session.store.id, product.body.id],
       )
     ).rows[0].id;
