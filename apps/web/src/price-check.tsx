@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ScanLine, Tag } from 'lucide-react';
+import { Package, ScanLine, Tag } from 'lucide-react';
 import { api } from './api';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
 import { t, translateError, useLanguage } from './i18n';
@@ -9,6 +9,12 @@ import './price-check.css';
 
 type CheckedProduct = {
   name: string;
+  description: string;
+  image: string;
+  category: string;
+  brand: string;
+  packageQuantity: string;
+  barcode: string;
   unit: string;
   price: string;
   regularPrice: string | null;
@@ -121,6 +127,16 @@ export function PriceCheckPage() {
         ) : (
           <>
             <form className="price-check-form" onSubmit={submit}>
+              <div className="price-check-scanner" onPointerDown={prepareAudio}>
+                <CameraBarcodeScanner
+                  disabled={!context.data}
+                  onScan={(value) => void scan(value)}
+                  onOpen={prepareAudio}
+                  continuous
+                  inline
+                  alwaysOn
+                />
+              </div>
               <label htmlFor="price-check-barcode">{t('Scan the product barcode')}</label>
               <div className="price-check-input-row">
                 <ScanLine size={28} aria-hidden="true" />
@@ -136,12 +152,6 @@ export function PriceCheckPage() {
                   placeholder={t('Ready to scan')}
                   onFocus={prepareAudio}
                   onChange={(event) => setCode(event.target.value)}
-                />
-                <CameraBarcodeScanner
-                  disabled={!context.data}
-                  onScan={(value) => void scan(value)}
-                  onOpen={prepareAudio}
-                  continuous
                 />
               </div>
               <button
@@ -162,27 +172,47 @@ export function PriceCheckPage() {
                 <p role="alert">{message}</p>
               ) : product ? (
                 <div className="price-check-product">
-                  {product.discountType && (
-                    <span className="price-check-badge">
-                      {t(product.discountType === 'markdown' ? 'Reduced price' : 'Promotion')}
-                    </span>
-                  )}
-                  <h2>{product.name}</h2>
-                  {product.regularPrice && product.regularPrice !== product.price && (
-                    <p className="price-check-regular">
-                      {t('Regular price')}: <s>{formatMoney(product.regularPrice, currency)}</s>
+                  <div className="price-check-photo">
+                    {product.image ? (
+                      <img src={product.image} alt={product.name} />
+                    ) : (
+                      <Package size={56} aria-hidden="true" />
+                    )}
+                  </div>
+                  <div className="price-check-product-details">
+                    {product.discountType && (
+                      <span className="price-check-badge">
+                        {t(product.discountType === 'markdown' ? 'Reduced price' : 'Promotion')}
+                      </span>
+                    )}
+                    {product.brand && <p className="price-check-brand">{product.brand}</p>}
+                    <h2>{product.name}</h2>
+                    {product.description && (
+                      <p className="price-check-description">{product.description}</p>
+                    )}
+                    <div className="price-check-metadata">
+                      {product.category && <span>{product.category}</span>}
+                      {product.packageQuantity && <span>{product.packageQuantity}</span>}
+                    </div>
+                    {product.regularPrice && product.regularPrice !== product.price && (
+                      <p className="price-check-regular">
+                        {t('Regular price')}: <s>{formatMoney(product.regularPrice, currency)}</s>
+                      </p>
+                    )}
+                    <p className="price-check-price">
+                      {formatMoney(product.price, currency)}
+                      <span> / {t(product.unit)}</span>
                     </p>
-                  )}
-                  <p className="price-check-price">
-                    {formatMoney(product.price, currency)}
-                    <span> / {t(product.unit)}</span>
-                  </p>
-                  {product.quantity && product.totalPrice && (
-                    <p className="price-check-weight">
-                      {product.quantity} {t('kg')} · {t('Package price')}:{' '}
-                      <strong>{formatMoney(product.totalPrice, currency)}</strong>
+                    {product.quantity && product.totalPrice && (
+                      <p className="price-check-weight">
+                        {product.quantity} {t('kg')} · {t('Package price')}:{' '}
+                        <strong>{formatMoney(product.totalPrice, currency)}</strong>
+                      </p>
+                    )}
+                    <p className="price-check-barcode">
+                      {t('Barcode')}: {product.barcode}
                     </p>
-                  )}
+                  </div>
                 </div>
               ) : (
                 <p className="price-check-placeholder">

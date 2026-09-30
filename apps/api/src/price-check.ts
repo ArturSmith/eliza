@@ -21,6 +21,12 @@ import { Database, DatabaseModule } from './database.js';
 import { resolvePrice } from './pricing-engine.js';
 import { cookie, hash } from './security.js';
 
+// Only customer-facing catalog fields belong in the kiosk response.
+const productFields = `p.id,p.name,p.description,p.image,p.category,p.unit,
+  COALESCE(p.source->>'brand','') AS brand,
+  COALESCE(p.source->>'quantity','') AS "packageQuantity",
+  p.price::text,p.regular_price::text,p.price_kind,p.category_id`;
+
 @Controller('price-check')
 export class PriceCheckController {
   constructor(private database: Database) {}
@@ -71,13 +77,13 @@ export class PriceCheckController {
     }
     const products = await this.database.pool.query(
       markdown
-        ? `SELECT p.id,p.name,p.unit,p.price::text,p.regular_price::text,p.price_kind,p.category_id
+        ? `SELECT ${productFields}
            FROM products p WHERE p.store_id=$1 AND p.id=$2 AND p.active`
         : decoded
-          ? `SELECT p.id,p.name,p.unit,p.price::text,p.regular_price::text,p.price_kind,p.category_id
+          ? `SELECT ${productFields}
              FROM products p WHERE p.store_id=$1 AND p.active AND p.plu ~ '^[0-9]+$'
                AND ltrim(p.plu,'0')=ltrim($2,'0')`
-          : `SELECT p.id,p.name,p.unit,p.price::text,p.regular_price::text,p.price_kind,p.category_id
+          : `SELECT ${productFields}
              FROM products p JOIN barcodes b ON b.product_id=p.id AND b.store_id=p.store_id
              WHERE p.store_id=$1 AND p.active AND b.value=$2`,
       [station.store_id, markdown?.product_id ?? decoded?.productCode ?? code],
@@ -109,6 +115,12 @@ export class PriceCheckController {
       : null;
     return {
       name: product.name,
+      description: product.description,
+      image: product.image,
+      category: product.category,
+      brand: product.brand,
+      packageQuantity: product.packageQuantity,
+      barcode: code,
       unit: product.unit,
       price: resolved.price,
       regularPrice: resolved.source === 'BASE' ? null : resolved.basePrice,

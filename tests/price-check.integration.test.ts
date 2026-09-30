@@ -91,6 +91,14 @@ describe.sequential('customer price checker', () => {
   it('shows the current product promotion and one-use markdown price', async () => {
     const product = await manager.request('/products', {
       name: 'Yogurt',
+      description: 'Plain yogurt with live cultures.',
+      image: 'data:image/jpeg;base64,/9j/2Q==',
+      source: {
+        barcode: '709000000039',
+        brand: 'Farmhouse',
+        quantity: '500 g',
+        imageImported: false,
+      },
       sku: 'CHECK-YOGURT',
       category: 'Dairy',
       unit: 'piece',
@@ -109,11 +117,21 @@ describe.sequential('customer price checker', () => {
       "INSERT INTO stock_batches(store_id,product_id,quantity,unit_cost,cost_source) VALUES($1,$2,3,59,'adjustment')",
       [storeId, productId],
     );
-    expect((await checker.request('/price-check/lookup?code=709000000039')).body).toMatchObject({
+    const publicProduct = (await checker.request('/price-check/lookup?code=709000000039')).body;
+    expect(publicProduct).toMatchObject({
       name: 'Yogurt',
+      description: 'Plain yogurt with live cultures.',
+      image: 'data:image/jpeg;base64,/9j/2Q==',
+      category: 'Dairy',
+      brand: 'Farmhouse',
+      packageQuantity: '500 g',
+      barcode: '709000000039',
+      unit: 'piece',
       price: '70.00',
       regularPrice: null,
     });
+    for (const privateField of ['cost', 'stock', 'sku', 'plu', 'taxRate', 'source', 'category_id'])
+      expect(publicProduct).not.toHaveProperty(privateField);
     expect((await checker.request('/price-check/lookup?code=000000000000')).status).toBe(404);
     const promo = await manager.request('/promotions', {
       name: 'Yogurt promotion',

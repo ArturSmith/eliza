@@ -9,29 +9,34 @@ export function CameraBarcodeScanner({
   disabled = false,
   continuous = false,
   inline = false,
+  alwaysOn = false,
   onOpen,
 }: {
   onScan: (barcode: string) => void;
   disabled?: boolean;
   continuous?: boolean;
   inline?: boolean;
+  alwaysOn?: boolean;
   onOpen?: () => void;
 }) {
   useLanguage();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(alwaysOn);
   const [error, setError] = useState('');
+  const [retry, setRetry] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const onScanRef = useRef(onScan);
   onScanRef.current = onScan;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || disabled) return;
     let cancelled = false;
     let controls: IScannerControls | undefined;
     let detected = false;
     let lastCode = '';
     let lastSeenAt = 0;
     const start = async () => {
+      setError('');
+      if (alwaysOn) onOpen?.();
       if (!navigator.mediaDevices?.getUserMedia) {
         setError(
           t('Camera access is unavailable. Use HTTPS or localhost and allow camera access.'),
@@ -76,7 +81,7 @@ export function CameraBarcodeScanner({
       cancelled = true;
       controls?.stop();
     };
-  }, [open, continuous]);
+  }, [open, continuous, disabled, retry, alwaysOn]);
 
   const preview = (
     <div className="camera-scan-preview">
@@ -86,39 +91,52 @@ export function CameraBarcodeScanner({
   );
   return (
     <>
-      <button
-        type="button"
-        className="camera-scan-button"
-        aria-label={t(open && inline ? 'Close camera' : 'Scan with camera')}
-        title={t(open && inline ? 'Close camera' : 'Scan with camera')}
-        aria-expanded={open}
-        disabled={disabled}
-        onClick={() => {
-          if (open) {
-            setOpen(false);
-            return;
-          }
-          setError('');
-          onOpen?.();
-          setOpen(true);
-        }}
-      >
-        {open && inline ? (
-          <X size={18} aria-hidden="true" />
-        ) : (
-          <ScanLine size={18} aria-hidden="true" />
-        )}
-      </button>
-      {inline ? (
+      {!alwaysOn && (
+        <button
+          type="button"
+          className="camera-scan-button"
+          aria-label={t(open && inline ? 'Close camera' : 'Scan with camera')}
+          title={t(open && inline ? 'Close camera' : 'Scan with camera')}
+          aria-expanded={open}
+          disabled={disabled}
+          onClick={() => {
+            if (open) {
+              setOpen(false);
+              return;
+            }
+            setError('');
+            onOpen?.();
+            setOpen(true);
+          }}
+        >
+          {open && inline ? (
+            <X size={18} aria-hidden="true" />
+          ) : (
+            <ScanLine size={18} aria-hidden="true" />
+          )}
+        </button>
+      )}
+      {inline || alwaysOn ? (
         open && (
-          <div className="camera-scan-inline">
+          <div className={`camera-scan-inline${alwaysOn ? ' camera-scan-always-on' : ''}`}>
             <p>
               {t(
-                'Point your camera at each barcode. Scanning continues until you close the camera.',
+                alwaysOn
+                  ? 'Point a barcode at the camera. It is ready for the next product.'
+                  : 'Point your camera at each barcode. Scanning continues until you close the camera.',
               )}
             </p>
             {preview}
-            {error && <p role="alert">{error}</p>}
+            {error && (
+              <div className="camera-scan-retry" role="alert">
+                <p>{error}</p>
+                {alwaysOn && (
+                  <button type="button" onClick={() => setRetry((value) => value + 1)}>
+                    {t('Try camera again')}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         )
       ) : (

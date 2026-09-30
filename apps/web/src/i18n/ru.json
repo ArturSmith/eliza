@@ -3,6 +3,8 @@
   "Check a price": "Узнать цену",
   "Scan the product barcode": "Отсканируйте штрих-код товара",
   "Ready to scan": "Готово к сканированию",
+  "Point a barcode at the camera. It is ready for the next product.": "Поднесите штрих-код к камере. Она готова к следующему товару.",
+  "Try camera again": "Включить камеру снова",
   "Check price": "Проверить цену",
   "Checking price…": "Проверяем цену…",
   "Could not check the price.": "Не удалось проверить цену.",
