@@ -13,7 +13,6 @@ import {
 } from '@tanstack/react-router';
 import { api, queryClient } from './api';
 import { Shell, Overview, ProductsPage, InventoryPage, AuditPage, DevicesPage } from './pages';
-import { LanguageSwitcher } from './i18n/LanguageSwitcher';
 import { applyTheme, initialTheme } from './theme';
 import './theme.css';
 import './styles.css';
@@ -48,6 +47,7 @@ import { AiAgentPage } from './ai-agent';
 import { DigitalPurchasesPage } from './digital-purchases';
 import { TeamManagementPage } from './team';
 import { OwnerDashboardPage } from './owner-dashboard';
+import { StoreLayoutPage } from './store-layout';
 import { ActionCenterPage } from './action-center';
 import { PriceTagsPage } from './price-tags';
 import { PriceCheckPage } from './price-check';
@@ -96,7 +96,6 @@ function Root() {
     return <div className="loading">{t('Loading…')}</div>;
   return (
     <>
-      <LanguageSwitcher />
       {location.pathname === '/pos' ||
       location.pathname.startsWith('/pos/') ||
       location.pathname === '/price-tags' ||
@@ -173,6 +172,7 @@ const routes = [
   createRoute({ getParentRoute: () => root, path: '/team', component: TeamManagementPage }),
   createRoute({ getParentRoute: () => root, path: '/devices', component: DevicesPage }),
   createRoute({ getParentRoute: () => root, path: '/settings', component: StoreSettingsPage }),
+  createRoute({ getParentRoute: () => root, path: '/store-layout', component: StoreLayoutPage }),
   createRoute({ getParentRoute: () => root, path: '/expenses', component: ExpensesPage }),
 ];
 const router = createRouter({ routeTree: root.addChildren(routes) });

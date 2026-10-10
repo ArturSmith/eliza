@@ -107,7 +107,10 @@ test('plans low stock, saves edits, groups supplier drafts and retains order lin
   await page.getByRole('link', { name: orders[0].number, exact: true }).first().click();
   await expect(page.getByRole('heading', { name: orders[0].number, exact: true })).toBeVisible();
   await page.goto('/shopping-lists');
-  await page.getByLabel('Language', { exact: true }).selectOption('ru');
+  const languageSettings = await page.context().newPage();
+  await languageSettings.goto('/settings');
+  await languageSettings.getByLabel('Language', { exact: true }).selectOption('ru');
+  await languageSettings.close();
   await expect(page.getByRole('heading', { name: 'Списки закупок', exact: true })).toBeVisible();
   await page
     .getByRole('row')

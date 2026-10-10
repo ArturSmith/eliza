@@ -45,6 +45,7 @@ import { CheckoutModule } from './checkout.js';
 import { ExpensesModule } from './expenses.js';
 import { PriceTagsModule } from './price-tags.js';
 import { PriceCheckModule } from './price-check.js';
+import { StoreLayoutModule } from './store-layout.js';
 @Catch()
 class Errors implements ExceptionFilter {
   catch(error: unknown, host: ArgumentsHost) {
@@ -142,6 +143,7 @@ class HealthController {
     GrossProfitModule,
     FinancialMetricsModule,
     StoreSettingsModule,
+    StoreLayoutModule,
     RefundModule,
   ],
   controllers: [HealthController],

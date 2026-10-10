@@ -7,24 +7,25 @@ test('language persists, switches across tabs, and preserves forms and business 
 }) => {
   await page.goto('/');
   await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
-  await page.getByLabel('Название магазина', { exact: true }).fill('Sales');
-  await page.getByLabel('Язык', { exact: true }).selectOption('en');
-  await expect(page.getByLabel('Store name', { exact: true })).toHaveValue('Sales');
+  await expect(page.locator('#root > .language-bar')).toHaveCount(0);
+  await page.evaluate(() => localStorage.setItem('eliza.language', 'en'));
+  await page.reload();
+  await page.getByLabel('Store name', { exact: true }).fill('Sales');
   await page.getByLabel('Your name', { exact: true }).fill('Cash');
   await page.getByLabel('Email address').fill('language@example.test');
   await page.getByLabel('Password', { exact: true }).fill('local-test-password-123');
   await page.getByRole('button', { name: 'Create my store' }).click();
   await page.getByRole('link', { name: 'Products', exact: true }).click();
   const second = await context.newPage();
-  await second.goto('/products');
+  await second.goto('/settings');
   await page.getByRole('button', { name: 'Add product', exact: true }).first().click();
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('Product name', { exact: true }).fill('Cash');
   await dialog.getByLabel('Description (optional)').fill('Original description');
   await dialog.getByLabel('SKU', { exact: true }).fill('LANG-001');
   await dialog.getByLabel('Category', { exact: true }).fill('Sales');
-  await dialog.getByLabel('Selling price', { exact: true }).fill('30');
   await dialog.getByLabel('Purchase cost', { exact: true }).fill('15');
+  await dialog.getByLabel('Selling price', { exact: true }).fill('30');
   await second.getByLabel('Language', { exact: true }).selectOption('ru');
   await expect(dialog.getByLabel('Название товара', { exact: true })).toHaveValue('Cash');
   await expect(dialog.getByLabel('Описание (необязательно)')).toHaveValue('Original description');
@@ -47,7 +48,7 @@ test('language persists, switches across tabs, and preserves forms and business 
   await expect(page.getByRole('button', { name: 'Запасы и закупки', exact: true })).toBeVisible();
   await page.screenshot({ path: test.info().outputPath('russian-products.png') });
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByLabel('Язык', { exact: true })).toBeInViewport();
+  await expect(page.locator('#root > .language-bar')).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
@@ -57,7 +58,7 @@ test('language persists, switches across tabs, and preserves forms and business 
   await page.getByLabel('Группировать продажи по').selectOption('month');
   await expect(page.getByLabel('Группировать продажи по')).toHaveValue('month');
   await page.getByRole('button', { name: 'Применить фильтры' }).click();
-  await page.getByLabel('Язык', { exact: true }).selectOption('en');
+  await second.getByLabel('Язык', { exact: true }).selectOption('en');
   await expect(page.getByLabel('Group sales by')).toHaveValue('month');
   await page.goto('/team');
   await page.getByRole('button', { name: 'Edit Cash' }).click();
@@ -74,13 +75,15 @@ test('language persists, switches across tabs, and preserves forms and business 
     },
   });
   expect(stock.ok(), await stock.text()).toBe(true);
+  const enrolled = await page.request.post('/api/pos/enroll', {
+    headers: { 'X-Eliza-Request': '1', Origin: 'http://localhost:5174' },
+    data: { name: 'Register A' },
+  });
+  expect(enrolled.ok(), await enrolled.text()).toBe(true);
   await page.goto('/pos');
-  await expect(page.getByLabel('Language', { exact: true })).toHaveValue('en');
-  await page.getByLabel('Language', { exact: true }).selectOption('ru');
+  await second.getByLabel('Language', { exact: true }).selectOption('ru');
   await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
-  await page.getByLabel('Название кассы').fill('Register A');
-  await page.getByRole('button', { name: 'Зарегистрировать кассу' }).click();
-  await page.getByLabel('Код сотрудника').selectOption('OWNER');
+  await page.getByLabel('Код сотрудника', { exact: true }).selectOption('OWNER');
   await page.getByLabel('PIN кассира').fill('654321');
   await page.getByRole('button', { name: 'Разблокировать кассу' }).click();
   await page.getByRole('button', { name: 'Открыть смену', exact: true }).click();
@@ -93,7 +96,6 @@ test('language persists, switches across tabs, and preserves forms and business 
   await page.getByRole('button', { name: 'Take payment', exact: true }).click();
   await dialog.getByLabel('Cash tendered').fill('30');
   // Another tab changes the language while payment details are still being entered.
-  await second.reload();
   await second.getByLabel('Language', { exact: true }).selectOption('ru');
   await expect(dialog.getByLabel('Получено наличными')).toHaveValue('30');
   await dialog.getByRole('button', { name: 'Завершить продажу', exact: true }).click();

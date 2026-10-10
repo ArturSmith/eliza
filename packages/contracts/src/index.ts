@@ -1,4 +1,5 @@
 import { z } from 'zod';
+export * from './store-layout.js';
 export const permissions = [
   'catalog.read',
   'costs.read',

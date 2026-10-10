@@ -1,6 +1,21 @@
 /* All interface colors live here. Edit the semantic tokens for the main palette;
    the legacy aliases keep component-specific shades centralized during migration. */
 :root {
+  --layout-floor: #eeeee5;
+  --layout-grid: #d4d6ca;
+  --layout-wall: #c8cbbd;
+  --layout-edge: #829386;
+  --layout-fixture: #9abb9f;
+  --layout-cold: #c6d9d3;
+  --layout-glass: #a7c5cb;
+  --layout-checkout: #587967;
+  --layout-screen: #263b34;
+  --layout-wood: #cbb17a;
+  --layout-label: #25352e;
+  --layout-product-0: #d78469;
+  --layout-product-1: #ddca78;
+  --layout-product-2: #7da986;
+  --layout-product-3: #84a7b8;
   color-scheme: light;
   --page: #f7f8f5;
   --surface: #fff;

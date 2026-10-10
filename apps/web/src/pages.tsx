@@ -115,6 +115,7 @@ const navGroups = [
       { to: '/devices', label: 'Devices', icon: Monitor, permission: 'devices.manage' },
       { to: '/audit', label: 'Activity log', icon: ScrollText, permission: 'audit.read' },
       { to: '/settings', label: 'Store settings', icon: Settings, permission: 'settings.manage' },
+      { to: '/store-layout', label: 'Store layout', icon: Store, permission: 'settings.manage' },
     ],
   },
 ] as const;

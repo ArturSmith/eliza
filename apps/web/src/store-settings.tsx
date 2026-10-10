@@ -1,7 +1,7 @@
 import { type ScaleBarcodeSettings, type TagDesign } from '@eliza/contracts';
 import { Ean13Barcode } from './ean13-barcode';
 import './store-settings.css';
-import { t, useLanguage } from './i18n';
+import { t, useLanguage, setLanguage, type Language } from './i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, refresh } from './api';
@@ -46,7 +46,7 @@ export function StoreSettingsPage() {
   );
 }
 function Editor({ profile }: { profile: Profile }) {
-  useLanguage();
+  const language = useLanguage();
   const [value, setValue] = useState(profile),
     [customNoSales, setCustomNoSales] = useState(
       ![14, 30, 60, 90].includes(profile.noSalesThresholdDays),
@@ -71,6 +71,7 @@ function Editor({ profile }: { profile: Profile }) {
     <div className="store-settings-layout">
       <nav className="store-settings-nav" aria-label={t('Settings sections')}>
         <strong>{t('Settings sections')}</strong>
+        <a href="#interface-settings">{t('Language')}</a>
         <a href="#business-details">{t('Business details')}</a>
         <a href="#product-defaults">{t('Product defaults')}</a>
         <a href="#inventory-alerts">{t('Inventory alerts')}</a>
@@ -87,6 +88,15 @@ function Editor({ profile }: { profile: Profile }) {
         }}
       >
         <fieldset disabled={busy}>
+          <section id="interface-settings" className="store-settings-section panel">
+            <header><h2>{t('Language')}</h2></header>
+            <Field label={t('Language')}>
+              <select value={language} onChange={event => setLanguage(event.target.value as Language)}>
+                <option value="en" lang="en">English</option>
+                <option value="ru" lang="ru">Русский</option>
+              </select>
+            </Field>
+          </section>
           <section id="business-details" className="store-settings-section panel">
             <header>
               <h2>{t('Business details')}</h2>

@@ -68,6 +68,9 @@ test('receiving and payment statuses stay independent and payment filters persis
   await expect(page.getByRole('cell', { name: 'received', exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('cell', { name: /Paid/ })).toBeVisible();
-  await page.getByLabel('Language', { exact: true }).selectOption('ru');
+  const languageSettings = await page.context().newPage();
+  await languageSettings.goto('/settings');
+  await languageSettings.getByLabel('Language', { exact: true }).selectOption('ru');
+  await languageSettings.close();
   await expect(page.getByRole('cell', { name: /Оплачен/ })).toBeVisible();
 });
