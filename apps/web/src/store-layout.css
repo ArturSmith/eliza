@@ -92,6 +92,10 @@
   background: var(--page);
   touch-action: none;
   user-select: none;
+  cursor: grab;
+}
+.store-layout-scene:active {
+  cursor: grabbing;
 }
 .store-layout-equipment {
   cursor: grab;

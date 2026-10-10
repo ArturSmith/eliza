@@ -28,7 +28,10 @@ plans use version 0; the first saved plan has version 1.
 ## Rendering and scope
 
 The scene projects procedural 3D equipment geometry into SVG with an isometric
-camera. It supports four camera orientations, zoom and a top-down plan. It runs
+camera. Drag empty space to orbit horizontally and change the viewing elevation;
+hold Alt or use the right mouse button to orbit over equipment. Scroll the mouse
+wheel to zoom (50–300%), or use the slider. Camera changes do not edit the saved
+layout. It also supports a top-down plan. It runs
 without WebGL or external model downloads. The coloured packages on shelves are
 illustrative; product placement, motion sensors, traffic heatmaps, interior walls
 and customer simulations are not yet connected to this editor.

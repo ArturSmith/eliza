@@ -94,6 +94,7 @@ function LayoutEditor({ saved }: { saved: Saved }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [top, setTop] = useState(false),
     [angle, setAngle] = useState(0),
+    [elevation, setElevation] = useState(35.264),
     [zoom, setZoom] = useState(1);
   const [message, setMessage] = useState('');
   const [notice, setNotice] = useState('');
@@ -264,8 +265,8 @@ function LayoutEditor({ saved }: { saved: Saved }) {
               <input
                 aria-label={t('Zoom')}
                 type="range"
-                min="0.6"
-                max="1.8"
+                min="0.5"
+                max="3"
                 step="0.1"
                 value={zoom}
                 onChange={(e) => setZoom(Number(e.target.value))}
@@ -278,6 +279,12 @@ function LayoutEditor({ saved }: { saved: Saved }) {
             onSelect={setSelected}
             top={top}
             angle={angle}
+            elevation={elevation}
+            onCameraChange={(a, e) => {
+              setAngle(a);
+              setElevation(e);
+            }}
+            onZoom={setZoom}
             zoom={zoom}
             onMove={(id, x, y) =>
               change({
@@ -297,7 +304,7 @@ function LayoutEditor({ saved }: { saved: Saved }) {
           </div>
           <p className="muted store-layout-hint">
             {t(
-              'Drag equipment to move it. Select an object to change its size or position. The floor grid shows 1 metre squares.',
+              'Drag empty space to rotate the view. Scroll to zoom. Drag equipment to move it; hold Alt to rotate over equipment. The floor grid shows 1 metre squares.',
             )}
           </p>
         </section>

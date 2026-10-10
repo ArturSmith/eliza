@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent } from 'react';
 import { footprint, validPlacement, type LayoutObject, type StoreLayout } from '@eliza/contracts';
 import { t } from './i18n';
 
@@ -10,7 +10,10 @@ export function StoreLayoutScene({
   onMove,
   top,
   angle,
+  elevation,
   zoom,
+  onCameraChange,
+  onZoom,
 }: {
   layout: StoreLayout;
   selected: string | null;
@@ -18,11 +21,28 @@ export function StoreLayoutScene({
   onMove: (id: string, x: number, y: number) => void;
   top: boolean;
   angle: number;
+  elevation: number;
   zoom: number;
+  onCameraChange: (angle: number, elevation: number) => void;
+  onZoom: (zoom: number) => void;
 }) {
   const svg = useRef<SVGSVGElement>(null);
   const [preview, setPreview] = useState<LayoutObject | null>(null);
   const drag = useRef<{ id: string; x: number; y: number; pointer: number } | null>(null);
+  const orbit = useRef<{ x: number; y: number; angle: number; elevation: number } | null>(null);
+  const tilt = (elevation * Math.PI) / 180;
+  useEffect(() => {
+    const element = svg.current!;
+    const wheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const delta =
+        event.deltaY *
+        (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? element.clientHeight : 1);
+      onZoom(Math.max(0.5, Math.min(3, zoom * Math.exp(-delta * 0.0015))));
+    };
+    element.addEventListener('wheel', wheel, { passive: false });
+    return () => element.removeEventListener('wheel', wheel);
+  }, [zoom, onZoom]);
   const theta = (angle * Math.PI) / 180,
     c = Math.cos(theta),
     s = Math.sin(theta);
@@ -32,7 +52,7 @@ export function StoreLayoutScene({
     if (top) return [x, y];
     const u = c * x - s * y,
       v = s * x + c * y;
-    return [((u - v) * Math.sqrt(3)) / 2, (u + v) / 2 - z];
+    return [(u - v) / Math.sqrt(2), ((u + v) / Math.sqrt(2)) * Math.sin(tilt) - z * Math.cos(tilt)];
   };
   const pointer = (event: PointerEvent): Point => {
     const point = svg.current!.createSVGPoint();
@@ -40,8 +60,8 @@ export function StoreLayoutScene({
     point.y = event.clientY;
     const p = point.matrixTransform(svg.current!.getScreenCTM()!.inverse());
     if (top) return [p.x + layout.width / 2, p.y + layout.length / 2];
-    const u = p.y + p.x / Math.sqrt(3),
-      v = p.y - p.x / Math.sqrt(3);
+    const u = (p.y / Math.sin(tilt) + p.x) / Math.sqrt(2),
+      v = (p.y / Math.sin(tilt) - p.x) / Math.sqrt(2);
     return [c * u + s * v + layout.width / 2, -s * u + c * v + layout.length / 2];
   };
   const ceiling = Math.max(2.7, ...layout.objects.map((o) => o.height)) + 0.3;
@@ -49,6 +69,7 @@ export function StoreLayoutScene({
     project(0, 0, ceiling),
     project(layout.width, 0, ceiling),
     project(0, layout.length, ceiling),
+    project(layout.width, layout.length, ceiling),
     project(layout.width, layout.length),
     project(0, 0),
     project(layout.width, 0),
@@ -87,10 +108,12 @@ export function StoreLayoutScene({
       <g key={key}>
         {!top && (
           <>
-            {polygon([a, b, project(x + width, y, z), project(x, y, z)], color)}
-            {polygon([b, e, project(x + width, y + depth, z), project(x + width, y, z)], color)}
-            {polygon([d, e, project(x + width, y + depth, z), project(x, y + depth, z)], color)}
-            {polygon([a, d, project(x, y + depth, z), project(x, y, z)], color)}
+            {c - s >= 0
+              ? polygon([d, e, project(x + width, y + depth, z), project(x, y + depth, z)], color)
+              : polygon([a, b, project(x + width, y, z), project(x, y, z)], color)}
+            {c + s >= 0
+              ? polygon([b, e, project(x + width, y + depth, z), project(x + width, y, z)], color)
+              : polygon([a, d, project(x, y + depth, z), project(x, y, z)], color)}
           </>
         )}
         {polygon([a, b, e, d], color)}
@@ -213,10 +236,28 @@ export function StoreLayoutScene({
       viewBox={`${(minX + maxX - w) / 2} ${(minY + maxY - h) / 2} ${w} ${h}`}
       role="img"
       aria-label={t('Interactive store layout')}
+      data-angle={angle}
+      data-elevation={elevation}
+      data-zoom={zoom}
+      onContextMenu={(e) => e.preventDefault()}
       onPointerDown={(e) => {
-        if (e.target === e.currentTarget) onSelect(null);
+        if (top) {
+          onSelect(null);
+          return;
+        }
+        e.preventDefault();
+        orbit.current = { x: e.clientX, y: e.clientY, angle, elevation };
+        svg.current!.setPointerCapture(e.pointerId);
       }}
       onPointerMove={(e) => {
+        if (orbit.current) {
+          const start = orbit.current;
+          onCameraChange(
+            (((start.angle + (e.clientX - start.x) * 0.4) % 360) + 360) % 360,
+            Math.max(10, Math.min(85, start.elevation - (e.clientY - start.y) * 0.3)),
+          );
+          return;
+        }
         if (!drag.current) return;
         const item = layout.objects.find((o) => o.id === drag.current!.id)!;
         const [x, y] = pointer(e);
@@ -228,6 +269,12 @@ export function StoreLayoutScene({
         if (validPlacement(layout, next)) setPreview(next);
       }}
       onPointerUp={(e) => {
+        if (orbit.current) {
+          orbit.current = null;
+          if (svg.current?.hasPointerCapture(e.pointerId))
+            svg.current.releasePointerCapture(e.pointerId);
+          return;
+        }
         if (!drag.current) return;
         drag.current = null;
         if (preview) onMove(preview.id, preview.x, preview.y);
@@ -237,6 +284,7 @@ export function StoreLayoutScene({
       }}
       onPointerCancel={() => {
         drag.current = null;
+        orbit.current = null;
         setPreview(null);
       }}
     >
@@ -276,19 +324,19 @@ export function StoreLayoutScene({
           <>
             {polygon(
               [
-                project(0, 0),
-                project(layout.width, 0),
-                project(layout.width, 0, 2.7),
-                project(0, 0, 2.7),
+                project(0, c - s >= 0 ? 0 : layout.length),
+                project(layout.width, c - s >= 0 ? 0 : layout.length),
+                project(layout.width, c - s >= 0 ? 0 : layout.length, 2.7),
+                project(0, c - s >= 0 ? 0 : layout.length, 2.7),
               ],
               'var(--layout-wall)',
             )}
             {polygon(
               [
-                project(0, 0),
-                project(0, layout.length),
-                project(0, layout.length, 2.7),
-                project(0, 0, 2.7),
+                project(c + s >= 0 ? 0 : layout.width, 0),
+                project(c + s >= 0 ? 0 : layout.width, layout.length),
+                project(c + s >= 0 ? 0 : layout.width, layout.length, 2.7),
+                project(c + s >= 0 ? 0 : layout.width, 0, 2.7),
               ],
               'var(--layout-wall)',
             )}
@@ -300,6 +348,7 @@ export function StoreLayoutScene({
           key={item.id}
           className="store-layout-equipment"
           onPointerDown={(e) => {
+            if (e.button !== 0 || e.altKey) return;
             e.stopPropagation();
             onSelect(item.id);
             setPreview(item);
