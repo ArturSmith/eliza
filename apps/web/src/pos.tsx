@@ -1,3 +1,4 @@
+import { BrandLogo } from './brand';
 import { t, useLanguage, translateError } from './i18n';
 import { LanguageSwitcher } from './i18n/LanguageSwitcher';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
@@ -217,8 +218,7 @@ export function PosPage() {
     return (
       <div className="pin-screen">
         <div className="pin-brand">
-          <ShoppingBag size={26} />
-          {t('eliza. ')}
+          <BrandLogo />
         </div>
         <div className="pin-card">
           <span className="icon-tile">
@@ -870,8 +870,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     <div className="pos-shell">
       <header className="pos-topbar">
         <div className="pos-brand">
-          <ShoppingBag size={23} />
-          <strong>{t('eliza.')}</strong>
+          <BrandLogo />
           <span className="pos-divider" />
           <div>
             <strong>{context.device!.name}</strong>

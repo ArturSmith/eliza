@@ -1,3 +1,4 @@
+import { BrandLogo } from './brand';
 import { countText, t, useLanguage, getLocale } from './i18n';
 import { useState, type ReactNode } from 'react';
 import { Link, Outlet, useLocation } from '@tanstack/react-router';
@@ -260,11 +261,7 @@ export function Shell() {
           <X size={18} />
         </button>
         <Link to="/" className="brand">
-          <span className="brand-mark">
-            <Store size={21} />
-          </span>
-          {t('eliza')}
-          <span className="brand-period">.</span>
+          <BrandLogo />
         </Link>
         <div className="store-switch">
           <span className="store-avatar">{store.name.slice(0, 1)}</span>

@@ -1,6 +1,7 @@
 /* All interface colors live here. Edit the semantic tokens for the main palette;
    the legacy aliases keep component-specific shades centralized during migration. */
 :root {
+  --brand-dot: #8caa68;
   --layout-floor: #eeeee5;
   --layout-grid: #d4d6ca;
   --layout-wall: #c8cbbd;

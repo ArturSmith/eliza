@@ -1,3 +1,4 @@
+import { BrandLogo } from './brand';
 import { t, useLanguage, translateError } from './i18n';
 import {
   useState,
@@ -103,11 +104,7 @@ export function AuthForm({ setup }: { setup: boolean }) {
     <div className="auth-layout">
       <section className="auth-story">
         <div className="brand">
-          <span className="brand-mark">
-            <Store size={22} />
-          </span>
-          {t('eliza')}
-          <span className="brand-period">.</span>
+          <BrandLogo />
         </div>
         <div>
           <span className="eyebrow">{t('MADE FOR YOUR EVERYDAY')}</span>

@@ -5754,3 +5754,10 @@ input.shopping-section-title {
   gap: 1rem;
   padding-top: 0.35rem;
 }
+
+/* Match the landing-page lockup across management, authentication and checkout. */
+.eliza-logo { display: inline-flex; align-items: center; gap: 9px; line-height: 1; white-space: nowrap; }
+.eliza-logo-mark { display: block; flex: 0 0 auto; width: 34px; height: 34px; }
+.eliza-wordmark { font-family: Arial, Helvetica, sans-serif; font-size: inherit; font-weight: 750; letter-spacing: -2px; }
+.eliza-logo-dot { color: var(--brand-dot); }
+.pos-brand > .eliza-logo { font-size: 27px; }
