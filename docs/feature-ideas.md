@@ -9,7 +9,7 @@ The historical idea statuses below are not a current release checklist. See
 The first increment now shares cost provenance and refund rounding between financial
 summary and dashboard dimensions, checks financial document totals against line facts,
 and adds searched, product/date-filtered, paginated stock movement history.
-Sales-based replenishment, proactive AI notifications and traffic analysis remain planned.
+Sales-based replenishment now has a read-only planning report and shared AI tool (15 October). Proactive notifications and traffic analysis remain planned.
 
 These are proposals to explore, not committed requirements or implemented features. The [prioritized backlog](prioritized-backlog.md) takes precedence. Some ideas extend backlog items; validate demand before expanding the MVP.
 

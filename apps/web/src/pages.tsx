@@ -98,6 +98,12 @@ const navGroups = [
         icon: ListChecks,
         permission: 'purchases.read',
       },
+      {
+        to: '/replenishment',
+        label: 'Replenishment',
+        icon: ListChecks,
+        permission: 'purchases.read',
+      },
       { to: '/purchases', label: 'Purchases', icon: Truck, permission: 'purchases.read' },
       {
         to: '/digital-purchases',

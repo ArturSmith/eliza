@@ -17,3 +17,14 @@ The agent currently has no write tools. Updating stock, products, and purchases 
 ## Verification
 
 Run `pnpm test` for unit tests, `pnpm exec vitest run --config vitest.integration.config.ts tests/ai-agent.integration.test.ts` for the isolated database and mocked provider checks, and `pnpm exec playwright test tests/e2e/ai-agent.spec.ts` for the chat UI. The integration checks authentication, current store and employee isolation, follow-up context, tool output handling, scanned document references, empty results, invalid arguments, provider failures and absence of write tools. For a live smoke test, ask for a known sales period and compare the answer with **Sales**, then find a saved invoice by number and compare it with the original scan.
+
+## Replenishment read tool — 15 October 2026
+
+Slow/no-sales and order-quantity/timing questions can use `replenishment`, backed by
+the same service as the Replenishment page. It requires sales, inventory, purchasing
+and supplier read permissions. Results include the completed local date window,
+observed product history, gross units sold, refunds separately, current batch stock,
+expiry allowances, dated incoming orders, pack rounding, order-by date and warnings.
+Insufficient history or missing supply facts must not become invented quantities.
+The report is a planning estimate, not a seasonality or lost-demand forecast. It
+creates no purchase orders and sends no notifications.

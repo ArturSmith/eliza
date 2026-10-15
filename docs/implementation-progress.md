@@ -1,13 +1,13 @@
 # Implementation progress
 
-Updated: 14 October 2026. Approved order: financial/reporting foundations, demand
+Updated: 15 October 2026. Approved order: financial/reporting foundations, demand
 and replenishment calculations, AI-assisted actions, notifications, then traffic analysis.
 
 | Order | Scope | Status |
 | --- | --- | --- |
 | 1 | Financial consistency and movement history | First increment implemented; see below |
-| 2 | Reliable slow/no-sales and replenishment calculations | Pending |
-| 3 | AI explanations and reviewed purchasing actions using those calculations | Pending |
+| 2 | Reliable slow/no-sales and replenishment calculations | Implemented planning estimate and report |
+| 3 | AI explanations and reviewed purchasing actions using those calculations | Shared AI read tool implemented; reviewed conversion remains pending |
 | 4 | Notifications and scheduled summaries | Pending |
 | 5 | Sensor traffic analysis linked to product placement | Pending |
 
@@ -33,3 +33,10 @@ Tests cover financial uncertainty, malformed historical refunds, refund regressi
 No historical records are modified. No tax/VAT treatment or inventory-loss categories
 are changed. Summaries still use recorded expenses only. The wider feature roadmap is
 not complete, and this change has not deployed the application to Railway.
+
+## Replenishment increment — 15 October 2026
+
+Open Stock & purchasing → Replenishment (`/replenishment`). See
+[calculation rules and manual checks](replenishment.md). The same read-only report
+is available to Eliza AI. There is no automatic ordering, scheduled notification,
+new-product recommendation or traffic-analysis implementation in this increment.

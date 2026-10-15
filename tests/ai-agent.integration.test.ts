@@ -239,7 +239,7 @@ describe.sequential('Eliza AI conversations', () => {
       )
     ).rows[0];
     await db.pool.query(
-      "INSERT INTO sales(store_id,device_id,employee_id,shift_id,request_id,request_hash,receipt_number,total,tax,discount,receipt) VALUES($1,$2,$3,$4,gen_random_uuid(),'test','AI-1',42,0,0,$5)",
+      "INSERT INTO sales(store_id,device_id,employee_id,shift_id,request_id,request_hash,receipt_number,total,tax,discount,receipt,created_at) VALUES($1,$2,$3,$4,gen_random_uuid(),'test','AI-1',42,0,0,$5,'2026-09-15T12:00:00Z')",
       [storeId, account.device_id, account.employee_id, shift.id, JSON.stringify({ lines: [] })],
     );
     replies = [

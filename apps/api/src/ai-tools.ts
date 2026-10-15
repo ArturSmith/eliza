@@ -1,3 +1,4 @@
+import { ReplenishmentService, replenishmentPermissions } from './replenishment.js';
 import { z } from 'zod';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import type { Database } from './database.js';
@@ -88,6 +89,54 @@ const analytics = range.safeExtend({
   ]),
 });
 export const aiToolDefinitions = [
+  {
+    name: 'replenishment',
+    permission: 'inventory.read',
+    description:
+      'Read sales-based reorder quantities and order dates, slow/no-sales products including zero-sales products, stock, incoming orders and missing-data warnings. Uses the same calculations as Replenishment. These are planning estimates, not forecasts. Never turn null quantities into invented numbers; review supplier, stock and delivery warnings. Requires sales, inventory, purchases and supplier read permissions. Results are paginated.',
+    parameters: {
+      type: 'object',
+      properties: {
+        historyDays: { type: 'integer' },
+        reviewDays: { type: 'integer' },
+        safetyDays: { type: 'integer' },
+        search: { type: 'string' },
+        status: {
+          type: 'string',
+          enum: [
+            'all',
+            'order_now',
+            'order_later',
+            'no_sales',
+            'slow',
+            'needs_review',
+            'insufficient_history',
+          ],
+        },
+        page: { type: 'integer' },
+      },
+      required: ['historyDays', 'reviewDays', 'safetyDays', 'search', 'status', 'page'],
+      additionalProperties: false,
+    },
+    schema: z
+      .object({
+        historyDays: z.number().int().min(14).max(90),
+        reviewDays: z.number().int().min(1).max(90),
+        safetyDays: z.number().int().min(0).max(30),
+        search: z.string().trim().max(100),
+        status: z.enum([
+          'all',
+          'order_now',
+          'order_later',
+          'no_sales',
+          'slow',
+          'needs_review',
+          'insufficient_history',
+        ]),
+        page: z.number().int().min(1).max(100000),
+      })
+      .strict(),
+  },
   {
     name: 'browse_store_data',
     permission: 'catalog.read',
@@ -383,6 +432,8 @@ export function availableAiTools(permissions: readonly Permission[]) {
         : tool.name === 'browse_store_data'
           ? Object.values(browsePermissions).some((permission) => permissions.includes(permission))
           : permissions.includes(tool.permission as Permission)) &&
+      (tool.name !== 'replenishment' ||
+        replenishmentPermissions.every((p) => permissions.includes(p))) &&
       (tool.name !== 'gross_profit' || permissions.includes('sales.read')) &&
       (tool.name !== 'product_details' || permissions.includes('costs.read')) &&
       (tool.name !== 'propose_document_product' || permissions.includes('purchases.read')),
@@ -399,6 +450,8 @@ export async function executeAiTool(
   if (
     (name !== 'browse_store_data' &&
       !req.context.user.permissions.includes(tool.permission as Permission)) ||
+    (name === 'replenishment' &&
+      !replenishmentPermissions.every((p) => req.context.user.permissions.includes(p))) ||
     (name === 'gross_profit' && !req.context.user.permissions.includes('sales.read')) ||
     (name === 'product_details' && !req.context.user.permissions.includes('costs.read')) ||
     (name === 'propose_document_product' &&
@@ -441,6 +494,8 @@ export async function executeAiTool(
   };
   const pattern = '%' + (a.query ?? '').replace(/[\\%_]/g, '\\$&') + '%';
   switch (name) {
+    case 'replenishment':
+      return new ReplenishmentService(database).report(req, parsed.data);
     case 'browse_store_data': {
       const { area, id, offset } = parsed.data as z.infer<typeof browse>;
       const statements: Record<typeof area, string> = {

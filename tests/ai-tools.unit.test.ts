@@ -45,6 +45,33 @@ describe('AI read tool boundaries', () => {
       false,
     );
   });
+  it('requires every permission for replenishment and rejects a narrower user before reading data', async () => {
+    const permissions = [
+      'sales.read',
+      'inventory.read',
+      'purchases.read',
+      'suppliers.read',
+    ] as const;
+    expect(availableAiTools(permissions).some((t) => t.name === 'replenishment')).toBe(true);
+    for (const permission of permissions)
+      expect(
+        availableAiTools(permissions.filter((p) => p !== permission)).some(
+          (t) => t.name === 'replenishment',
+        ),
+      ).toBe(false);
+    const { database, req, query } = fixture(['inventory.read']);
+    await expect(
+      executeAiTool(database, req, 'replenishment', {
+        historyDays: 28,
+        reviewDays: 7,
+        safetyDays: 2,
+        search: '',
+        status: 'all',
+        page: 1,
+      }),
+    ).rejects.toThrow();
+    expect(query).not.toHaveBeenCalled();
+  });
   it('defines every strict browse argument as required, with null for unused filters', () => {
     const browse = aiToolDefinitions.find((tool) => tool.name === 'browse_store_data');
     expect(browse?.parameters.required).toEqual(['area', 'id', 'offset']);

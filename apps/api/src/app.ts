@@ -1,3 +1,4 @@
+import { ReplenishmentModule } from './replenishment.js';
 import { PurchaseDocumentError } from './purchase-document-error.js';
 import 'reflect-metadata';
 import {
@@ -126,6 +127,7 @@ class HealthController {
     PromotionsModule,
     PricingReportModule,
     InventoryModule,
+    ReplenishmentModule,
     StockCountsModule,
     ManagementModule,
     TeamModule,

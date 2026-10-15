@@ -1,3 +1,4 @@
+import { ReplenishmentPage } from './replenishment';
 import { ShoppingListsPage } from './shopping-lists';
 import { t, useLanguage } from './i18n';
 import React, { Suspense, lazy } from 'react';
@@ -118,6 +119,7 @@ const root = createRootRoute({
   ),
 });
 const routes = [
+  createRoute({ getParentRoute: () => root, path: '/replenishment', component: ReplenishmentPage }),
   createRoute({
     getParentRoute: () => root,
     path: '/shopping-lists',
