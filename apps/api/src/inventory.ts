@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import {
   BadRequestException,
   Body,
@@ -9,6 +10,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -18,6 +20,15 @@ import { Database } from './database.js';
 import { AccessGuard, type AuthRequest, hash, parse, Require } from './security.js';
 import { AuthModule } from './auth.js';
 import { audits, deviceRecords, employees, movements, products } from './schema.js';
+const historyQuery = z
+  .object({
+    search: z.string().trim().max(100).default(''),
+    productId: z.union([z.uuid(), z.literal('')]).default(''),
+    from: z.union([z.iso.date(), z.literal('')]).default(''),
+    to: z.union([z.iso.date(), z.literal('')]).default(''),
+    page: z.coerce.number().int().min(1).max(1000000).default(1),
+  })
+  .refine((v) => !v.from || !v.to || v.from <= v.to, 'Start date must not follow end date');
 @Controller('inventory')
 @UseGuards(AccessGuard)
 export class InventoryController {
@@ -67,6 +78,41 @@ export class InventoryController {
       .where(eq(movements.storeId, req.context.store.id))
       .orderBy(desc(movements.createdAt))
       .limit(100);
+  }
+  @Get('movements/history') @Require('inventory.read') async history(
+    @Query() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const filter = parse(historyQuery, input);
+    const pattern = '%' + filter.search.replace(/[\\%_]/g, '\\$&') + '%';
+    const pageSize = 50;
+    const result = await this.database.pool.query(
+      `WITH matched AS (
+      SELECT m.id,m.product_id AS "productId",p.name AS "productName",p.sku,
+        m.quantity::text,m.balance::text,m.reason,m.notes,e.name AS actor,d.name AS device,
+        m.created_at AS "createdAt"
+      FROM movements m JOIN products p ON p.id=m.product_id AND p.store_id=m.store_id
+      LEFT JOIN employees e ON e.id=m.employee_id AND e.store_id=m.store_id
+      LEFT JOIN device_records d ON d.id=m.device_id AND d.store_id=m.store_id
+      WHERE m.store_id=$1 AND ($2='' OR m.product_id::text=$2)
+        AND ($3='' OR m.created_at>=(NULLIF($3,'')::date::timestamp AT TIME ZONE $6))
+        AND ($4='' OR m.created_at<((NULLIF($4,'')::date+1)::timestamp AT TIME ZONE $6))
+        AND ($5='%%' OR p.name ILIKE $5 OR p.sku ILIKE $5 OR m.notes ILIKE $5 OR m.reason ILIKE $5)
+    ), paged AS (SELECT * FROM matched ORDER BY "createdAt" DESC,id DESC LIMIT $7 OFFSET $8)
+    SELECT (SELECT count(*)::int FROM matched) AS total,
+      COALESCE((SELECT jsonb_agg(paged ORDER BY "createdAt" DESC,id DESC) FROM paged),'[]'::jsonb) AS rows`,
+      [
+        req.context.store.id,
+        filter.productId,
+        filter.from,
+        filter.to,
+        pattern,
+        req.context.store.timezone,
+        pageSize,
+        (filter.page - 1) * pageSize,
+      ],
+    );
+    return { ...result.rows[0], page: filter.page, pageSize };
   }
   @Post('adjustments') @Require('inventory.adjust') async adjust(
     @Body() input: unknown,

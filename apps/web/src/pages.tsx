@@ -37,7 +37,7 @@ import {
   AlertTriangle,
   Menu,
 } from 'lucide-react';
-import type { Product, Permission, Device, Session } from '@eliza/contracts';
+import type { Product, Permission, Device, Session, Movement } from '@eliza/contracts';
 import { toScaled, fromScaled } from '@eliza/contracts';
 import {
   api,
@@ -46,7 +46,6 @@ import {
   refresh,
   useSession,
   useProducts,
-  useMovements,
   useAudit,
   useDevices,
 } from './api';
@@ -933,7 +932,25 @@ export function ProductsPage() {
 export function InventoryPage() {
   useLanguage();
   const products = useProducts();
-  const movements = useMovements();
+  const [movementFilters, setMovementFilters] = useState({
+    search: '',
+    productId: '',
+    from: '',
+    to: '',
+  });
+  const [movementPage, setMovementPage] = useState(1);
+  const movements = useQuery<{ rows: Movement[]; total: number; page: number; pageSize: number }>({
+    queryKey: ['movements', 'history', movementFilters, movementPage],
+    queryFn: () =>
+      api(
+        '/inventory/movements/history?' +
+          new URLSearchParams({ ...movementFilters, page: String(movementPage) }),
+      ),
+  });
+  const filterMovements = (key: keyof typeof movementFilters, value: string) => {
+    setMovementFilters((previous) => ({ ...previous, [key]: value }));
+    setMovementPage(1);
+  };
   const session = useSession();
   const [open, setOpen] = useState(false);
   const [batchProductId, setBatchProductId] = useState('');
@@ -1039,16 +1056,64 @@ export function InventoryPage() {
         <div className="panel-heading">
           <div>
             <h2>{t('Stock movements')}</h2>
-            <p className="muted">{t('Most recent 100 movements, across your store.')}</p>
+            <p className="muted">
+              {t('Search the full stock history. Dates use your store’s timezone.')}
+            </p>
           </div>
           <Badge tone="gray">
-            {movements.data?.length ?? 0} {t(' records')}
+            {movements.data?.total ?? 0} {t(' records')}
           </Badge>
+        </div>
+        <div className="movement-filters">
+          <Field label="Search movements">
+            <input
+              type="search"
+              value={movementFilters.search}
+              onChange={(e) => filterMovements('search', e.target.value)}
+            />
+          </Field>
+          <Field label="Product">
+            <select
+              value={movementFilters.productId}
+              onChange={(e) => filterMovements('productId', e.target.value)}
+            >
+              <option value="">{t('All products')}</option>
+              {(products.data ?? []).map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} · {p.sku}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="From">
+            <input
+              type="date"
+              value={movementFilters.from}
+              onChange={(e) => filterMovements('from', e.target.value)}
+            />
+          </Field>
+          <Field label="To">
+            <input
+              type="date"
+              value={movementFilters.to}
+              min={movementFilters.from || undefined}
+              onChange={(e) => filterMovements('to', e.target.value)}
+            />
+          </Field>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setMovementFilters({ search: '', productId: '', from: '', to: '' });
+              setMovementPage(1);
+            }}
+          >
+            {t('Clear filters')}
+          </Button>
         </div>
         <ErrorMessage error={products.error ?? movements.error} />
         {movements.isPending ? (
           <Loading />
-        ) : movements.data?.length ? (
+        ) : movements.data?.rows.length ? (
           <div className="table-scroll">
             <table>
               <thead>
@@ -1062,7 +1127,7 @@ export function InventoryPage() {
                 </tr>
               </thead>
               <tbody>
-                {movements.data.map((m) => (
+                {movements.data.rows.map((m) => (
                   <tr key={m.id}>
                     <td>
                       <strong>{m.productName}</strong>
@@ -1099,12 +1164,37 @@ export function InventoryPage() {
         ) : (
           !movements.error && (
             <Empty
-              title={t('Start with what’s on your shelves')}
-              description={t(
-                'Add your products, then record an opening balance. Every future change will build on this history.',
-              )}
+              title={t('No matching movements')}
+              description={t('Try another search or clear the filters.')}
             />
           )
+        )}
+        {movements.data && movements.data.total > 0 && (
+          <div className="movement-pagination">
+            <Button
+              variant="outline"
+              disabled={movementPage === 1 || movements.isFetching}
+              onClick={() => setMovementPage((p) => p - 1)}
+            >
+              {t('Previous')}
+            </Button>
+            <span>
+              {t('Page {page} of {pages}', {
+                page: movementPage,
+                pages: Math.max(1, Math.ceil(movements.data.total / movements.data.pageSize)),
+              })}
+            </span>
+            <Button
+              variant="outline"
+              disabled={
+                movementPage * movements.data.pageSize >= movements.data.total ||
+                movements.isFetching
+              }
+              onClick={() => setMovementPage((p) => p + 1)}
+            >
+              {t('Next')}
+            </Button>
+          </div>
         )}
       </section>
       <Dialog

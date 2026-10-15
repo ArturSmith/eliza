@@ -1,3 +1,4 @@
+import { saleCostColumns, originalCostsCte, refundCostColumns } from './financial-facts.js';
 import {
   Controller,
   ForbiddenException,
@@ -74,12 +75,7 @@ export class FinancialMetricsService {
         AND ($8::text IS NULL OR COALESCE(i.pricing_source,CASE WHEN p.price_kind='limited_discount' THEN 'LEGACY_MARKDOWN' ELSE 'LEGACY_UNCLASSIFIED' END)=$8)))
 ), sold_lines AS (
   SELECT i.sale_id,i.total,
-    COALESCE(i.cost_total,round(i.cost*i.quantity,2)) AS snapshot_cost,
-    CASE WHEN i.cost_total IS NULL AND i.cost IS NULL THEN NULL
-         WHEN EXISTS(SELECT 1 FROM sale_batch_allocations a
-           JOIN stock_batches b ON b.id=a.batch_id AND b.store_id=a.store_id
-           WHERE a.sale_item_id=i.id AND a.store_id=i.store_id AND b.cost_source='legacy_estimate') THEN NULL
-         ELSE COALESCE(i.cost_total,round(i.cost*i.quantity,2)) END AS historical_cost
+${saleCostColumns}
   FROM sale_items i JOIN sold s ON s.id=i.sale_id LEFT JOIN products p ON p.id=i.product_id AND p.store_id=i.store_id
   WHERE i.store_id=$1 AND ($5::uuid IS NULL OR i.product_id=$5::uuid OR p.base_product_id=$5::uuid)
     AND ($8::text IS NULL OR COALESCE(i.pricing_source,CASE WHEN p.price_kind='limited_discount' THEN 'LEGACY_MARKDOWN' ELSE 'LEGACY_UNCLASSIFIED' END)=$8)
@@ -98,23 +94,7 @@ export class FinancialMetricsService {
       LEFT JOIN sale_items i ON i.id=l.sale_item_id AND i.store_id=l.store_id
       WHERE l.store_id=$1 AND l.refund_id=r.id AND ($5::uuid IS NULL OR l.product_id=$5::uuid OR p.base_product_id=$5::uuid)
         AND ($8::text IS NULL OR COALESCE(i.pricing_source,'LEGACY_UNCLASSIFIED')=$8)))
-), original_lines AS (
-  SELECT i.sale_id,i.product_id,i.quantity,
-    COALESCE(i.cost_total,round(i.cost*i.quantity,2)) AS snapshot_cost,
-    CASE WHEN i.cost_total IS NULL AND i.cost IS NULL THEN NULL
-      WHEN EXISTS(SELECT 1 FROM sale_batch_allocations a JOIN stock_batches b
-        ON b.id=a.batch_id AND b.store_id=a.store_id
-        WHERE a.store_id=$1 AND a.sale_item_id=i.id AND b.cost_source='legacy_estimate') THEN NULL
-      ELSE COALESCE(i.cost_total,round(i.cost*i.quantity,2)) END AS historical_cost
-  FROM sale_items i WHERE i.store_id=$1
-), original_costs AS (
-  SELECT sale_id,product_id,sum(quantity) AS quantity,
-    CASE WHEN count(*) FILTER(WHERE historical_cost IS NULL)>0 THEN NULL
-      ELSE sum(historical_cost) END AS cost,
-    CASE WHEN count(*) FILTER(WHERE snapshot_cost IS NULL)>0 THEN NULL
-      ELSE sum(snapshot_cost) END AS snapshot_cost
-  FROM original_lines GROUP BY sale_id,product_id
-), return_history AS (
+), ${originalCostsCte}, return_history AS (
   SELECT h.id AS refund_id,l.total,l.restock,l.loss_cost,l.restored_cost,l.quantity,c.cost,c.snapshot_cost,c.quantity AS original_quantity,
     COALESCE(i.pricing_source,'LEGACY_UNCLASSIFIED') AS pricing_source,
     COALESCE(sum(l.quantity) OVER(PARTITION BY l.sale_id,l.product_id ORDER BY h.created_at,h.id,l.id
@@ -125,18 +105,8 @@ export class FinancialMetricsService {
   LEFT JOIN products p ON p.id=l.product_id AND p.store_id=l.store_id
   WHERE l.store_id=$1 AND ($5::uuid IS NULL OR l.product_id=$5::uuid OR p.base_product_id=$5::uuid)
 ), returned_lines AS (
-  SELECT h.total,h.restock,h.loss_cost,
-    CASE WHEN h.cost IS NULL THEN NULL
-      WHEN h.restored_cost IS NOT NULL THEN h.restored_cost
-      WHEN h.original_quantity>0 THEN
-        round(h.cost*(h.prior_returned+h.quantity)/h.original_quantity,2)-round(h.cost*h.prior_returned/h.original_quantity,2)
-      ELSE NULL END AS historical_cost,
-    CASE WHEN h.snapshot_cost IS NULL THEN NULL
-      WHEN h.restored_cost IS NOT NULL THEN h.restored_cost
-      WHEN h.original_quantity>0 THEN
-        round(h.snapshot_cost*(h.prior_returned+h.quantity)/h.original_quantity,2)-round(h.snapshot_cost*h.prior_returned/h.original_quantity,2)
-      ELSE NULL END AS snapshot_cost,
-    h.cost IS NULL AND h.snapshot_cost IS NOT NULL AND NOT h.restock AS estimated_loss_cost
+  SELECT h.refund_id,h.total,h.restock,h.loss_cost,
+${refundCostColumns}
   FROM return_history h JOIN returned r ON r.id=h.refund_id
   WHERE $8::text IS NULL OR h.pricing_source=$8
 ), lost AS (
@@ -155,9 +125,10 @@ SELECT
   (SELECT count(*)::int FROM sold_lines WHERE historical_cost IS NULL AND snapshot_cost IS NOT NULL) AS estimated_sale_cost,
   (SELECT count(*)::int FROM sold_lines WHERE snapshot_cost IS NULL) AS missing_snapshot_sale_cost,
   (SELECT COALESCE(sum(total) FILTER(WHERE historical_cost IS NULL),0)::text FROM sold_lines) AS missing_cost_revenue,
-  (SELECT count(*)::int FROM sold s WHERE NOT EXISTS(SELECT 1 FROM sold_lines i WHERE i.sale_id=s.id)) AS sales_without_lines,
+  (SELECT count(*)::int FROM sold s WHERE NOT EXISTS(SELECT 1 FROM sold_lines i WHERE i.sale_id=s.id) OR s.total IS DISTINCT FROM (SELECT sum(i.total) FROM sold_lines i WHERE i.sale_id=s.id)) AS sales_without_lines,
   (SELECT COALESCE(sum(total),0)::text FROM returned) AS refunds,
   (SELECT count(*)::int FROM returned) AS refund_count,
+  (SELECT count(*)::int FROM returned r WHERE r.total IS DISTINCT FROM (SELECT sum(l.total) FROM returned_lines l WHERE l.refund_id=r.id)) AS refunds_without_lines,
   (SELECT COALESCE(sum(historical_cost),0)::text FROM returned_lines) AS returned_cost,
   (SELECT COALESCE(sum(snapshot_cost),0)::text FROM returned_lines) AS snapshot_returned_cost,
   (SELECT count(*)::int FROM returned_lines WHERE historical_cost IS NULL) AS missing_refund_cost,
@@ -197,11 +168,11 @@ SELECT
       const refunds = cents(facts.refunds);
       const revenue = sales - refunds;
       const missingSaleCost = facts.missing_sale_cost + facts.sales_without_lines;
-      const missingRefundCost = facts.missing_refund_cost;
+      const missingRefundCost = facts.missing_refund_cost + facts.refunds_without_lines;
       const costComplete = missingSaleCost === 0 && missingRefundCost === 0;
       const snapshotCostComplete =
         facts.missing_snapshot_sale_cost + facts.sales_without_lines === 0 &&
-        facts.missing_snapshot_refund_cost === 0;
+        facts.missing_snapshot_refund_cost + facts.refunds_without_lines === 0;
       const cogs = costComplete ? cents(facts.sold_cost) - cents(facts.returned_cost) : null;
       const grossProfit = cogs === null ? null : revenue - cogs;
       const snapshotCogs = snapshotCostComplete
@@ -270,7 +241,8 @@ SELECT
           estimatedCostSaleItems: facts.estimated_sale_cost,
           estimatedCostRefundLines: facts.estimated_refund_cost,
           missingSnapshotSaleItems: facts.missing_snapshot_sale_cost + facts.sales_without_lines,
-          missingSnapshotRefundLines: facts.missing_snapshot_refund_cost,
+          missingSnapshotRefundLines:
+            facts.missing_snapshot_refund_cost + facts.refunds_without_lines,
           revenueMissingCost: money(cents(facts.missing_cost_revenue)),
           saleCostCoveragePercent: percent(sales - cents(facts.missing_cost_revenue), sales),
           lossCostComplete: missingLossCost === 0,
@@ -302,11 +274,15 @@ class FinancialMetricsController {
     if (!req.context.user.permissions.includes('expenses.read'))
       throw new ForbiddenException('Expense reporting permission is required.');
     const period = parse(periodQuery, input);
-    return this.metrics.getFinancialSummary(req.context.store.id, {
-      from: period.from,
-      to: period.to,
-      timezone: req.context.store.timezone,
-    }, { productId: period.productId, shiftId: period.shiftId });
+    return this.metrics.getFinancialSummary(
+      req.context.store.id,
+      {
+        from: period.from,
+        to: period.to,
+        timezone: req.context.store.timezone,
+      },
+      { productId: period.productId, shiftId: period.shiftId },
+    );
   }
 }
 

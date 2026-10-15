@@ -1,5 +1,7 @@
 # Eliza — prioritized feature backlog
 
+Latest implementation updates: [14 October 2026 progress](implementation-progress.md). The older snapshot below remains historical.
+
 Status snapshot: 25 September 2026. Compared with the original Supermarket Store Management System build guide and the implemented application. This is a planning document, not authorization to implement every item. Recheck current behavior before starting an item.
 
 Scope: a single-shop MVP. Ranking reflects daily operational value and the impact of a missing workflow, not implementation difficulty.

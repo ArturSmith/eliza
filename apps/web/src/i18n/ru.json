@@ -1,4 +1,8 @@
 {
+  "Try another search or clear the filters.": "Измените запрос или сбросьте фильтры.",
+  "No matching movements": "Подходящих движений нет",
+  "Search movements": "Поиск движений",
+  "Search the full stock history. Dates use your store’s timezone.": "Поиск по всей истории запасов. Даты указаны в часовом поясе магазина.",
   "Drag empty space to rotate the view. Scroll to zoom. Drag equipment to move it; hold Alt to rotate over equipment. The floor grid shows 1 metre squares.": "Перетаскивайте свободную область для вращения. Колёсико — масштаб. Перетаскивайте оборудование для перемещения; удерживайте Alt для вращения над ним. Клетка пола — 1 метр.",
   "Price checker": "Проверка цены",
   "Check a price": "Узнать цену",

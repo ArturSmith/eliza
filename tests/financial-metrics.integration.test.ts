@@ -1,3 +1,5 @@
+import { OwnerDashboardController } from '../apps/api/dist/owner-dashboard.js';
+import { InventoryController } from '../apps/api/dist/inventory.js';
 import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { createApp } from '../apps/api/dist/app.js';
@@ -141,7 +143,7 @@ describe('canonical store financial summary', () => {
     ).rows[0].id;
     const legacySale = (
       await db.pool.query(
-        "INSERT INTO sales(store_id,device_id,employee_id,shift_id,request_id,request_hash,receipt_number,total,tax,discount,receipt,created_at) VALUES($1,$2,$3,$4,$5,'test','TEST-LEGACY',100,0,0,'{}','2026-10-02T10:00:00Z') RETURNING id",
+        "INSERT INTO sales(store_id,device_id,employee_id,shift_id,request_id,request_hash,receipt_number,total,tax,discount,receipt,created_at) VALUES($1,$2,$3,$4,$5,'test','TEST-LEGACY',100,0,0,jsonb_build_object('lines',jsonb_build_array(jsonb_build_object('productId',(SELECT id::text FROM products WHERE store_id=$1 AND sku='YOG'),'category','Dairy','quantity','1','total','100.00'))),'2026-10-02T10:00:00Z') RETURNING id",
         [actor.store, actor.device, actor.employee, shift, crypto.randomUUID()],
       )
     ).rows[0].id;
@@ -195,5 +197,82 @@ describe('canonical store financial summary', () => {
       [actor.store, product],
     );
     expect(consumed.rows[0].cost).toBe('4.00');
+    // Dashboard dimensions must never present estimated batch cost as verified profit.
+    const dashboard = new OwnerDashboardController(db, metrics) as any;
+    const store = { id: actor.store, timezone: 'Europe/Oslo', currency: 'NOK' };
+    const category = await dashboard.categories(
+      store,
+      { from: '2026-10-02', to: '2026-10-02' },
+      null,
+      true,
+    );
+    expect(category.rows[0].grossProfit).toBeNull();
+    expect(category.rows[0].margin).toBeNull();
+    const trend = await dashboard.marginTrend(store, '2026-10-02');
+    expect(trend.find((r: any) => r.month === '2026-10').margin).toBeNull();
+    // A refund header without line facts is incomplete, not a verified zero-cost return.
+    await db.pool.query(
+      "INSERT INTO refunds(store_id,sale_id,shift_id,employee_id,device_id,approver_id,request_id,request_hash,number,method,reason,total,tax,receipt,created_at) VALUES($1,$2,$3,$4,$5,$4,$6,'audit','RF-NOLINES','cash','audit',10,0,'{}','2026-10-03T12:00:00Z')",
+      [actor.store, sale, shift, actor.employee, actor.device, crypto.randomUUID()],
+    );
+    const incomplete = await metrics.getFinancialSummary(actor.store, {
+      from: '2026-10-03',
+      to: '2026-10-03',
+      timezone: 'Europe/Oslo',
+    });
+    expect(incomplete.revenue).toBe('-10.00');
+    expect(incomplete.cogs).toBeNull();
+    expect(incomplete.estimated).toBeNull();
+    expect(incomplete.dataQuality.missingCostRefundLines).toBe(1);
+    // Search all history, not just the first 100. Dates are store-local; UUID breaks ties.
+    await db.pool.query(
+      "INSERT INTO movements(store_id,product_id,employee_id,device_id,quantity,balance,reason,notes,request_id,request_hash,created_at) SELECT $1,$2,$3,$4,1,n,'received','audit-history-'||n,gen_random_uuid(),'history','2026-09-09T22:30:00Z' FROM generate_series(1,105) n",
+      [actor.store, product, actor.employee, actor.device],
+    );
+    const inventory = new InventoryController(db);
+    const req = { context: { store, user: { permissions: ['inventory.read'] } } } as any;
+    const filters = {
+      search: 'audit-history-',
+      productId: product,
+      from: '2026-09-10',
+      to: '2026-09-10',
+    };
+    const first = await inventory.history({ ...filters, page: 1 }, req);
+    const second = await inventory.history({ ...filters, page: 2 }, req);
+    const third = await inventory.history({ ...filters, page: 3 }, req);
+    const cookie = setup.headers
+      .getSetCookie()
+      .map((value) => value.split(';')[0])
+      .join('; ');
+    const historyUrl = url + '/api/inventory/movements/history?search=audit-history-';
+    expect((await fetch(historyUrl)).status).toBe(401);
+    const authenticatedHistory = await fetch(historyUrl, { headers: { Cookie: cookie } });
+    expect(authenticatedHistory.status).toBe(200);
+    expect((await authenticatedHistory.json()).total).toBe(105);
+    expect((await fetch(historyUrl + '&page=0', { headers: { Cookie: cookie } })).status).toBe(400);
+    expect(first.total).toBe(105);
+    expect(first.rows).toHaveLength(50);
+    expect(second.rows).toHaveLength(50);
+    expect(third.rows).toHaveLength(5);
+    expect(new Set([...first.rows, ...second.rows, ...third.rows].map((r: any) => r.id)).size).toBe(
+      105,
+    );
+    expect((await inventory.history({ ...filters, page: 4 }, req)).total).toBe(105);
+    expect((await inventory.history({ ...filters, page: 4 }, req)).rows).toEqual([]);
+    expect(
+      (await inventory.history({ ...filters, from: '2026-09-09', to: '2026-09-09' }, req)).total,
+    ).toBe(0);
+    expect((await inventory.history({ search: '%' }, req)).total).toBe(0);
+    expect(
+      (
+        await inventory.history({}, {
+          context: { store: { ...store, id: crypto.randomUUID() } },
+        } as any)
+      ).total,
+    ).toBe(0);
+    await expect(
+      inventory.history({ from: '2026-10-01', to: '2026-09-01' }, req),
+    ).rejects.toThrow();
+    await expect(inventory.history({ page: 0 }, req)).rejects.toThrow();
   });
 });

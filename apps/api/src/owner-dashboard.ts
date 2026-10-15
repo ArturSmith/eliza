@@ -1,3 +1,4 @@
+import { originalCostsCte, refundCostColumns } from './financial-facts.js';
 import {
   Controller,
   Get,
@@ -63,11 +64,7 @@ const money = (value: unknown) => String(value ?? '0');
 
 // Receipt snapshots preserve the charged tax and category after catalog edits.
 // Restock costs are allocated cumulatively so partial refunds conserve cents.
-const financialEntries = `original_costs AS (
- SELECT sale_id,product_id,sum(quantity) AS quantity,sum(COALESCE(cost_total,round(cost*quantity,2))) AS cost,
- count(*) FILTER(WHERE cost_total IS NULL AND cost IS NULL) AS missing
- FROM sale_items WHERE store_id=$1 GROUP BY sale_id,product_id
-), receipt_lines AS (
+const financialEntries = `${originalCostsCte}, receipt_lines AS (
  SELECT s.id AS sale_id,s.created_at,(j->>'productId')::uuid AS product_id,
  COALESCE(j->>'category','Uncategorised') AS category,
  (j->>'quantity')::numeric AS quantity,(j->>'total')::numeric AS revenue
@@ -75,20 +72,25 @@ const financialEntries = `original_costs AS (
 ), snapshots AS (
  SELECT sale_id,product_id,min(category) AS category,sum(quantity) AS quantity,sum(revenue) AS revenue,min(created_at) AS created_at
  FROM receipt_lines GROUP BY sale_id,product_id
-), refund_history AS (
- SELECT r.created_at,l.*,c.cost,c.quantity AS sold_quantity,COALESCE(c.missing,1) AS missing,
+), return_history AS (
+ SELECT r.id AS refund_id,r.created_at,l.*,c.cost,c.snapshot_cost,c.quantity AS original_quantity,
  COALESCE(s.category,'Uncategorised') AS category,
- COALESCE(sum(CASE WHEN l.restock THEN l.quantity ELSE 0 END) OVER(PARTITION BY l.sale_id,l.product_id ORDER BY r.created_at,r.id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS prior_restock
+ COALESCE(sum(l.quantity) OVER(PARTITION BY l.sale_id,l.product_id ORDER BY r.created_at,r.id,l.id
+ ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING),0) AS prior_returned
  FROM refunds r JOIN refund_lines l ON l.refund_id=r.id AND l.store_id=r.store_id
  LEFT JOIN original_costs c ON c.sale_id=l.sale_id AND c.product_id=l.product_id
  LEFT JOIN snapshots s ON s.sale_id=l.sale_id AND s.product_id=l.product_id WHERE r.store_id=$1
+), restored AS (
+ SELECT h.created_at,h.product_id,h.category,h.total,${refundCostColumns}
+ FROM return_history h
 ), financial_entries AS (
- SELECT s.created_at,s.product_id,s.category,s.quantity,s.revenue,c.cost,COALESCE(c.missing,1) AS missing
+ SELECT s.created_at,s.product_id,s.category,s.quantity,s.revenue,c.cost,
+ CASE WHEN c.cost IS NULL THEN 1 ELSE 0 END AS missing
  FROM snapshots s LEFT JOIN original_costs c ON c.sale_id=s.sale_id AND c.product_id=s.product_id
  UNION ALL
- SELECT created_at,product_id,category,0,-total,
- -COALESCE(restored_cost,CASE WHEN restock THEN round(cost*(prior_restock+quantity)/sold_quantity,2)-round(cost*prior_restock/sold_quantity,2) ELSE 0 END),missing
- FROM refund_history
+ SELECT created_at,product_id,category,0,-total,-historical_cost,
+ CASE WHEN historical_cost IS NULL THEN 1 ELSE 0 END
+ FROM restored
 )`;
 
 type Store = { id: string; timezone: string; currency: string };

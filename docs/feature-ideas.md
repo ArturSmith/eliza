@@ -2,6 +2,15 @@
 
 Created: 12 September 2026.
 
+## Current implementation work — 14 October 2026
+
+The historical idea statuses below are not a current release checklist. See
+[implementation progress](implementation-progress.md) for the approved implementation order.
+The first increment now shares cost provenance and refund rounding between financial
+summary and dashboard dimensions, checks financial document totals against line facts,
+and adds searched, product/date-filtered, paginated stock movement history.
+Sales-based replenishment, proactive AI notifications and traffic analysis remain planned.
+
 These are proposals to explore, not committed requirements or implemented features. The [prioritized backlog](prioritized-backlog.md) takes precedence. Some ideas extend backlog items; validate demand before expanding the MVP.
 
 ## Small improvements to explore during a shop pilot

@@ -25,3 +25,12 @@ An expense is `ONE_TIME` on `expense_date`, or `EVEN_OVER_PERIOD` between `perio
 When verified cost is missing, exact COGS, gross profit, gross margin, and store operating profit are `null`. If every affected sale and return still has a cost snapshot saved at checkout, `estimated` provides provisional COGS and profit derived from those immutable snapshots. This is useful for stock migrated with `legacy_estimate` batch cost, but it is not a verified purchase-cost margin. The Overview marks these values with `≈` and an explanation. If a snapshot itself is missing, the estimate is also unavailable. When loss cost is missing, inventory losses and store operating profit are `null`. `dataQuality` reports missing and estimated sale/refund cost records, missing loss records, and cost coverage. The expense scope is explicitly `recorded_expenses_only`: unrecorded bills cannot be detected from the database. Product- or shift-filtered summaries omit inventory losses and operating expenses because those store-wide amounts cannot be allocated to those dimensions reliably.
 
 This is a management-profitability model, not cash flow or statutory net profit. It does not calculate income tax, accounts receivable/payable, depreciation, or owner-withdrawable cash.
+
+## Consistency update — 14 October 2026
+
+Summary, category/product profitability and monthly margin use shared SQL rules
+for immutable sale cost, legacy-estimate provenance and cumulative refund allocation.
+A legacy-estimated layer cannot produce an exact profit in a dashboard breakdown.
+The summary also withholds exact and estimated cost/profit when a sale/refund total
+does not reconcile to the included line facts, including missing lines. This does
+not reconstruct missing history. Existing tax and loss-classification policy is unchanged.
