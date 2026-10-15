@@ -5854,3 +5854,52 @@ input.shopping-section-title {
 .replenishment-filters .field {
   margin-bottom: 0;
 }
+
+/* Keep report sections spaced and long names contained within their columns. */
+.replenishment-page {
+  display: grid;
+  gap: 20px;
+  min-width: 0;
+}
+.replenishment-page > .page-heading,
+.replenishment-page > p {
+  margin: 0;
+}
+.replenishment-page > .muted {
+  line-height: 1.6;
+  max-width: 1100px;
+}
+.replenishment-table table {
+  table-layout: fixed;
+  min-width: 1430px;
+  white-space: normal;
+}
+.replenishment-table th,
+.replenishment-table td {
+  padding: 16px;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.replenishment-table th {
+  line-height: 1.5;
+}
+.replenishment-table td {
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+}
+.replenishment-table .replenishment-notes {
+  min-width: 0;
+}
+.replenishment-filters > .field {
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .replenishment-filters > .field:first-child,
+  .replenishment-filters > .field:nth-child(5),
+  .replenishment-filters > button {
+    grid-column: 1 / -1;
+  }
+  .replenishment-page {
+    gap: 16px;
+  }
+}

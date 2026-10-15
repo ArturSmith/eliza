@@ -89,7 +89,7 @@ export function ReplenishmentPage() {
   const field = (key: keyof typeof draft, value: string) =>
     setDraft((previous) => ({ ...previous, [key]: value }));
   return (
-    <>
+    <div className="replenishment-page">
       <div className="page-heading">
         <div>
           <div className="eyebrow">{t('Stock & purchasing')}</div>
@@ -202,8 +202,19 @@ export function ReplenishmentPage() {
                     )}
                   </p>
                 )}
-                <section className="panel table-scroll">
+                <section className="panel table-scroll replenishment-table">
                   <table>
+                    <colgroup>
+                      <col style={{ width: 240 }} />
+                      <col style={{ width: 135 }} />
+                      <col style={{ width: 130 }} />
+                      <col style={{ width: 110 }} />
+                      <col style={{ width: 155 }} />
+                      <col style={{ width: 155 }} />
+                      <col style={{ width: 145 }} />
+                      <col style={{ width: 120 }} />
+                      <col style={{ width: 240 }} />
+                    </colgroup>
                     <thead>
                       <tr>
                         {[
@@ -326,6 +337,6 @@ export function ReplenishmentPage() {
           )}
         </>
       )}
-    </>
+    </div>
   );
 }
