@@ -225,7 +225,7 @@ export async function createApp() {
         !req.accepts('html')
       )
         return next();
-      res.sendFile(root + 'index.html');
+      res.sendFile('index.html', { root });
     });
   }
   if (process.env.NODE_ENV !== 'production') {

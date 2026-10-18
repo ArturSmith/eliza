@@ -146,3 +146,7 @@ New checkout receipts snapshot the store header details and footer. Subsequent s
 ### Local operational tools
 
 Use `pnpm ops:check`, `pnpm db:backup`, and `pnpm db:verify-backup <dump>` for diagnostics and backup verification. `pnpm db:restore-new <dump>` restores into a separate database; owner recovery is an explicit local-administrator command. See [the operations runbook](docs/operations.md) for exact recovery steps and remaining deployment requirements. Backups are private but unencrypted; off-device copies and scheduling remain operator responsibilities.
+
+## macOS desktop prototype
+
+`pnpm desktop:dev` runs the shared application against an isolated local store, with no cloud dependency for checkout. See [desktop setup and limitations](docs/desktop.md) before using it. PostgreSQL must currently be installed separately; cloud synchronization and a signed self-contained installer are not implemented.

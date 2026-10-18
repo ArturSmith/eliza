@@ -19,7 +19,10 @@
     "db:verify-backup": "node scripts/backup.mjs verify",
     "ops:check": "node scripts/readiness.mjs",
     "account:recover": "node scripts/recover-owner.mjs",
-    "db:restore-new": "node scripts/backup.mjs restore-new"
+    "db:restore-new": "node scripts/backup.mjs restore-new",
+    "desktop:dev": "pnpm build && pnpm --filter @eliza/desktop start",
+    "desktop:package:mac": "pnpm build && pnpm --filter @eliza/desktop package:mac",
+    "test:desktop": "pnpm build && node tests/desktop/offline-smoke.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

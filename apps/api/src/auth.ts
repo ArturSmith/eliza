@@ -178,7 +178,7 @@ export class AuthService {
     const options = {
       httpOnly: true,
       sameSite: 'strict' as const,
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production' && process.env.ELIZA_DESKTOP !== 'true',
       path: '/api',
     };
     res.cookie('eliza_session', secret, { ...options, maxAge: 12 * 3600_000 });
@@ -297,7 +297,7 @@ export class AuthController {
     res.cookie('eliza_device', deviceToken, {
       httpOnly: true,
       sameSite: 'strict',
-      secure: process.env.NODE_ENV === 'production',
+      secure: process.env.NODE_ENV === 'production' && process.env.ELIZA_DESKTOP !== 'true',
       path: '/api',
       maxAge: 365 * 86400_000,
     });
