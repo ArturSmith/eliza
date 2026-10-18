@@ -40,6 +40,11 @@ export const employees = pgTable('employees', {
     .notNull()
     .references(() => roles.id),
   name: text('name').notNull(),
+  firstName: text('first_name'),
+  lastName: text('last_name'),
+  birthYear: integer('birth_year'),
+  gender: text('gender'),
+  phone: text('phone'),
   email: text('email').unique(),
   employeeCode: text('employee_code')
     .notNull()

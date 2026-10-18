@@ -29,3 +29,12 @@
   flex-wrap: wrap;
   gap: 0.4rem;
 }
+
+.employee-profile-section + .employee-profile-section {
+  border-top: 1px solid var(--color-border-dce5d8);
+  padding-top: 24px;
+  margin-top: 8px;
+}
+.employee-profile-section h3 {
+  margin: 0 0 20px;
+}

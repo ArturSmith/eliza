@@ -13,7 +13,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { z } from 'zod';
-import { employeeSchema, pinSchema } from '@eliza/contracts';
+import { employeeSchema, employeeProfileSchema, pinSchema } from '@eliza/contracts';
 import { AuthModule } from './auth.js';
 import { Database } from './database.js';
 import {
@@ -86,6 +86,17 @@ export class TeamController {
         )
       ).rows[0];
       await client.query(
+        'UPDATE employees SET first_name=$2,last_name=$3,birth_year=$4,gender=$5,phone=$6 WHERE id=$1',
+        [
+          employee.id,
+          body.firstName || null,
+          body.lastName || null,
+          body.birthYear || null,
+          body.gender || null,
+          body.phone || null,
+        ],
+      );
+      await client.query(
         'INSERT INTO employee_roles(employee_id,role_id,store_id) SELECT $1,unnest($2::uuid[]),$3',
         [employee.id, roleIds, store.id],
       );
@@ -137,6 +148,7 @@ export class TeamController {
   ) {
     const body = parse(
       z.object({
+        ...employeeProfileSchema.shape,
         name: z.string().trim().min(1).max(120),
         employeeCode: z
           .string()
@@ -203,6 +215,17 @@ export class TeamController {
         'UPDATE employees SET name=$1,employee_code=$2,role_id=$3,active=$4,pin_hash=COALESCE($5,pin_hash) WHERE id=$6',
         [body.name, body.employeeCode, body.roleId, body.active, pin, id],
       );
+      await client.query(
+        'UPDATE employees SET first_name=$2,last_name=$3,birth_year=$4,gender=$5,phone=$6 WHERE id=$1',
+        [
+          id,
+          body.firstName === undefined ? old.first_name : body.firstName || null,
+          body.lastName === undefined ? old.last_name : body.lastName || null,
+          body.birthYear === undefined ? old.birth_year : body.birthYear || null,
+          body.gender === undefined ? old.gender : body.gender || null,
+          body.phone === undefined ? old.phone : body.phone || null,
+        ],
+      );
       await client.query('DELETE FROM employee_roles WHERE employee_id=$1', [id]);
       await client.query(
         'INSERT INTO employee_roles(employee_id,role_id,store_id) SELECT $1,unnest($2::uuid[]),$3',
@@ -234,6 +257,19 @@ export class TeamController {
             roleId: body.roleId,
             active: body.active,
           },
+          profileFieldsChanged: ['firstName', 'lastName', 'birthYear', 'gender', 'phone'].filter(
+            (key) => {
+              const columns = {
+                firstName: 'first_name',
+                lastName: 'last_name',
+                birthYear: 'birth_year',
+                gender: 'gender',
+                phone: 'phone',
+              };
+              const field = key as keyof typeof columns;
+              return body[field] !== undefined && (body[field] || null) !== old[columns[field]];
+            },
+          ),
           pinReset: !!pin,
         },
       );

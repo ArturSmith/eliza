@@ -47,6 +47,11 @@ export class ManagementController {
       .select({
         id: employees.id,
         name: employees.name,
+        firstName: sql<string>`CASE WHEN ${req.context.user.permissions.includes('team.manage')} THEN ${employees.firstName} END`,
+        lastName: sql<string>`CASE WHEN ${req.context.user.permissions.includes('team.manage')} THEN ${employees.lastName} END`,
+        birthYear: sql<number>`CASE WHEN ${req.context.user.permissions.includes('team.manage')} THEN ${employees.birthYear} END`,
+        gender: sql<string>`CASE WHEN ${req.context.user.permissions.includes('team.manage')} THEN ${employees.gender} END`,
+        phone: sql<string>`CASE WHEN ${req.context.user.permissions.includes('team.manage')} THEN ${employees.phone} END`,
         email: sql<string>`COALESCE(${employees.email},'')`,
         roleId: employees.roleId,
         employeeCode: employees.employeeCode,

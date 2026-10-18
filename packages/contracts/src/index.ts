@@ -193,6 +193,11 @@ export type Device = {
 export type Employee = {
   id: string;
   name: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  birthYear?: number | null;
+  gender?: string | null;
+  phone?: string | null;
   email: string;
   role: string;
   roleId: string;
@@ -223,7 +228,29 @@ function isQuantity(v: string) {
 }
 export const cashierPermissions: Permission[] = ['catalog.read', 'pos.access'];
 export const pinSchema = z.string().regex(/^\d{6}$/, 'Use exactly six digits');
+export const employeeProfileSchema = z.object({
+  firstName: z.string().trim().max(60).optional(),
+  lastName: z.string().trim().max(60).optional(),
+  birthYear: z
+    .union([
+      z.coerce
+        .number()
+        .int()
+        .min(1900)
+        .refine((v) => v <= new Date().getUTCFullYear(), 'Birth year cannot be in the future'),
+      z.literal(''),
+    ])
+    .optional(),
+  gender: z.enum(['', 'female', 'male', 'other', 'undisclosed']).optional(),
+  phone: z
+    .string()
+    .trim()
+    .max(40)
+    .refine((v) => !v || /^\+?[0-9 ()-]{5,40}$/.test(v), 'Enter a valid contact phone')
+    .optional(),
+});
 export const employeeSchema = z.object({
+  ...employeeProfileSchema.shape,
   name: short,
   employeeCode: z
     .string()

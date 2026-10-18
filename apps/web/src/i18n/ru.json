@@ -2100,5 +2100,17 @@
   "Equipment must fit inside the store without overlapping.": "Оборудование должно находиться внутри магазина и не пересекаться с другими объектами.",
   "Store layout changed. Reload before saving.": "Другой менеджер изменил планировку. Перезагрузите страницу перед сохранением.",
   "Access denied": "Нет доступа",
-  "Leave without saving the store layout?": "Выйти без сохранения планировки магазина?"
+  "Leave without saving the store layout?": "Выйти без сохранения планировки магазина?",
+  "Personal information": "Личные данные",
+  "First name": "Имя",
+  "Last name": "Фамилия",
+  "Birth year": "Год рождения",
+  "Gender": "Пол",
+  "Not specified": "Не указан",
+  "Female": "Женский",
+  "Male": "Мужской",
+  "Prefer not to say": "Предпочитаю не указывать",
+  "Contact phone": "Контактный телефон",
+  "Access and roles": "Доступ и роли",
+  "Edit employee": "Редактировать сотрудника"
 }

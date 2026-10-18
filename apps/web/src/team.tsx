@@ -64,6 +64,7 @@ export function TeamManagementPage() {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
     const body = Object.fromEntries(formData);
+    body.name = [body.firstName, body.lastName].filter(Boolean).join(' ') || employee?.name || '';
     const roleIds = formData.getAll('roleIds').map(String);
     const roleId =
       roleIds.find((id) => id === employee?.roleId) ??
@@ -136,6 +137,7 @@ export function TeamManagementPage() {
                   <td>
                     <strong>{e.name}</strong>
                     <small>{e.email || t('PIN-only account')}</small>
+                    {canManage && e.phone && <small>{e.phone}</small>}
                   </td>
                   <td>{e.employeeCode}</td>
                   <td>
@@ -169,7 +171,7 @@ export function TeamManagementPage() {
                         aria-label={t('Edit {value0}', { value0: e.name })}
                       >
                         <Pencil size={15} />
-                        {t('Edit access ')}
+                        {t('Edit employee')}
                       </Button>
                       {!e.hasQr && (
                         <Button
@@ -192,114 +194,165 @@ export function TeamManagementPage() {
       <Dialog
         open={open}
         onOpenChange={setOpen}
-        title={employee ? t('Edit employee access') : t('Add an employee')}
+        title={employee ? t('Edit employee') : t('Add an employee')}
         description={t(
           'Never share a PIN between employees. Changes are recorded in the activity log.',
         )}
       >
         <form onSubmit={submit} key={employee?.id ?? 'new'}>
-          <Field label={t('Employee name')}>
-            <input name="name" defaultValue={employee?.name} required maxLength={120} />
-          </Field>
-          <div className="form-grid">
-            <div className="field">
-              <label htmlFor="team-employee-code">{t('Employee code')}</label>
-              <span className="employee-code-control">
+          <section className="employee-profile-section">
+            <h3>{t('Personal information')}</h3>
+            <div className="form-grid">
+              <Field label={t('First name')}>
                 <input
-                  id="team-employee-code"
-                  name="employeeCode"
-                  value={employeeCode}
-                  onChange={(event) => setEmployeeCode(event.target.value)}
+                  name="firstName"
+                  defaultValue={employee?.firstName ?? employee?.name}
                   required
-                  maxLength={20}
-                  placeholder={t('e.g. ANNA')}
+                  maxLength={60}
+                  autoComplete="given-name"
                 />
-                {!employee && (
-                  <button
-                    type="button"
-                    className="button button-outline button-icon"
-                    aria-label={t('Generate employee code')}
-                    title={t('Generate employee code')}
-                    onClick={generateEmployeeCode}
-                  >
-                    <RefreshCw size={17} />
-                  </button>
-                )}
-              </span>
-            </div>
-          </div>
-          <fieldset className="field">
-            <legend>{t('Roles')}</legend>
-            <div className="role-options">
-              {roles.data?.map((role) => (
-                <label key={role.id} className="role-option">
-                  <input
-                    type="checkbox"
-                    name="roleIds"
-                    value={role.id}
-                    defaultChecked={
-                      employee
-                        ? (employee.roleIds ?? [employee.roleId]).includes(role.id)
-                        : role.name === 'Cashier'
-                    }
-                  />
-                  <span>{t(role.name)}</span>
-                </label>
-              ))}
-            </div>
-            <small>
-              {t('Employees can have several roles. General employee can use Price Tags devices.')}
-            </small>
-          </fieldset>
-          <Field
-            label={employee ? t('New PIN (optional)') : t('Register PIN')}
-            hint={
-              employee
-                ? t(
-                    'Leave blank to keep the existing PIN. Changing it locks their register session.',
-                  )
-                : t('Exactly six digits.')
-            }
-          >
-            <input
-              name="pin"
-              type="password"
-              inputMode="numeric"
-              pattern="[0-9]{6}"
-              maxLength={6}
-              minLength={6}
-              required={!employee}
-              autoComplete="new-password"
-            />
-          </Field>
-          {employee ? (
-            <Field label={t('Status')}>
-              <select name="active" defaultValue={String(employee.active)}>
-                <option value="true">{t('Active')}</option>
-                <option value="false">{t('Inactive')}</option>
-              </select>
-            </Field>
-          ) : (
-            <>
-              <Field label={t('Management email (optional)')}>
-                <input name="email" type="email" autoComplete="off" />
               </Field>
-              <Field
-                label={t('Management password (optional)')}
-                hint={t(
-                  'Provide both email and a password to allow back-office login. At least 12 characters.',
-                )}
-              >
+              <Field label={t('Last name')}>
                 <input
-                  name="password"
-                  type="password"
-                  minLength={12}
-                  maxLength={128}
-                  autoComplete="new-password"
+                  name="lastName"
+                  defaultValue={employee?.lastName ?? ''}
+                  maxLength={60}
+                  autoComplete="family-name"
                 />
               </Field>
-            </>
-          )}
+              <Field label={t('Birth year')}>
+                <input
+                  name="birthYear"
+                  type="number"
+                  min={1900}
+                  max={new Date().getFullYear()}
+                  defaultValue={employee?.birthYear ?? ''}
+                />
+              </Field>
+              <Field label={t('Gender')}>
+                <select name="gender" defaultValue={employee?.gender ?? ''}>
+                  <option value="">{t('Not specified')}</option>
+                  <option value="female">{t('Female')}</option>
+                  <option value="male">{t('Male')}</option>
+                  <option value="other">{t('Other')}</option>
+                  <option value="undisclosed">{t('Prefer not to say')}</option>
+                </select>
+              </Field>
+            </div>
+            <Field label={t('Contact phone')}>
+              <input
+                name="phone"
+                type="tel"
+                autoComplete="tel"
+                maxLength={40}
+                defaultValue={employee?.phone ?? ''}
+              />
+            </Field>
+          </section>
+          <section className="employee-profile-section">
+            <h3>{t('Access and roles')}</h3>
+            <div className="form-grid">
+              <div className="field">
+                <label htmlFor="team-employee-code">{t('Employee code')}</label>
+                <span className="employee-code-control">
+                  <input
+                    id="team-employee-code"
+                    name="employeeCode"
+                    value={employeeCode}
+                    onChange={(event) => setEmployeeCode(event.target.value)}
+                    required
+                    maxLength={20}
+                    placeholder={t('e.g. ANNA')}
+                  />
+                  {!employee && (
+                    <button
+                      type="button"
+                      className="button button-outline button-icon"
+                      aria-label={t('Generate employee code')}
+                      title={t('Generate employee code')}
+                      onClick={generateEmployeeCode}
+                    >
+                      <RefreshCw size={17} />
+                    </button>
+                  )}
+                </span>
+              </div>
+            </div>
+            <fieldset className="field">
+              <legend>{t('Roles')}</legend>
+              <div className="role-options">
+                {roles.data?.map((role) => (
+                  <label key={role.id} className="role-option">
+                    <input
+                      type="checkbox"
+                      name="roleIds"
+                      value={role.id}
+                      defaultChecked={
+                        employee
+                          ? (employee.roleIds ?? [employee.roleId]).includes(role.id)
+                          : role.name === 'Cashier'
+                      }
+                    />
+                    <span>{t(role.name)}</span>
+                  </label>
+                ))}
+              </div>
+              <small>
+                {t(
+                  'Employees can have several roles. General employee can use Price Tags devices.',
+                )}
+              </small>
+            </fieldset>
+            <Field
+              label={employee ? t('New PIN (optional)') : t('Register PIN')}
+              hint={
+                employee
+                  ? t(
+                      'Leave blank to keep the existing PIN. Changing it locks their register session.',
+                    )
+                  : t('Exactly six digits.')
+              }
+            >
+              <input
+                name="pin"
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                minLength={6}
+                required={!employee}
+                autoComplete="new-password"
+              />
+            </Field>
+            {employee ? (
+              <Field label={t('Status')}>
+                <select name="active" defaultValue={String(employee.active)}>
+                  <option value="true">{t('Active')}</option>
+                  <option value="false">{t('Inactive')}</option>
+                </select>
+              </Field>
+            ) : (
+              <>
+                <Field label={t('Management email (optional)')}>
+                  <input name="email" type="email" autoComplete="off" />
+                </Field>
+                <Field
+                  label={t('Management password (optional)')}
+                  hint={t(
+                    'Provide both email and a password to allow back-office login. At least 12 characters.',
+                  )}
+                >
+                  <input
+                    name="password"
+                    type="password"
+                    minLength={12}
+                    maxLength={128}
+                    autoComplete="new-password"
+                  />
+                </Field>
+              </>
+            )}
+          </section>
           <ErrorMessage error={mutation.error} />
           <div className="form-actions">
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
