@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import type { PoolClient } from 'pg';
 import { fromScaled, toScaled } from '@eliza/contracts';
 
@@ -16,7 +17,7 @@ export async function resolvePrice(
   storeId: string,
   product: {
     id: string;
-    price: string;
+    price: string | null;
     category_id?: string | null;
     price_kind?: string;
     regular_price?: string | null;
@@ -24,7 +25,6 @@ export async function resolvePrice(
   },
   markdownUnitId?: string | null,
 ): Promise<ResolvedPrice> {
-  const basePrice = product.price;
   if (markdownUnitId) {
     const unit = (
       await client.query(
@@ -55,6 +55,9 @@ export async function resolvePrice(
       markdownUnitId,
     };
   }
+  const basePrice = product.price;
+  if (basePrice === null)
+    throw new BadRequestException('Set a selling price before selling this product.');
   if (product.price_kind === 'limited_discount')
     return {
       price: basePrice,

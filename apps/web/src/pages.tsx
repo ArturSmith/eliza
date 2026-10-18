@@ -126,7 +126,8 @@ const navGroups = [
   },
 ] as const;
 const nav = navGroups.flatMap((group) => [...group.items]);
-function money(value: string | number, currency = 'NOK') {
+function money(value: string | number | null, currency = 'NOK') {
+  if (value === null) return '—';
   return new Intl.NumberFormat(getLocale(), { style: 'currency', currency }).format(Number(value));
 }
 function date(

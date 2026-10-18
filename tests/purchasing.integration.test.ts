@@ -872,4 +872,72 @@ describe.sequential('purchasing and receiving', () => {
     expect(Array.isArray((await manager.request('/purchases')).body)).toBe(true);
     expect((await new Client().request('/purchases?page=1')).status).toBe(401);
   });
+  it('creates an unpriced product and sets its first prices on receipt without inventing zero costs', async () => {
+    const input = {
+      name: 'Unpriced yogurt',
+      sku: 'UNPRICED',
+      category: 'Dairy',
+      unit: 'piece',
+      minStock: '0',
+      barcodes: [],
+      plu: '',
+    };
+    const created = await manager.request('/products', { ...input, price: '', cost: '' });
+    expect(created.status).toBe(201);
+    const id = created.body.id;
+    expect(
+      (await db.pool.query('SELECT price,cost FROM products WHERE id=$1', [id])).rows[0],
+    ).toEqual({ price: null, cost: null });
+    expect((await manager.request('/products')).body.find((p: any) => p.id === id)).toMatchObject({
+      price: null,
+      cost: null,
+    });
+    const adjustment = await manager.request('/inventory/adjustments', {
+      requestId: requestId(),
+      productId: id,
+      quantity: '1',
+      reason: 'count_correction',
+      notes: 'No known cost yet',
+    });
+    expect(adjustment.status).toBe(400);
+    expect(adjustment.body.message).toContain('Set purchase cost');
+    const draft = await manager.request('/purchases', {
+      requestId: requestId(),
+      supplierId: supplier.id,
+      lines: [{ productId: id, quantity: '1', unitCost: '59', taxRate: '0' }],
+    });
+    expect(draft.status).toBe(201);
+    const placed = await manager.request('/purchases/' + draft.body.id + '/status', {
+      requestId: requestId(),
+      version: draft.body.version,
+      status: 'ordered',
+    });
+    expect(placed.status).toBe(201);
+    const received = await manager.request('/purchases/' + draft.body.id + '/receipts', {
+      requestId: requestId(),
+      version: placed.body.version,
+      lines: [
+        {
+          purchaseLineId: placed.body.lines[0].id,
+          quantity: '1',
+          sellingPrice: '70',
+          expectedSellingPrice: null,
+        },
+      ],
+    });
+    expect(received.status).toBe(201);
+    expect(
+      (await db.pool.query('SELECT price,cost,stock FROM products WHERE id=$1', [id])).rows[0],
+    ).toEqual({ price: '70.00', cost: '59.00', stock: '1.000' });
+    const cleared = await manager.request(
+      '/products/' + id,
+      { ...input, price: null, cost: null },
+      'PATCH',
+    );
+    expect(cleared.status).toBe(200);
+    expect(
+      (await db.pool.query('SELECT unit_cost FROM stock_batches WHERE product_id=$1', [id])).rows[0]
+        .unit_cost,
+    ).toBe('59.00');
+  });
 });

@@ -62,8 +62,10 @@ export function PromotionsPage() {
   const canCreate =
     name.trim() && selectedCount > 0 && validValue && (timing === 'now' || !!startsAt);
   const currency = session.data?.store.currency ?? 'NOK';
-  const money = (amount: string) =>
-    new Intl.NumberFormat(getLocale(), { style: 'currency', currency }).format(Number(amount));
+  const money = (amount: string | null) =>
+    amount === null
+      ? '—'
+      : new Intl.NumberFormat(getLocale(), { style: 'currency', currency }).format(Number(amount));
   const date = (value: string) =>
     new Intl.DateTimeFormat(getLocale(), {
       dateStyle: 'medium',

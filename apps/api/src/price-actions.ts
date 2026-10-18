@@ -57,12 +57,15 @@ export class PriceActionsController {
       )
     ).rows[0];
     if (!product) throw new NotFoundException('Product not found.');
-    const checkout = await resolvePrice(this.database.pool as any, store, {
-      id: product.id,
-      price: product.price,
-      category_id: product.category_id,
-      price_kind: product.priceKind,
-    });
+    const checkout =
+      product.price === null
+        ? null
+        : await resolvePrice(this.database.pool as any, store, {
+            id: product.id,
+            price: product.price,
+            category_id: product.category_id,
+            price_kind: product.priceKind,
+          });
     const batches = (
       await this.database.pool.query(
         `SELECT b.id,(b.quantity-COALESCE((SELECT count(*) FROM markdown_units u JOIN markdowns m ON m.id=u.markdown_id
@@ -90,7 +93,7 @@ export class PriceActionsController {
         [store, id],
       )
     ).rows;
-    return { product: { ...product, checkoutPrice: checkout.price }, batches, offers };
+    return { product: { ...product, checkoutPrice: checkout?.price ?? null }, batches, offers };
   }
 
   @Post() @Require('catalog.write') async change(
@@ -111,6 +114,8 @@ export class PriceActionsController {
       ).rows[0];
       if (!product) throw new NotFoundException('Product not found.');
       const basePrice = product.regularPrice ?? product.price;
+      if (body.kind === 'discount_all' && basePrice == null)
+        throw new BadRequestException('Set a selling price before discounting this product.');
       if (body.kind === 'discount_all' && toScaled(body.price, 2) >= toScaled(basePrice, 2))
         throw new BadRequestException('Discounted price must be below the regular price.');
       if (body.kind === 'discount_all') {

@@ -192,6 +192,8 @@ export class InventoryController {
         `);
         costTotal = valuation.rows[0].cost === null ? null : String(valuation.rows[0].cost);
       } else {
+        if (product.cost === null)
+          throw new BadRequestException('Set purchase cost before adding stock.');
         await tx.execute(
           sql`SELECT adjust_stock_batches(${store.id}::uuid,${product.id}::uuid,${body.quantity}::numeric)`,
         );

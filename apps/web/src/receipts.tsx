@@ -4,7 +4,8 @@ import { ErrorMessage } from './forms';
 import type { Receipt } from '@eliza/contracts';
 import { Printer, CheckCircle2 } from 'lucide-react';
 import { Button } from './components/ui/button';
-export function formatMoney(value: string, currency = 'NOK') {
+export function formatMoney(value: string | null | undefined, currency = 'NOK') {
+  if (value == null) return '—';
   const [whole, fraction = ''] = value.split('.');
   return new Intl.NumberFormat(getLocale(), { style: 'currency', currency })
     .formatToParts(value.startsWith('-') && BigInt(whole) === 0n ? -0 : BigInt(whole))

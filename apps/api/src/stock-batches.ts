@@ -11,6 +11,14 @@ export async function addUnknownStock(
   quantity: string,
   historicalCost: string | null = null,
 ) {
+  if (historicalCost === null) {
+    const result = await c.query('SELECT cost FROM products WHERE store_id=$1 AND id=$2', [
+      storeId,
+      productId,
+    ]);
+    if (result.rows[0]?.cost == null)
+      throw new ConflictException('Set purchase cost before adding stock.');
+  }
   await c.query(
     `INSERT INTO stock_batches(store_id,product_id,quantity,unit_cost,cost_source)
      SELECT $1,$2,$3,COALESCE($4::numeric,cost),CASE WHEN $4::numeric IS NULL THEN 'adjustment' ELSE 'legacy_estimate' END FROM products WHERE store_id=$1 AND id=$2`,

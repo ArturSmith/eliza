@@ -108,8 +108,14 @@ export const productSchema = z.object({
       'Tax rate must be between 0 and 100',
     )
     .default('0'),
-  price: money,
-  cost: money,
+  price: z
+    .union([money, z.literal(''), z.null()])
+    .optional()
+    .transform((v) => (v === '' || v == null ? null : v)),
+  cost: z
+    .union([money, z.literal(''), z.null()])
+    .optional()
+    .transform((v) => (v === '' || v == null ? null : v)),
   minStock: quantity.refine(
     (v) => isQuantity(v) && toScaled(v, 3) >= 0n,
     'Minimum stock cannot be negative',
@@ -566,7 +572,7 @@ export const receiptInputSchema = z.object({
             .optional(),
           unitCost: money.optional(),
           sellingPrice: money.optional(),
-          expectedSellingPrice: money.optional(),
+          expectedSellingPrice: money.nullable().optional(),
         })
         .superRefine((line, ctx) => {
           if (!line.expiryBatches) return;

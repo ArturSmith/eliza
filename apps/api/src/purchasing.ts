@@ -1239,7 +1239,9 @@ export class PurchasingController {
             throw new BadRequestException('You cannot change selling prices.');
           if (
             entry.expectedSellingPrice === undefined ||
-            toScaled(entry.expectedSellingPrice, 2) !== toScaled(product.price, 2)
+            (entry.expectedSellingPrice == null || product.price == null
+              ? entry.expectedSellingPrice !== product.price
+              : toScaled(entry.expectedSellingPrice, 2) !== toScaled(product.price, 2))
           )
             throw new ConflictException(
               'The selling price changed. Refresh the order and review the current price.',

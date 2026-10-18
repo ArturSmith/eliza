@@ -65,7 +65,7 @@ const posCatalogSql = `SELECT p.id,p.image,p.source,p.name,p.sku,p.category,p.ca
             WHERE sb.store_id=p.store_id AND sb.product_id=p.id
               AND (sb.expiry_date IS NULL OR sb.expiry_date>(now() AT TIME ZONE
                 (SELECT timezone FROM stores WHERE id=p.store_id))::date)),0)::numeric(15,3)::text AS stock,
-          COALESCE(p.plu,'') AS plu,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),'[]'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active`;
+          COALESCE(p.plu,'') AS plu,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),'[]'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active AND p.price IS NOT NULL`;
 async function pricedCatalogRow(
   client: PoolClient,
   storeId: string,
@@ -502,6 +502,8 @@ export class CheckoutController {
         const product = products.find((p) => p.id === item.productId);
         if (!product || !product.active)
           throw new BadRequestException('A product is no longer available. Refresh your cart.');
+        if (product.price == null && !item.markdownUnitId)
+          throw new ConflictException('Set a selling price before selling this product.');
         let resolved;
         try {
           resolved = await resolvePrice(client, actor.storeId, product, item.markdownUnitId);

@@ -305,7 +305,13 @@ export function ProductForm({
   const selling = productSchema.shape.price.safeParse(manualPrice ? price : suggestedPrice);
   const buying = productSchema.shape.cost.safeParse(cost);
   const tax = productSchema.shape.taxRate.safeParse(effectiveTaxRate);
-  if (selling.success && buying.success && tax.success) {
+  if (
+    selling.success &&
+    selling.data !== null &&
+    buying.success &&
+    buying.data !== null &&
+    tax.success
+  ) {
     const line = calculateLine(selling.data, '1', tax.data);
     const net = toScaled(line.total, 2) - toScaled(line.tax, 2);
     const profit = net - toScaled(buying.data, 2);
@@ -541,7 +547,7 @@ export function ProductForm({
           </Field>
         </div>
         <div className="form-grid">
-          <Field label={t('Purchase cost')}>
+          <Field label={t('Purchase cost (optional)')}>
             <input
               name="cost"
               inputMode="decimal"
@@ -551,11 +557,10 @@ export function ProductForm({
                 setCost(e.target.value);
                 if (!initial) setManualPrice(false);
               }}
-              required
             />
           </Field>
           <Field
-            label={t('Selling price')}
+            label={t('Selling price (optional)')}
             hint={
               !manualPrice
                 ? t(
@@ -574,7 +579,6 @@ export function ProductForm({
                 setPrice(e.target.value);
                 setManualPrice(true);
               }}
-              required
             />
             <small className="product-margin-preview" aria-live="polite">
               {t('Gross margin')}: {marginPreview}

@@ -166,7 +166,7 @@ function CostComparison({
 }: {
   cost: string;
   previous?: string | null;
-  price?: string;
+  price?: string | null;
 }) {
   useLanguage();
   const currency = useSession().data?.store.currency ?? 'NOK';
@@ -972,8 +972,8 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
           ? {
               ...line,
               productId: product.id,
-              unitCost: line.source ? line.unitCost : (product.cost ?? '0'),
-              sellingPrice: product.price,
+              unitCost: line.source ? line.unitCost : (product.cost ?? ''),
+              sellingPrice: product.price ?? '',
             }
           : line,
       ),

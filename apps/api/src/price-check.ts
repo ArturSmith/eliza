@@ -95,6 +95,8 @@ export class PriceCheckController {
     const product = products.rows[0];
     if (decoded && product.unit !== 'kilogram')
       throw new BadRequestException('Scale barcode does not belong to a product sold by kilogram.');
+    if (product.price == null && !markdown)
+      throw new NotFoundException('Selling price is not set for this product.');
     let resolved;
     try {
       resolved = await resolvePrice(
