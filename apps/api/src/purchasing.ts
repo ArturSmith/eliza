@@ -729,7 +729,7 @@ export class PurchasingController {
     );
     const pageSize = pageInput === undefined ? 200 : 50;
     const result = await this.database.pool.query(
-      `WITH searched AS (SELECT p.id,p.number,p.supplier_id,p.supplier_reference,p.document_date::text,p.status,p.version,p.total,p.payment_status,p.payment_due_date::text,p.paid_at,
+      `WITH searched AS (SELECT p.id,p.number,p.supplier_id,p.supplier_reference,p.document_date::text,p.status,p.version,p.total::text AS total,p.payment_status,p.payment_due_date::text,p.paid_at,
 (p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received','closed') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,p.created_at AS "createdAt",s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.store_id=$1 AND ($2='' OR strpos(lower(p.number),$2)>0 OR strpos(lower(s.name),$2)>0 OR strpos(lower(p.supplier_reference),$2)>0)),
        matching AS (SELECT * FROM searched WHERE ($3='all' OR status=$3)
          AND ($4='all' OR ($4='overdue' AND payment_overdue) OR payment_status=$4)),

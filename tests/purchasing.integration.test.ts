@@ -838,6 +838,13 @@ describe.sequential('purchasing and receiving', () => {
     const second = (await manager.request(path + '&page=2')).body;
     expect(first.total).toBe(55);
     expect(first.rows).toHaveLength(50);
+    // json_agg must not turn PostgreSQL numeric money into JavaScript numbers.
+    for (const row of [...first.rows, ...second.rows]) {
+      expect(typeof row.total).toBe('string');
+      expect(row.total).toMatch(/^\d+\.\d{2}$/);
+    }
+    const legacy = (await manager.request('/purchases?search=pagination%20fixture')).body;
+    expect(legacy[0].total).toBe(first.rows[0].total);
     expect(second.rows).toHaveLength(5);
     expect(new Set([...first.rows, ...second.rows].map((r: any) => r.id)).size).toBe(55);
     expect((await manager.request(path + '&page=1')).body.rows.map((r: any) => r.id)).toEqual(
