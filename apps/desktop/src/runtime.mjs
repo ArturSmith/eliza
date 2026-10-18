@@ -1,26 +1,70 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, writeFile, rm, chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 const exec = promisify(execFile);
 
-export function postgresBin(explicit) {
-  const candidates = [
-    explicit,
-    ...[18, 17, 16, 15, 14].flatMap((v) => [
-      `/opt/homebrew/opt/postgresql@${v}/bin`,
-      `/usr/local/opt/postgresql@${v}/bin`,
-    ]),
-  ].filter(Boolean);
-  const bin = candidates.find((p) =>
-    ['postgres', 'pg_ctl', 'initdb'].every((name) => existsSync(join(p, name))),
-  );
+export class DatabaseRuntimeError extends Error {}
+
+const requiredPrograms = ['postgres', 'pg_ctl', 'initdb', 'pg_dump', 'pg_restore'];
+export function postgresBin(
+  explicit,
+  {
+    root = process.env.ELIZA_RUNTIME_ROOT ?? fileURLToPath(new URL('../../../', import.meta.url)),
+    dataDir = process.env.ELIZA_DATA_DIR,
+    packaged = process.env.ELIZA_DESKTOP_PACKAGED === '1',
+  } = {},
+) {
+  const clusterVersion = dataDir && join(dataDir, 'postgres/PG_VERSION');
+  const major =
+    clusterVersion && existsSync(clusterVersion)
+      ? readFileSync(clusterVersion, 'utf8').trim()
+      : null;
+  if (major !== null && !/^(14|15|16|17|18)$/.test(major))
+    throw new DatabaseRuntimeError(
+      'Unsupported PostgreSQL data version. Existing store data has not been changed.',
+    );
+  const bundled = packaged
+    ? join(root, 'postgres')
+    : join(root, '.local/postgres-runtime', `darwin-${process.arch}`);
+  const manifestFile = join(bundled, 'manifest.json');
+  const complete = (bin) => requiredPrograms.every((name) => existsSync(join(bin, name)));
+  if (explicit && !packaged) {
+    if (!complete(explicit))
+      throw new DatabaseRuntimeError(
+        'POSTGRES_BIN is incomplete. Existing store data has not been changed.',
+      );
+    return explicit;
+  }
+  if (existsSync(manifestFile)) {
+    const manifest = JSON.parse(readFileSync(manifestFile, 'utf8'));
+    if (manifest.platform !== process.platform || manifest.arch !== process.arch)
+      throw new DatabaseRuntimeError('The bundled PostgreSQL runtime does not match this Mac.');
+    const selected = major ?? manifest.defaultMajor;
+    if (!/^(14|15|16|17|18)$/.test(selected))
+      throw new DatabaseRuntimeError('Invalid bundled PostgreSQL manifest.');
+    const bin = join(bundled, selected, 'bin');
+    if (!complete(bin))
+      throw new DatabaseRuntimeError(
+        `This store needs PostgreSQL ${selected}, which is not included in this app. Existing data is unchanged. Use the previous app or restore a verified backup into a supported version.`,
+      );
+    return bin;
+  }
+  if (packaged)
+    throw new DatabaseRuntimeError(
+      'The application database runtime is missing. Reinstall Eliza. Existing store data is unchanged.',
+    );
+  const versions = major ? [major] : [18, 17, 16, 15, 14];
+  const bin = versions
+    .flatMap((v) => [`/opt/homebrew/opt/postgresql@${v}/bin`, `/usr/local/opt/postgresql@${v}/bin`])
+    .find(complete);
   if (!bin)
-    throw new Error(
-      'PostgreSQL is not installed. Install PostgreSQL 14–18 with Homebrew, or set POSTGRES_BIN. Your store data has not been changed.',
+    throw new DatabaseRuntimeError(
+      'Build the bundled database with pnpm desktop:postgres, or set POSTGRES_BIN for development. Existing store data is unchanged.',
     );
   return bin;
 }
@@ -29,9 +73,16 @@ export function postgresBin(explicit) {
 export async function startDatabase({
   dataDir,
   root,
-  bin = postgresBin(process.env.POSTGRES_BIN),
+  bin = postgresBin(process.env.POSTGRES_BIN, { root, dataDir }),
   port = 54339,
 }) {
+  // Check compatibility before writing credentials or initializing a cluster.
+  const version = (await exec(join(bin, 'postgres'), ['--version'])).stdout.match(/(\d+)\./)?.[1];
+  const versionFile = join(dataDir, 'postgres/PG_VERSION');
+  if (existsSync(versionFile) && (await readFile(versionFile, 'utf8')).trim() !== version)
+    throw new DatabaseRuntimeError(
+      'The PostgreSQL runtime does not match this store. Existing data is unchanged.',
+    );
   await mkdir(dataDir, { recursive: true, mode: 0o700 });
   await chmod(dataDir, 0o700);
   const cluster = join(dataDir, 'postgres');
@@ -72,7 +123,6 @@ export async function startDatabase({
     }
   }
   const major = (await readFile(join(cluster, 'PG_VERSION'), 'utf8')).trim();
-  const version = (await run('postgres', ['--version'])).stdout.match(/(\d+)\./)?.[1];
   if (major !== version)
     throw new Error(
       `This store uses PostgreSQL ${major}. Set POSTGRES_BIN to that version before opening it.`,
@@ -110,7 +160,7 @@ export async function startDatabase({
     } finally {
       await client.end();
     }
-    return { url, stop };
+    return { url, stop, bin };
   } catch (error) {
     if (!running) await stop().catch(() => {});
     throw error;

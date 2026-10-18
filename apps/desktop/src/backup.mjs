@@ -90,7 +90,7 @@ export async function createBackup({
   url,
   destination,
   reason = 'manual',
-  bin = postgresBin(process.env.POSTGRES_BIN),
+  bin = postgresBin(process.env.POSTGRES_BIN, { root }),
 }) {
   const dir = join(destination, '..');
   await mkdir(dir, { recursive: true, mode: 0o700 });
@@ -212,7 +212,7 @@ export async function verifyBackup({
   root,
   url,
   file,
-  bin = postgresBin(process.env.POSTGRES_BIN),
+  bin = postgresBin(process.env.POSTGRES_BIN, { root }),
 }) {
   const temporary = await mkdtemp(join(tmpdir(), 'eliza-verify-'));
   const dump = join(temporary, 'store.dump');
@@ -249,7 +249,7 @@ export async function restoreEmptyStore({
   root,
   url,
   file,
-  bin = postgresBin(process.env.POSTGRES_BIN),
+  bin = postgresBin(process.env.POSTGRES_BIN, { root }),
 }) {
   const temporary = await mkdtemp(join(tmpdir(), 'eliza-restore-'));
   const client = connection(root, url);
@@ -288,7 +288,13 @@ export async function restoreEmptyStore({
     await rm(temporary, { recursive: true, force: true });
   }
 }
-export async function automaticBackup({ root, url, dataDir, reason = 'automatic' }) {
+export async function automaticBackup({
+  root,
+  url,
+  dataDir,
+  reason = 'automatic',
+  bin = postgresBin(process.env.POSTGRES_BIN, { root, dataDir }),
+}) {
   const directory = join(dataDir, 'backups');
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await chmod(directory, 0o700);
@@ -296,7 +302,7 @@ export async function automaticBackup({ root, url, dataDir, reason = 'automatic'
     directory,
     'auto-' + new Date().toISOString().replaceAll(':', '-') + '-' + randomUUID() + '.elizabackup',
   );
-  const manifest = await createBackup({ root, url, destination: file, reason });
+  const manifest = await createBackup({ root, url, destination: file, reason, bin });
   const names = (await readdir(directory))
     .filter((n) => /^auto-\d{4}-.*\.elizabackup$/.test(n))
     .sort()

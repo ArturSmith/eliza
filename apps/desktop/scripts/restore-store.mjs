@@ -28,7 +28,7 @@ try {
   const port = probe.address().port;
   await new Promise((done) => probe.close(done));
   database = await startDatabase({ root, dataDir, port });
-  const result = await restoreEmptyStore({ root, url: database.url, file });
+  const result = await restoreEmptyStore({ root, url: database.url, file, bin: database.bin });
   success = true;
   console.log(
     JSON.stringify({

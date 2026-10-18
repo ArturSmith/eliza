@@ -4,7 +4,9 @@ Eliza Desktop lives in this monorepo under `apps/desktop`. It runs the **existin
 
 ## Run on a Mac
 
-Install PostgreSQL 14–18 with Homebrew (for example `brew install postgresql@17`). No Homebrew service needs to run: Eliza starts its own cluster. Use `POSTGRES_BIN` to select a nonstandard installation or the matching major version for an existing cluster.
+The packaged Mac app includes PostgreSQL and all database tools. End users do not install Homebrew, PostgreSQL or a separate database service. Eliza starts and stops its own private cluster automatically.
+
+For source development, build the embedded runtime once with `pnpm desktop:postgres` (macOS Command Line Tools and internet required). A matching Homebrew installation or `POSTGRES_BIN` remains an optional development fallback only.
 
 ```sh
 pnpm install
@@ -19,14 +21,14 @@ Internal macOS build, for the current CPU architecture:
 pnpm desktop:package:mac
 ```
 
-The `.app` is written under `.local/desktop-builds`. It includes the API, web assets and production JavaScript dependencies. **This prototype still requires PostgreSQL installed on the target Mac.** It is unsigned and unnotarized; it is not yet a public installer. iOS is not supported by Electron.
+The `.app`, a drag-to-Applications `.dmg`, and its SHA-256 checksum are written under `.local/desktop-builds`. It includes the API, web assets and production JavaScript dependencies. **PostgreSQL is included in the app; no separate installation is required.** It is unsigned and unnotarized; it is not yet a public installer. iOS is not supported by Electron.
 
 ## Data and process lifetime
 
 - Store directory: `~/Library/Application Support/Eliza Desktop`. `ELIZA_DESKTOP_DATA_DIR` can explicitly select another store directory (used by the disposable smoke test).
 - Separate PostgreSQL cluster: `postgres/`, loopback port `54339`, random password in mode-0600 `database-secret`. Does not use `.local/postgres` or a developer/cloud `DATABASE_URL`.
 - HTTP API + UI: `http://127.0.0.1:37931`; production runtime validates the exact loopback configuration. Public web deployments still require HTTPS. Existing permission checks, strict cookies and Origin validation remain active.
-- On launch: initialize cluster if absent, start PostgreSQL, apply transactional checksum-verified migrations, start API, open window. On normal quit: close API before stopping PostgreSQL. Startup failures retain existing data.
+- On launch: initialize cluster if absent, start PostgreSQL, apply transactional checksum-verified migrations, start API, open window. On normal quit: stop the browser, stop accepting HTTP connections, close idle/preconnect sockets, drain active requests, close the API, finish backups and stop PostgreSQL. Startup failures retain existing data.
 - Single-instance application lock prevents two windows managing the same cluster. A crash can leave PostgreSQL running; relaunch reconnects to that cluster. Do not remove `postmaster.pid` manually.
 - Local server logs: `server.log`; PostgreSQL logs: `postgres.log`. Do not share logs without reviewing them.
 - The renderer has no Node integration or privileged IPC bridge. Outbound renderer requests are blocked. Camera permissions are restricted to the local application. AI/document cloud processing is disabled in this initial local mode.
@@ -35,7 +37,7 @@ The `.app` is written under `.local/desktop-builds`. It includes the API, web as
 
 ```sh
 pnpm build
-pnpm exec vitest run tests/desktop-runtime.unit.test.ts
+pnpm exec vitest run tests/desktop-runtime.unit.test.ts tests/desktop-backup.unit.test.ts tests/desktop-bundle.unit.test.ts tests/desktop-shutdown.unit.test.ts
 node tests/desktop/offline-smoke.mjs
 ```
 
@@ -48,7 +50,7 @@ Manual: set up the local store while connected, close/reopen it, disconnect exte
 - **No cloud import, replication, merge, outbox or sync.** Local store is independent of Railway. Do not use both as if they shared stock.
 - One Mac owns the store. LAN access, discovery, TLS and multi-device enrollment are not implemented. Phones cannot yet use this local server.
 - Automatic local backups and restore verification are implemented below. Keep off-device copies and test the actual recovery procedure before using real money. Copying a running PostgreSQL data directory is not a safe backup.
-- Bundle a relocatable PostgreSQL runtime and its licenses, add signed/notarized installers, controlled updates and guided recovery UX. Do not update during a payment.
+- Add signed/notarized installers, controlled updates and guided recovery UX. The relocatable PostgreSQL runtime and its license are now included. Do not update during a payment.
 - Validate receipt/label printing on actual printers; current printing uses the existing print dialog. External WhatsApp windows are currently blocked by the desktop sandbox policy.
 - Offline card authorization depends on a separate payment terminal/provider; this prototype records confirmed external card payments and does not authorize them.
 - Offline AI inference is not included. No cloud AI key is passed into the local API.
@@ -79,3 +81,22 @@ ELIZA_DESKTOP_DATA_DIR=/path/to/new-store pnpm --filter @eliza/desktop start
 The destination must not already exist. Restoration runs in its own new cluster on a temporary loopback port, leaving the active store untouched. It checks schema history and row counts before returning success and clears management/POS/Price Tags login sessions; accounts and transaction history remain. The restored store runs current migrations when opened. For now restoration is a command-line operation; a guided recovery screen is not implemented.
 
 Browser device credentials are not included in the archive. An open shift remains in the restored history, attached to its original register. Recovery/rebinding of a lost physical register needs a separate manager workflow before this can be considered a complete disaster-recovery solution for a live store.
+
+
+## Embedded database distribution
+
+`pnpm desktop:postgres` builds checksum-pinned official PostgreSQL sources for the host Mac architecture. PostgreSQL 17.11 is used for fresh stores; 14.24 is bundled to open existing PostgreSQL 14 preview stores without a major-version conversion. Stores using another major version stop with an explicit compatibility error; their data is never reinitialized. Plan a separate verified migration before removing the legacy runtime.
+
+The build cache lives in `.local/postgres-runtime/darwin-<arch>/`. Packaging copies it to `Eliza.app/Contents/Resources/runtime/postgres/`, including each version's `COPYRIGHT` and a source/checksum manifest. The build rewrites internal library paths, applies ad-hoc signatures and rejects non-system dependencies outside the bundle. PostgreSQL uses macOS system libraries (including zlib for existing compressed backups); optional ICU, OpenSSL, GSSAPI and readline integrations are disabled. Database access remains restricted to loopback with SCRAM authentication. Remote cloud communication will use the API, not this PostgreSQL server.
+
+Packaging fails if a runtime is incomplete, has the wrong architecture or contains a dependency on Homebrew/build-machine paths. The packaged app always uses the included runtime and does not honor an external `POSTGRES_BIN`. Existing database directories and backups remain under Application Support, outside the replaceable app bundle.
+
+Verify a packaged build with system PostgreSQL deliberately unavailable to the app:
+
+```sh
+ELIZA_DESKTOP_SMOKE_NO_SYSTEM_POSTGRES=1 \
+ELIZA_DESKTOP_SMOKE_BINARY="/path/to/Eliza.app/Contents/MacOS/Eliza" \
+node tests/desktop/offline-smoke.mjs
+```
+
+This checks actual Electron startup, offline sale/retry, restart, backups and restore. The final DMG was also tested read-only from a mounted image with both the staging directory and build-time PostgreSQL cache temporarily unavailable; the application and recovery tools used only the image’s embedded runtime. Build each CPU architecture on a matching Mac; the current local artifact is Apple Silicon. Bundling the database does not add Railway synchronization or Apple notarization.

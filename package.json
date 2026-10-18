@@ -20,6 +20,7 @@
     "ops:check": "node scripts/readiness.mjs",
     "account:recover": "node scripts/recover-owner.mjs",
     "db:restore-new": "node scripts/backup.mjs restore-new",
+    "desktop:postgres": "node apps/desktop/scripts/build-postgres.mjs",
     "desktop:dev": "pnpm build && pnpm --filter @eliza/desktop start",
     "desktop:package:mac": "pnpm build && pnpm --filter @eliza/desktop package:mac",
     "test:desktop": "pnpm build && node tests/desktop/offline-smoke.mjs"

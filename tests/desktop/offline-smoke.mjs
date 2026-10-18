@@ -42,6 +42,10 @@ const request = async (page, path, body, method = body ? 'POST' : 'GET') =>
 async function launch() {
   const env = { ...process.env, ELIZA_DESKTOP_DATA_DIR: dataDir };
   delete env.ELECTRON_RUN_AS_NODE;
+  if (process.env.ELIZA_DESKTOP_SMOKE_NO_SYSTEM_POSTGRES === '1') {
+    env.PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
+    env.POSTGRES_BIN = '/nonexistent-postgresql/bin';
+  }
   desktop = await _electron.launch({
     executablePath: process.env.ELIZA_DESKTOP_SMOKE_BINARY || require('electron'),
     args: [resolve('apps/desktop')],
@@ -292,8 +296,13 @@ try {
     '2.000',
   );
   expect((await request(page, '/pos/sales')).body.some((r) => r.id === first.body.id)).toBe(true);
+  // Closing the window must finish the server and database before Electron exits.
+  const exited = new Promise((done) => desktop.process().once('exit', done));
+  await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close());
+  expect(await exited).toBe(0);
+  desktop = undefined;
   console.log(
-    'PASS: offline sale, idempotency, restart, automatic backup, restore verification, corruption rejection and separate-store restoration.',
+    'PASS: offline sale, idempotency, restart, automatic backup, restore verification, corruption rejection, separate-store restoration and graceful window-close shutdown.',
   );
 } finally {
   await desktop?.close();

@@ -9,7 +9,7 @@
   "scripts": {
     "start": "electron .",
     "package:mac": "node scripts/package-mac.mjs",
-    "typecheck": "node --check src/main.mjs && node --check src/runtime.mjs && node --check src/worker.mjs && node --check src/backup.mjs && node --check scripts/restore-store.mjs"
+    "typecheck": "node --check src/main.mjs && node --check src/runtime.mjs && node --check src/http-shutdown.mjs && node --check src/worker.mjs && node --check src/backup.mjs && node --check scripts/restore-store.mjs"
   },
   "devDependencies": {
     "@electron/packager": "20.3.0",

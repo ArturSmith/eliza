@@ -118,11 +118,15 @@ else {
     if (window?.isMinimized()) window.restore();
     window?.focus();
   });
-  app.on('window-all-closed', () => app.quit());
+  app.on('window-all-closed', () => {
+    if (!quitting) app.quit();
+  });
   app.on('before-quit', (event) => {
     if (!worker || quitting) return;
     event.preventDefault();
     quitting = true;
+    // Stop catalog polling before Nest closes its database pool and HTTP server.
+    if (window && !window.isDestroyed()) window.destroy();
     const timeout = setTimeout(
       () => {
         worker?.kill();
@@ -181,7 +185,13 @@ else {
       mkdirSync(app.getPath('userData'), { recursive: true, mode: 0o700 });
       const log = openSync(join(app.getPath('userData'), 'server.log'), 'a', 0o600);
       worker = utilityProcess.fork(join(here, 'worker.mjs'), [], {
-        env: { ...process.env, ELIZA_RUNTIME_ROOT: root, ELIZA_DATA_DIR: app.getPath('userData') },
+        env: {
+          ...process.env,
+          ELIZA_RUNTIME_ROOT: root,
+          ELIZA_DATA_DIR: app.getPath('userData'),
+          ELIZA_DESKTOP_PACKAGED: app.isPackaged ? '1' : '0',
+          ...(app.isPackaged ? { POSTGRES_BIN: '' } : {}),
+        },
         stdio: 'pipe',
         serviceName: 'Eliza Local Store',
       });
@@ -193,7 +203,7 @@ else {
           if (!ready) {
             dialog.showErrorBox(
               'Eliza',
-              'Local store startup timed out. Check PostgreSQL installation and server.log in the store data folder.',
+              'Local store startup timed out. Check server.log in the store data folder.',
             );
             app.quit();
           }
