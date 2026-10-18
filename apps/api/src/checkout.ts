@@ -779,13 +779,21 @@ export class SalesReportsController {
     private operations: Operations,
     private database: Database,
   ) {}
-  @Get('sales') @Require('sales.read') async sales(@Req() req: AuthRequest) {
-    return (
-      await this.database.pool.query(
-        'SELECT receipt FROM sales WHERE store_id=$1 ORDER BY created_at DESC LIMIT 100',
-        [req.context.store.id],
-      )
-    ).rows.map((row) => row.receipt);
+  @Get('sales') @Require('sales.read') async sales(
+    @Req() req: AuthRequest,
+    @Query('page') pageInput?: string,
+  ) {
+    const page = parse(z.coerce.number().int().min(1).max(1000000).default(1), pageInput);
+    const pageSize = pageInput === undefined ? 100 : 50;
+    const result = await this.database.pool.query(
+      `WITH matching AS (SELECT id,created_at,receipt FROM sales WHERE store_id=$1),
+       paged AS (SELECT receipt FROM matching ORDER BY created_at DESC,id DESC LIMIT $2 OFFSET $3)
+       SELECT (SELECT count(*)::int FROM matching) AS total,
+              COALESCE((SELECT json_agg(receipt) FROM paged),'[]'::json) AS rows`,
+      [req.context.store.id, pageSize, (page - 1) * pageSize],
+    );
+    const { rows, total } = result.rows[0];
+    return pageInput === undefined ? rows : { rows, total, page, pageSize };
   }
   @Post('sales/:id/reprint') @Require('sales.read') reprint(
     @Param('id', ParseUUIDPipe) id: string,

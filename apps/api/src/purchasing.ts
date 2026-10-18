@@ -711,15 +711,35 @@ export class PurchasingController {
   @Get('purchases') @Require('purchases.read') async list(
     @Req() req: AuthRequest,
     @Query('search') search?: string,
+    @Query('page') pageInput?: string,
+    @Query('status') statusInput?: string,
+    @Query('payment') paymentInput?: string,
   ) {
     const term = parse(z.string().max(200).default(''), search).trim().toLowerCase();
-    return (
-      await this.database.pool.query(
-        `SELECT p.id,p.number,p.supplier_id,p.supplier_reference,p.document_date::text,p.status,p.version,p.total,p.payment_status,p.payment_due_date::text,p.paid_at,
-(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received','closed') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,p.created_at AS "createdAt",s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.store_id=$1 AND ($2='' OR strpos(lower(p.number),$2)>0 OR strpos(lower(s.name),$2)>0 OR strpos(lower(p.supplier_reference),$2)>0) ORDER BY p.created_at DESC LIMIT 200`,
-        [req.context.store.id, term],
-      )
-    ).rows;
+    const page = parse(z.coerce.number().int().min(1).max(1000000).default(1), pageInput);
+    const status = parse(
+      z
+        .enum(['all', 'draft', 'ordered', 'partially_received', 'received', 'closed', 'cancelled'])
+        .default('all'),
+      statusInput,
+    );
+    const payment = parse(
+      z.enum(['all', 'unpaid', 'paid', 'overdue', 'unrecorded']).default('all'),
+      paymentInput,
+    );
+    const pageSize = pageInput === undefined ? 200 : 50;
+    const result = await this.database.pool.query(
+      `WITH searched AS (SELECT p.id,p.number,p.supplier_id,p.supplier_reference,p.document_date::text,p.status,p.version,p.total,p.payment_status,p.payment_due_date::text,p.paid_at,
+(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received','closed') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,p.created_at AS "createdAt",s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.store_id=$1 AND ($2='' OR strpos(lower(p.number),$2)>0 OR strpos(lower(s.name),$2)>0 OR strpos(lower(p.supplier_reference),$2)>0)),
+       matching AS (SELECT * FROM searched WHERE ($3='all' OR status=$3)
+         AND ($4='all' OR ($4='overdue' AND payment_overdue) OR payment_status=$4)),
+       paged AS (SELECT * FROM matching ORDER BY "createdAt" DESC,id DESC LIMIT $5 OFFSET $6)
+       SELECT (SELECT count(*)::int FROM matching) AS total,
+              COALESCE((SELECT json_agg(paged) FROM paged),'[]'::json) AS rows`,
+      [req.context.store.id, term, status, payment, pageSize, (page - 1) * pageSize],
+    );
+    const { rows, total } = result.rows[0];
+    return pageInput === undefined ? rows : { rows, total, page, pageSize };
   }
   @Get('purchases/:id') @Require('purchases.read') async detail(
     @Param('id', ParseUUIDPipe) id: string,
@@ -954,10 +974,10 @@ export class PurchasingController {
       tax = 0n;
     for (const line of [...b.lines].sort((a, b) => a.productId.localeCompare(b.productId))) {
       const p = (
-        await c.query('SELECT * FROM products WHERE id=$1 AND store_id=$2 AND active AND base_product_id IS NULL FOR SHARE', [
-          line.productId,
-          store,
-        ])
+        await c.query(
+          'SELECT * FROM products WHERE id=$1 AND store_id=$2 AND active AND base_product_id IS NULL FOR SHARE',
+          [line.productId, store],
+        )
       ).rows[0];
       if (!p) throw new BadRequestException('Choose active products from this store.');
       this.whole(p.unit, line.quantity);
@@ -1196,10 +1216,10 @@ export class PurchasingController {
         const entry = b.lines.find((l) => l.purchaseLineId === line.id);
         if (!entry) continue;
         const product = (
-          await c.query('SELECT * FROM products WHERE id=$1 AND store_id=$2 AND base_product_id IS NULL FOR UPDATE', [
-            line.product_id,
-            store,
-          ])
+          await c.query(
+            'SELECT * FROM products WHERE id=$1 AND store_id=$2 AND base_product_id IS NULL FOR UPDATE',
+            [line.product_id, store],
+          )
         ).rows[0];
         if (!product.active)
           throw new BadRequestException('Activate the product before receiving it.');

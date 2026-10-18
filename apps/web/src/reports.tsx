@@ -1,3 +1,4 @@
+import { HistoryPagination, type HistoryPage } from './history-pagination';
 import { t, useLanguage, getLocale } from './i18n';
 import { ReceiptSearch } from './refunds';
 import { useState } from 'react';
@@ -10,7 +11,11 @@ import { Button } from './components/ui/button';
 import { formatMoney } from './receipts';
 export function SalesPage() {
   useLanguage();
-  const query = useQuery({ queryKey: ['sales'], queryFn: () => api<Receipt[]>('/reports/sales') });
+  const [page, setPage] = useState(1);
+  const query = useQuery({
+    queryKey: ['sales', page],
+    queryFn: () => api<HistoryPage<Receipt>>('/reports/sales?page=' + page),
+  });
   return (
     <>
       <div className="page-heading">
@@ -18,9 +23,7 @@ export function SalesPage() {
           <div className="eyebrow">{t('CHECKOUT HISTORY')}</div>
           <h1>{t('Sales')}</h1>
           <p className="muted">
-            {t(
-              'Completed receipts with the original prices, tax, and payment details. Latest 100 sales. ',
-            )}
+            {t('Completed receipts with the original prices, tax, and payment details.')}
           </p>
         </div>
       </div>
@@ -30,7 +33,7 @@ export function SalesPage() {
       <section className="panel">
         {query.isPending ? (
           <p className="panel-padding muted">{t('Loading sales…')}</p>
-        ) : query.data?.length ? (
+        ) : query.data?.rows.length ? (
           <div className="table-scroll">
             <table aria-label={t('Recent receipts')}>
               <thead>
@@ -43,7 +46,7 @@ export function SalesPage() {
                 </tr>
               </thead>
               <tbody>
-                {query.data.map((r) => (
+                {query.data.rows.map((r) => (
                   <tr key={r.id}>
                     <td>
                       <strong>{r.receiptNumber}</strong>
@@ -60,7 +63,10 @@ export function SalesPage() {
                     <td>{r.payment.method === 'cash' ? t('Cash') : t('Card recorded')}</td>
                     <td>{formatMoney(r.total, r.currency)}</td>
                     <td>
-                      <Button variant="ghost" onClick={() => window.location.assign('/sales/receipts/' + r.id)}>
+                      <Button
+                        variant="ghost"
+                        onClick={() => window.location.assign('/sales/receipts/' + r.id)}
+                      >
                         {t('View receipt ')}
                       </Button>
                     </td>
@@ -74,6 +80,14 @@ export function SalesPage() {
             <h3>{t('No sales yet')}</h3>
             <p className="muted">{t('Completed checkouts appear here automatically.')}</p>
           </div>
+        )}
+        {query.data && (
+          <HistoryPagination
+            page={page}
+            total={query.data.total}
+            busy={query.isFetching}
+            onChange={setPage}
+          />
         )}
       </section>
     </>

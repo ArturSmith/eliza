@@ -826,4 +826,43 @@ describe.sequential('purchasing and receiving', () => {
       ).status,
     ).toBe(400);
   });
+  it('paginates all purchase history and applies search/status/payment before slicing', async () => {
+    await db.pool.query(
+      `INSERT INTO purchases(store_id,supplier_id,number,status,notes,total,subtotal,tax,created_by,device_id,supplier_reference,payment_status)
+      SELECT store_id,supplier_id,'PAGE-'||n,'draft','',total,subtotal,tax,created_by,device_id,'pagination fixture','unpaid'
+      FROM purchases CROSS JOIN generate_series(1,55) n WHERE id=$1`,
+      [order.id],
+    );
+    const path = '/purchases?search=pagination%20fixture&status=draft&payment=unpaid';
+    const first = (await manager.request(path + '&page=1')).body;
+    const second = (await manager.request(path + '&page=2')).body;
+    expect(first.total).toBe(55);
+    expect(first.rows).toHaveLength(50);
+    expect(second.rows).toHaveLength(5);
+    expect(new Set([...first.rows, ...second.rows].map((r: any) => r.id)).size).toBe(55);
+    expect((await manager.request(path + '&page=1')).body.rows.map((r: any) => r.id)).toEqual(
+      first.rows.map((r: any) => r.id),
+    );
+    expect((await manager.request(path + '&page=3')).body).toMatchObject({ total: 55, rows: [] });
+    expect(
+      (await manager.request('/purchases?search=pagination%20fixture&payment=paid&page=1')).body
+        .total,
+    ).toBe(0);
+    expect(
+      (await manager.request('/purchases?search=pagination%20fixture&status=received&page=1')).body
+        .total,
+    ).toBe(0);
+    for (const query of [
+      'page=0',
+      'page=-1',
+      'page=1.5',
+      'page=bad',
+      'page=1000001',
+      'status=invalid',
+      'payment=invalid',
+    ])
+      expect((await manager.request('/purchases?' + query)).status).toBe(400);
+    expect(Array.isArray((await manager.request('/purchases')).body)).toBe(true);
+    expect((await new Client().request('/purchases?page=1')).status).toBe(401);
+  });
 });

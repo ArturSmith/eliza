@@ -1,3 +1,4 @@
+import { HistoryPagination, type HistoryPage } from './history-pagination';
 import type { DocumentDraftLine } from './purchase-document';
 import { readDocumentHandoff } from './document-purchase';
 import { countText, t, useLanguage, getLocale } from './i18n';
@@ -303,7 +304,9 @@ export function SuppliersPage() {
               aria-label={t('Search suppliers')}
               placeholder={t('Search name, code, tag, contact, email, or phone…')}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+              }}
             />
           </div>
           <select
@@ -648,9 +651,21 @@ const statusTone: Record<string, string> = {
 export function PurchasesPage() {
   useLanguage();
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [filter, setFilter] = useState('all');
+  const [paymentFilter, setPaymentFilter] = useState('all');
   const q = useQuery({
-    queryKey: ['purchases', search.trim()],
-    queryFn: () => api<Order[]>('/purchases?search=' + encodeURIComponent(search.trim())),
+    queryKey: ['purchases', search.trim(), filter, paymentFilter, page],
+    queryFn: () =>
+      api<HistoryPage<Order>>(
+        '/purchases?' +
+          new URLSearchParams({
+            search: search.trim(),
+            status: filter,
+            payment: paymentFilter,
+            page: String(page),
+          }),
+      ),
   });
   const currency = useSession().data?.store.currency ?? 'NOK';
   const [selected, setSelected] = useState<string | undefined>(
@@ -679,18 +694,11 @@ export function PurchasesPage() {
       void refresh();
     },
   });
-  const [filter, setFilter] = useState('all');
-  const [paymentFilter, setPaymentFilter] = useState('all');
-  const terms = search.trim().toLowerCase();
-  const rows = (q.data ?? []).filter(
-    (p) =>
-      (filter === 'all' || p.status === filter) &&
-      (paymentFilter === 'all' ||
-        (paymentFilter === 'overdue' ? p.payment_overdue : p.payment_status === paymentFilter)) &&
-      [p.number, p.supplierName, p.supplier_reference].some((v) =>
-        (v ?? '').toLowerCase().includes(terms),
-      ),
-  );
+  useEffect(() => {
+    if (q.data && page > Math.max(1, Math.ceil(q.data.total / q.data.pageSize)))
+      setPage(Math.max(1, Math.ceil(q.data.total / q.data.pageSize)));
+  }, [q.data, page]);
+  const rows = q.data?.rows ?? [];
   return (
     <>
       <Heading
@@ -716,13 +724,19 @@ export function PurchasesPage() {
               aria-label={t('Search purchase orders')}
               placeholder={t('Search order number, supplier, or supplier reference…')}
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
             />
           </div>
           <select
             aria-label={t('Filter order status')}
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => {
+              setFilter(e.target.value);
+              setPage(1);
+            }}
           >
             {[
               'all',
@@ -741,7 +755,10 @@ export function PurchasesPage() {
           <select
             aria-label={t('Payment status')}
             value={paymentFilter}
-            onChange={(e) => setPaymentFilter(e.target.value)}
+            onChange={(e) => {
+              setPaymentFilter(e.target.value);
+              setPage(1);
+            }}
           >
             <option value="all">{t('All payments')}</option>
             <option value="unpaid">{t('Unpaid')}</option>
@@ -749,7 +766,7 @@ export function PurchasesPage() {
             <option value="overdue">{t('Overdue')}</option>
             <option value="unrecorded">{t('Payment not recorded')}</option>
           </select>
-          <span className="muted">{countText('orders', rows.length)}</span>
+          <span className="muted">{countText('orders', q.data?.total ?? 0)}</span>
         </div>
         <ErrorMessage error={q.error} />
         {q.isPending ? (
@@ -812,10 +829,18 @@ export function PurchasesPage() {
           </div>
         ) : (
           <p className="panel-padding">
-            {q.data?.length
+            {search.trim() || filter !== 'all' || paymentFilter !== 'all'
               ? t('No orders match this search or filter.')
               : t('No purchase orders yet.')}
           </p>
+        )}
+        {q.data && (
+          <HistoryPagination
+            page={page}
+            total={q.data.total}
+            busy={q.isFetching}
+            onChange={setPage}
+          />
         )}
       </section>
       <Dialog

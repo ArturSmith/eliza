@@ -653,4 +653,30 @@ describe.sequential('register, shifts and checkout', () => {
     });
     expect(c.rows.find((r: any) => r.bucket === 'Unrecorded category').total).toBe('5.00');
   });
+  it('paginates sales history with stable ordering and authenticated access', async () => {
+    await db.pool.query(
+      `INSERT INTO sales(store_id,device_id,employee_id,shift_id,request_id,request_hash,receipt_number,total,tax,discount,receipt,created_at)
+      SELECT store_id,device_id,employee_id,shift_id,gen_random_uuid(),'pagination','PAGE-'||n,total,tax,discount,
+      jsonb_set(receipt,'{id}',to_jsonb(('00000000-0000-0000-0000-'||lpad(n::text,12,'0'))::text)), '2099-01-01T00:00:00Z'
+      FROM sales CROSS JOIN generate_series(1,55) n WHERE id=$1`,
+      [receiptId],
+    );
+    const first = (await manager.request('/reports/sales?page=1')).body;
+    const second = (await manager.request('/reports/sales?page=2')).body;
+    expect(first.pageSize).toBe(50);
+    expect(first.rows).toHaveLength(50);
+    expect(second.rows.length).toBeGreaterThan(0);
+    expect(first.rows.every((r: any) => !second.rows.some((other: any) => other.id === r.id))).toBe(
+      true,
+    );
+    expect((await manager.request('/reports/sales?page=1')).body.rows).toEqual(first.rows);
+    expect((await manager.request('/reports/sales?page=1000')).body).toMatchObject({
+      total: first.total,
+      rows: [],
+    });
+    for (const query of ['0', '-1', '1.5', 'bad', '1000001'])
+      expect((await manager.request('/reports/sales?page=' + query)).status).toBe(400);
+    expect(Array.isArray((await manager.request('/reports/sales')).body)).toBe(true);
+    expect((await new Client().request('/reports/sales?page=1')).status).toBe(401);
+  });
 });
