@@ -53,6 +53,9 @@ async function launch() {
     timeout: 120000,
   });
   const page = await desktop.firstWindow({ timeout: 120000 });
+  await page.addLocatorHandler(page.locator('[data-onboarding-dialog][open]'), async (dialog) => {
+    await dialog.locator('.page-tour-skip').click();
+  });
   await page.waitForLoadState('networkidle');
   return page;
 }

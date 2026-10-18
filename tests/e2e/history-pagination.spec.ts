@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('Sales and Purchases request separate pages and reset purchase filters to page one', async ({
   page,

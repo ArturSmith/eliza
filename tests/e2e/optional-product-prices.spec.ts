@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('creates and reopens a product with unknown prices, then saves real prices', async ({
   page,

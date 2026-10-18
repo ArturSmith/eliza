@@ -1,3 +1,4 @@
+import { PageOnboarding } from './onboarding/PageOnboarding';
 import { BrandLogo } from './brand';
 import { t, useLanguage, translateError } from './i18n';
 import { LanguageSwitcher } from './i18n/LanguageSwitcher';
@@ -867,7 +868,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     productScroll.current?.scrollTo({ top: 0 });
   }, [search, page, category, favorites, popular]);
   return (
-    <div className="pos-shell">
+    <div className="pos-shell" data-tour-scope="pos">
       <header className="pos-topbar">
         <div className="pos-brand">
           <BrandLogo />
@@ -878,6 +879,12 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
           </div>
         </div>
         <div className="pos-operator">
+          <PageOnboarding
+            storeId={context.store!.id}
+            employeeId={context.operator!.id}
+            endpoint="/pos/onboarding"
+            scope='[data-tour-scope="pos"]'
+          />
           <UserRound size={17} />
           <span>{context.operator!.name}</span>
           <span className={`badge badge-${context.shift ? 'green' : 'gray'}`}>

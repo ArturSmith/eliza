@@ -1,3 +1,4 @@
+import { readOnboarding, saveOnboarding } from './onboarding.js';
 import { z } from 'zod';
 import {
   Body,
@@ -106,6 +107,16 @@ export class CheckoutController {
     private operations: Operations,
     private registers: RegisterService,
   ) {}
+  @Get('onboarding') onboarding(@Req() req: Request) {
+    return this.operations.transaction(async (client) =>
+      readOnboarding(client, await this.registers.operator(client, req)),
+    );
+  }
+  @Post('onboarding') saveOnboarding(@Req() req: Request, @Body() body: unknown) {
+    return this.operations.transaction(async (client) =>
+      saveOnboarding(client, await this.registers.operator(client, req), body),
+    );
+  }
   @Get('barcode-settings') barcodeSettings(@Req() req: Request) {
     return this.operations.transaction(async (client) => {
       const actor = await this.registers.operator(client, req);

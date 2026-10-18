@@ -1063,3 +1063,39 @@ export const expenseSchema = z
   });
 export type ExpenseInput = z.infer<typeof expenseSchema>;
 export type Expense = ExpenseInput & { id: string; version: number; createdAt: string };
+
+export const onboardingPages = [
+  'overview',
+  'products',
+  'inventory',
+  'replenishment',
+  'shopping-lists',
+  'stock-counts',
+  'suppliers',
+  'purchases',
+  'digital-purchases',
+  'ai',
+  'analytics',
+  'action-center',
+  'sales',
+  'shifts',
+  'audit',
+  'team',
+  'devices',
+  'settings',
+  'store-layout',
+  'expenses',
+  'promotions',
+  'pos',
+  'price-tags',
+  'receipt',
+  'refund',
+  'price-check',
+] as const;
+export type OnboardingPage = (typeof onboardingPages)[number];
+export const onboardingProgressSchema = z.object({
+  pageId: z.enum(onboardingPages),
+  version: z.number().int().min(1).max(100),
+  status: z.enum(['completed', 'skipped']),
+});
+export type OnboardingProgress = z.infer<typeof onboardingProgressSchema>;

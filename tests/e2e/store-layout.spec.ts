@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('manager builds, saves and reloads a store layout; stale and invalid saves are rejected', async ({
   page,

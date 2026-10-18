@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('a manager can return an assigned checkout device to Management', async ({ page }) => {
   await page.goto('/');

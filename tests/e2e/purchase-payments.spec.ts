@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 test('receiving and payment statuses stay independent and payment filters persist correctly', async ({
   page,
 }) => {

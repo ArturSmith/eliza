@@ -1,3 +1,4 @@
+import { PageOnboarding } from './onboarding/PageOnboarding';
 import { BrandLogo } from './brand';
 import { countText, t, useLanguage, getLocale } from './i18n';
 import { useState, type ReactNode } from 'react';
@@ -351,6 +352,9 @@ export function Shell() {
             <strong>{t(current?.label ?? 'Page')}</strong>
           </div>
           <div className="topbar-right">
+            {(!current || user.permissions.includes(current.permission)) && (
+              <PageOnboarding storeId={store.id} employeeId={user.id} endpoint="/auth/onboarding" />
+            )}
             <span className="local-badge">
               <span className="status-dot" />
               {t('Local server ')}
@@ -379,7 +383,7 @@ export function Shell() {
             </Button>
           </div>
         </header>
-        <main>
+        <main data-tour-scope="management">
           <ErrorMessage error={logout.error} />
           {current && !user.permissions.includes(current.permission) ? (
             <Empty

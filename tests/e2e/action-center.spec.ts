@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('manager can open the Action Center, review an alert, and inspect no-sales controls', async ({
   page,

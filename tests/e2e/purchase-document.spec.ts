@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('digital scans stay separate from purchase orders', async ({ page }) => {
   await page.goto('/');

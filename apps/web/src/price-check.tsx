@@ -1,3 +1,4 @@
+import { PageOnboarding } from './onboarding/PageOnboarding';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Package, ScanLine, Tag } from 'lucide-react';
@@ -27,7 +28,10 @@ export function PriceCheckPage() {
   useLanguage();
   const context = useQuery({
     queryKey: ['price-check-context'],
-    queryFn: () => api<{ storeName: string; currency: string }>('/price-check/context'),
+    queryFn: () =>
+      api<{ deviceId: string; storeId: string; storeName: string; currency: string }>(
+        '/price-check/context',
+      ),
     refetchOnWindowFocus: true,
   });
   const [code, setCode] = useState('');
@@ -109,9 +113,17 @@ export function PriceCheckPage() {
   }
   const currency = context.data?.currency ?? 'USD';
   return (
-    <main className="price-check-screen">
+    <main className="price-check-screen" data-tour-scope="price-check">
       <div className="price-check-content">
         <header className="price-check-header">
+          {context.data && (
+            <PageOnboarding
+              storeId={context.data.storeId}
+              employeeId={'device-' + context.data.deviceId}
+              scope='[data-tour-scope="price-check"]'
+              autoStart={false}
+            />
+          )}
           <span className="price-check-mark">
             <Tag size={30} aria-hidden="true" />
           </span>

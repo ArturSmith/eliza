@@ -1,3 +1,4 @@
+import { PageOnboarding } from './onboarding/PageOnboarding';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   encodeScaleBarcode,
@@ -20,6 +21,7 @@ import './price-tags.css';
 type Context = {
   device: { id: string; name: string };
   store: {
+    id: string;
     name: string;
     currency: string;
     scaleBarcode: ScaleBarcodeSettings;
@@ -272,7 +274,12 @@ export function PriceTagsPage() {
       void queryClient.invalidateQueries({ queryKey: ['price-tags-context'] });
     },
   });
-  if (context.isPending) return <div className="price-tags-shell">{t('Loading…')}</div>;
+  if (context.isPending)
+    return (
+      <div className="price-tags-shell" data-tour-scope="price-tags">
+        {t('Loading…')}
+      </div>
+    );
   if (context.error)
     return (
       <div className="price-tags-shell">
@@ -371,8 +378,14 @@ export function PriceTagsPage() {
   const packagePrice = (label: WeightLabel) =>
     fromScaled((toScaled(label.price, 2) * toScaled(label.weight, 3) + 500n) / 1000n, 2);
   return (
-    <div className="price-tags-shell">
+    <div className="price-tags-shell" data-tour-scope="price-tags">
       <header className="price-tags-header">
+        <PageOnboarding
+          storeId={value.store.id}
+          employeeId={value.operator.id}
+          endpoint="/price-tags/onboarding"
+          scope='[data-tour-scope="price-tags"]'
+        />
         <div>
           <h1>{t('Price Tags')}</h1>
           <p>

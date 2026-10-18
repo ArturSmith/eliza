@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 test('product photos upload, survive reload, and can be removed', async ({ page }) => {
   await page.goto('/');
   await page.getByLabel('Store name').fill('Photo store');

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('stock adjustment keeps product selection usable beside camera scanner', async ({ page }) => {
   await page.goto('/');

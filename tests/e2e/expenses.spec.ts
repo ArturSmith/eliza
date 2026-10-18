@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 test('records, edits, filters and deletes a shop expense', async ({ page }) => {
   await page.goto('/');
   await page.getByLabel('Store name', { exact: true }).fill('Expense shop');

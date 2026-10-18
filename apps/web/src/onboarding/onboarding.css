@@ -1,0 +1,132 @@
+.page-tour-help {
+  flex-shrink: 0;
+  gap: 6px;
+}
+.page-tour-dialog {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  overflow: hidden;
+  touch-action: none;
+}
+.page-tour-dialog::backdrop {
+  background: transparent;
+}
+.page-tour-spotlight {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.page-tour-dimmer {
+  fill: var(--tour-backdrop);
+}
+.page-tour-outline {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.page-tour-card {
+  position: absolute;
+  width: min(360px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  touch-action: pan-y;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 12px 40px var(--color-shadow-1525104d);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.page-tour-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.page-tour-close {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+.page-tour-card h2 {
+  margin: 12px 0 8px;
+  font-size: 20px;
+  line-height: 1.25;
+}
+.page-tour-card p {
+  margin: 0;
+  color: var(--muted);
+}
+.page-tour-progress {
+  display: flex;
+  gap: 5px;
+  margin: 20px 0;
+}
+.page-tour-progress span {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+}
+.page-tour-progress span.current,
+.page-tour-progress span.done {
+  background: var(--accent);
+}
+.page-tour-actions,
+.page-tour-actions > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.page-tour-actions .button {
+  min-height: 40px;
+}
+.page-tour-skip {
+  border: 0;
+  padding: 8px 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.page-tour-help:focus-visible,
+.page-tour-card button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+@media (max-width: 700px) {
+  .page-tour-help > span {
+    display: none;
+  }
+  .page-tour-help {
+    width: 36px;
+    min-height: 36px;
+    padding: 6px;
+  }
+}
+@media print {
+  .page-tour-help,
+  .page-tour-dialog {
+    display: none !important;
+  }
+}

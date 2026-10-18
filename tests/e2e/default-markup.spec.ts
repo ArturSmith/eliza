@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('applies saved markup on purchase-cost changes and allows selling-price overrides', async ({
   page,

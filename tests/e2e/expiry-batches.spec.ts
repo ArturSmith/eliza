@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 test('receives one product with multiple expiry dates and preserves batch quantities', async ({
   page,
 }) => {

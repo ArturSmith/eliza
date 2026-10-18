@@ -1,3 +1,4 @@
+import { PageOnboarding } from './onboarding/PageOnboarding';
 import { t, useLanguage, getLocale } from './i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -153,12 +154,12 @@ export function ReceiptDetailPage({
   });
   if (detail.isPending || (checkout && context.isPending))
     return (
-      <main className="receipt-page">
+      <main className="receipt-page" data-tour-scope="receipt">
         <p>{t('Loading receipt…')}</p>
       </main>
     );
   return (
-    <main className="receipt-page">
+    <main className="receipt-page" data-tour-scope="receipt">
       <a className="text-link receipt-page-back" href={refund ? receiptPath : listPath}>
         ← {refund ? t('Back to receipt') : checkout ? t('Back to checkout') : t('Back to sales')}
       </a>
@@ -166,6 +167,14 @@ export function ReceiptDetailPage({
       {detail.data && (!checkout || context.data) && (
         <>
           <header className="receipt-page-header">
+            {checkout && context.data?.operator && (
+              <PageOnboarding
+                storeId={context.data.store!.id}
+                employeeId={context.data.operator.id}
+                endpoint="/pos/onboarding"
+                scope='[data-tour-scope="receipt"]'
+              />
+            )}
             <div>
               <p className="eyebrow">{refund ? t('REFUND') : t('RECEIPT')}</p>
               <h1>{refund ? t('Refund items') : detail.data.receipt.receiptNumber}</h1>

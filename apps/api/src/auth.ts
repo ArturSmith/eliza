@@ -1,3 +1,4 @@
+import { readOnboarding, saveOnboarding } from './onboarding.js';
 import {
   Body,
   ConflictException,
@@ -305,6 +306,22 @@ export class AuthController {
     res.clearCookie('eliza_pos_session', { path: '/api' });
     res.clearCookie('eliza_price_tags_session', { path: '/api' });
     return result;
+  }
+  @Get('onboarding') @UseGuards(AccessGuard) onboarding(@Req() req: AuthRequest) {
+    return readOnboarding(this.database.pool, {
+      storeId: req.context.store.id,
+      employeeId: req.context.user.id,
+    });
+  }
+  @Post('onboarding') @UseGuards(AccessGuard) saveOnboarding(
+    @Req() req: AuthRequest,
+    @Body() body: unknown,
+  ) {
+    return saveOnboarding(
+      this.database.pool,
+      { storeId: req.context.store.id, employeeId: req.context.user.id },
+      body,
+    );
   }
   @Get('session') @UseGuards(AccessGuard) session(@Req() req: AuthRequest) {
     return req.context;

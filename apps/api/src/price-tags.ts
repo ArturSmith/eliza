@@ -1,3 +1,4 @@
+import { readOnboarding, saveOnboarding } from './onboarding.js';
 import {
   BadRequestException,
   Body,
@@ -90,6 +91,21 @@ export class PriceTagsController {
       throw new UnauthorizedException('Price Tags is locked. Sign in with your PIN.');
     return { device, employee: result.rows[0] };
   }
+  @Get('onboarding') async onboarding(@Req() req: Request) {
+    const { device, employee } = await this.operator(req);
+    return readOnboarding(this.database.pool, {
+      storeId: device.store_id,
+      employeeId: employee.id,
+    });
+  }
+  @Post('onboarding') async saveOnboarding(@Req() req: Request, @Body() body: unknown) {
+    const { device, employee } = await this.operator(req);
+    return saveOnboarding(
+      this.database.pool,
+      { storeId: device.store_id, employeeId: employee.id },
+      body,
+    );
+  }
   @Get('context') async context(@Req() req: Request) {
     const device = await this.station(req);
     const employees = await this.database.pool.query(
@@ -105,6 +121,7 @@ export class PriceTagsController {
     return {
       device: { id: device.id, name: device.name },
       store: {
+        id: device.store_id,
         name: device.store_name,
         currency: device.currency,
         scaleBarcode: device.scale_barcode,

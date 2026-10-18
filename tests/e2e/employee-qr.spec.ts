@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('manager issues a printable QR and employee unlocks checkout with it', async ({ page }) => {
   await page.goto('/');

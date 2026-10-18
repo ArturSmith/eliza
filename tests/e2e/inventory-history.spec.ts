@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('inventory searches and pages past 100 movements without losing filters', async ({ page }) => {
   test.setTimeout(60000);

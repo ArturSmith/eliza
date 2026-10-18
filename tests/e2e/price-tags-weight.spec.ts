@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('prints selected weight labels and regular price tags together', async ({ page }) => {
   await page.goto('/');
@@ -68,7 +68,7 @@ test('prints selected weight labels and regular price tags together', async ({ p
   expect(device.ok(), await device.text()).toBe(true);
 
   await page.goto('/price-tags');
-  await page.getByLabel('Employee').selectOption('SAM');
+  await page.getByRole('combobox', { name: /^Employee/ }).selectOption('SAM');
   await page.getByLabel('PIN').fill('123456');
   await page.getByRole('button', { name: 'Unlock Price Tags' }).click();
   const changedTab = page.getByRole('tab', { name: /Price changed/ });

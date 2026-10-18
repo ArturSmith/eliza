@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import sharp from 'sharp';
 
 test('customer price checker displays only the scanned product and current price', async ({

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 test('plans low stock, saves edits, groups supplier drafts and retains order links', async ({
   page,
 }) => {

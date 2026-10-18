@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('purchase history renders money from the real paginated API', async ({ page }) => {
   const errors: string[] = [];

@@ -52,7 +52,12 @@ export class PriceCheckController {
 
   @Get('context') async context(@Req() req: Request) {
     const station = await this.station(req);
-    return { storeName: station.store_name, currency: station.currency };
+    return {
+      deviceId: station.id,
+      storeId: station.store_id,
+      storeName: station.store_name,
+      currency: station.currency,
+    };
   }
 
   @Get('lookup') async lookup(@Req() req: Request, @Query('code') input: string) {

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 const conversationId = 'a135a4b1-9217-4b6d-8412-1cb1e6f4182c';
 const documentId = 'b13a452a-6a6e-4b8f-9300-09b831dbe202';
 const now = new Date().toISOString();

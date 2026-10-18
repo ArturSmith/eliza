@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 
 test('new stock-count draft renders in the list and reopens after reload', async ({ page }) => {
   const errors: string[] = [];

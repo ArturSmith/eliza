@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 test('barcode creation reviews suggestions, saves attribution, and falls back to manual entry', async ({
   page,
 }) => {

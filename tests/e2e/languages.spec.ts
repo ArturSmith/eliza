@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 test.use({ locale: 'ru-RU' });
 
 test('language persists, switches across tabs, and preserves forms and business data', async ({
