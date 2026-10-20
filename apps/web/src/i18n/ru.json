@@ -2257,5 +2257,18 @@
   "Previous step": "Назад",
   "Finish tour": "Готово",
   "Step {current} of {total}": "Шаг {current} из {total}",
-  "Close walkthrough": "Закрыть инструкцию"
+  "Close walkthrough": "Закрыть инструкцию",
+  "Revenue = completed sales after discounts − refunds.": "Выручка = сумма завершённых продаж с учётом скидок − возвраты.",
+  "Cost of goods sold = cost recorded for sold goods − original cost of returned goods. Current product costs are not used.": "Себестоимость продаж = себестоимость проданных товаров, сохранённая при продаже − исходная себестоимость возвращённых товаров. Текущая цена закупки из карточки не используется.",
+  "Gross profit = revenue − cost of goods sold.": "Валовая прибыль = выручка − себестоимость продаж.",
+  "Gross margin = gross profit ÷ revenue × 100%. Calculated only when revenue is positive.": "Валовая рентабельность = валовая прибыль ÷ выручка × 100%. Рассчитывается только при положительной выручке.",
+  "Inventory losses = cost of expired and damaged stock written off + cost of returned goods that cannot be resold.": "Потери запасов = себестоимость списаний по причинам «Истёк срок годности» и «Повреждён» + себестоимость возвращённых товаров, непригодных для продажи.",
+  "Operating expenses = one-time expenses dated within the period + the period’s share of expenses distributed over time. Only recorded expenses are included.": "Операционные расходы = разовые расходы с датой в выбранном периоде + доля расходов, распределённых на этот период. Учитываются только внесённые расходы.",
+  "Store operating profit = revenue − cost of goods sold − inventory losses − operating expenses.": "Операционная прибыль магазина = выручка − себестоимость продаж − потери запасов − операционные расходы.",
+  "Average basket = completed sales after discounts, before refunds ÷ number of completed receipts.": "Средний чек = сумма завершённых продаж после скидок, до возвратов ÷ количество завершённых чеков.",
+  "Average per matching receipt = sales of the selected product after discounts, before refunds ÷ number of receipts containing that product.": "Средняя сумма на подходящий чек = продажи выбранного товара после скидок, до возвратов ÷ количество чеков с этим товаром.",
+  "Sales before refunds = sum of completed sale amounts after discounts, before refunds.": "Продажи до возвратов = сумма завершённых продаж после скидок, до вычета возвратов.",
+  "Refunds = sum of completed refunds recorded in the selected period.": "Возвраты = сумма завершённых возвратов, зарегистрированных в выбранном периоде.",
+  "Sales less refunds = completed sales after discounts − refunds.": "Продажи за вычетом возвратов = сумма завершённых продаж после скидок − возвраты.",
+  "Discounts = sum of discounts recorded on completed sale lines.": "Скидки = сумма скидок, сохранённых в строках завершённых продаж."
 }

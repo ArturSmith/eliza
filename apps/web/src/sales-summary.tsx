@@ -1,3 +1,4 @@
+import { metricFormula } from './metric-formulas';
 import { t, useLanguage, getLocale } from './i18n';
 import { AnalyticsCharts } from './analytics';
 import { GrossProfit } from './gross-profit';
@@ -260,7 +261,7 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                   data.totals.average,
                 ],
               ].map(([label, value]) => (
-                <div className="analytics-sales-metric" key={label}>
+                <div className="analytics-sales-metric" key={label} title={metricFormula(label ?? '')}>
                   <small className="analytics-sales-metric-label">{t(label ?? '')}</small>
                   <strong className="analytics-sales-metric-value">
                     {value === null ? t('Not allocated') : formatMoney(value, data.currency)}

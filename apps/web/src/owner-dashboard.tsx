@@ -1,3 +1,4 @@
+import { metricFormula } from './metric-formulas';
 import { dashboardText, dashboardSummary } from './i18n/dashboard';
 import { useState, useId, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -68,7 +69,7 @@ function FinancialCard({
   restricted?: boolean;
 }) {
   return (
-    <article className="kpi">
+    <article className="kpi" title={metricFormula(label)}>
       <span className="kpi-label">{t(label)}</span>
       <strong className={'kpi-value' + (value === null ? ' kpi-unavailable' : '')}>
         {restricted
@@ -359,7 +360,7 @@ export function TodayOperations() {
             <span className="kpi-label">{t('Transactions today')}</span>
             <strong className="kpi-value">{today.kpis.transactions.value ?? 0}</strong>
           </article>
-          <article className="kpi">
+          <article className="kpi" title={metricFormula('Average basket')}>
             <span className="kpi-label">{t('Average basket')}</span>
             <strong className="kpi-value">
               {formatMoney(String(today.kpis.averageBasket.value ?? 0), currency)}

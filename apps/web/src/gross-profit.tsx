@@ -1,3 +1,4 @@
+import { metricFormula } from './metric-formulas';
 import { t, useLanguage } from './i18n';
 import { useQuery } from '@tanstack/react-query';
 import { api, useSession } from './api';
@@ -81,7 +82,7 @@ function FinancialProfit({ from, to, productId = '', shiftId = '' }: Props) {
           {cards.map((card) => {
             const estimated = card.value === null && card.estimate != null;
             const value = card.value ?? card.estimate ?? null;
-            return <article className="kpi" key={card.label}>
+            return <article className="kpi" key={card.label} title={metricFormula(card.label)}>
               <span className="kpi-label">{t(card.label)}</span>
               <strong className={'kpi-value' + (value === null ? ' kpi-unavailable' : '')}>
                 {value === null ? t('Unavailable') : (estimated ? '≈' : '') +
@@ -162,14 +163,14 @@ function LegacyGrossProfit({
                 ['Cost of goods sold', p.costOfGoodsSold],
                 ['Gross profit', p.grossProfit],
               ].map(([label, value]) => (
-                <div key={label}>
+                <div key={label} title={metricFormula(label ?? '')}>
                   <small>{t(label ?? '')}</small>
                   <strong style={{ display: 'block', fontSize: 20 }}>
                     {value === null ? t('Unavailable') : formatMoney(value, p.currency)}
                   </strong>
                 </div>
               ))}
-              <div>
+              <div title={metricFormula('Gross margin')}>
                 <small>{t('Gross margin')}</small>
                 <strong style={{ display: 'block', fontSize: 20 }}>
                   {p.marginPercent === null ? '—' : p.marginPercent + '%'}
