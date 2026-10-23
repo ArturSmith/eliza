@@ -17,7 +17,6 @@ import {
   Copy,
   LockKeyhole,
   Printer,
-  ScanLine,
   Tags,
   LayoutTemplate,
   MoreHorizontal,
@@ -92,9 +91,7 @@ export function PriceTagsPage() {
     refetchOnWindowFocus: true,
     refetchInterval: 15_000,
   });
-  const [section, setSection] = useState<'products' | 'scan' | 'layout' | 'printer' | 'more'>(
-    'products',
-  );
+  const [section, setSection] = useState<'products' | 'layout' | 'printer' | 'more'>('products');
   const contentScroll = useRef<HTMLElement>(null);
   useEffect(() => {
     contentScroll.current?.scrollTo({ top: 0 });
@@ -545,7 +542,6 @@ export function PriceTagsPage() {
     (printer.mode === 'p1' && !printer.connected);
   const navigation = [
     { id: 'products', label: t('Products'), icon: Tags },
-    { id: 'scan', label: t('Scanner'), icon: ScanLine },
     { id: 'layout', label: t('Layout'), icon: LayoutTemplate },
     { id: 'printer', label: t('Printer'), icon: Printer },
     { id: 'more', label: t('More'), icon: MoreHorizontal },
@@ -621,41 +617,60 @@ export function PriceTagsPage() {
         role="tabpanel"
         aria-labelledby={'price-tags-nav-' + section}
       >
-        {(section === 'products' || section === 'scan') && (
+        {section === 'products' && (
           <>
-            {section === 'scan' && (
-              <section className="price-tags-scanner" aria-label={t('Scanner')}>
-                <h2>{t('Scan products')}</h2>
-                <CameraBarcodeScanner
-                  alwaysOn
-                  inline
-                  continuous
-                  disabled={products.isPending || !!products.error}
-                  onOpen={prepareScanSound}
-                  onScan={selectScannedProduct}
-                />
-              </section>
-            )}
             <div className="price-tags-product-tools">
               <div className="price-tags-tabs" role="tablist" aria-label={t('Product lists')}>
-                <button
-                  role="tab"
-                  aria-selected={tab === 'changed'}
-                  onClick={() => setTab('changed')}
-                >
-                  {t('Price changed')} <span className="price-tags-counter">{changedCount}</span>
-                </button>
-                <button role="tab" aria-selected={tab === 'all'} onClick={() => setTab('all')}>
-                  {t('All products')}
-                </button>
-                <button
-                  role="tab"
-                  aria-selected={tab === 'markdowns'}
-                  onClick={() => setTab('markdowns')}
-                >
-                  {t('Markdown labels')}{' '}
-                  <span className="price-tags-counter">{allMarkdowns.length}</span>
-                </button>
+                {(
+                  [
+                    {
+                      id: 'changed',
+                      label: t('Price changed'),
+                      short: t('Changed'),
+                      count: changedCount,
+                    },
+                    { id: 'all', label: t('All products'), short: t('All'), count: all.length },
+                    {
+                      id: 'markdowns',
+                      label: t('Markdown labels'),
+                      short: t('Markdowns'),
+                      count: allMarkdowns.length,
+                    },
+                  ] as const
+                ).map((item, index) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="tab"
+                    aria-label={item.label}
+                    title={item.label + ' · ' + item.count}
+                    aria-selected={tab === item.id}
+                    tabIndex={tab === item.id ? 0 : -1}
+                    onClick={() => setTab(item.id)}
+                    onKeyDown={(event) => {
+                      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                      event.preventDefault();
+                      const ids = ['changed', 'all', 'markdowns'] as const;
+                      const next =
+                        event.key === 'Home'
+                          ? 0
+                          : event.key === 'End'
+                            ? 2
+                            : (index + (event.key === 'ArrowRight' ? 1 : -1) + 3) % 3;
+                      setTab(ids[next]);
+                      (
+                        event.currentTarget.parentElement?.children[next] as HTMLButtonElement
+                      )?.focus();
+                    }}
+                  >
+                    <span className="price-tags-filter-label">{item.short}</span>
+                    {item.count > 0 && (
+                      <span className="price-tags-counter" aria-hidden="true">
+                        {item.count > 99 ? '99+' : item.count}
+                      </span>
+                    )}
+                  </button>
+                ))}
               </div>
               <div className="price-tags-controls">
                 <div className="price-tags-search-field">
@@ -664,7 +679,7 @@ export function PriceTagsPage() {
                     <input
                       id="price-tags-search"
                       onKeyDown={(event) => {
-                        if (section === 'scan' && event.key === 'Enter') {
+                        if (event.key === 'Enter') {
                           event.preventDefault();
                           prepareScanSound();
                           selectScannedProduct(search.trim());
@@ -678,19 +693,13 @@ export function PriceTagsPage() {
                       }}
                       placeholder={t('Name, SKU, PLU or barcode')}
                     />
-                    {section === 'products' && (
-                      <Button
-                        variant="outline"
-                        className="price-tags-scan-shortcut"
-                        aria-label={t('Scan with camera')}
-                        onClick={() => {
-                          prepareScanSound();
-                          setSection('scan');
-                        }}
-                      >
-                        <ScanLine size={22} />
-                      </Button>
-                    )}
+                    <CameraBarcodeScanner
+                      inline
+                      continuous
+                      disabled={products.isPending || !!products.error || lockedNavigation}
+                      onOpen={prepareScanSound}
+                      onScan={selectScannedProduct}
+                    />
                   </div>
                 </div>
               </div>
@@ -922,7 +931,7 @@ export function PriceTagsPage() {
         </section>
       </main>
       <footer className="price-tags-bottom">
-        {(section === 'products' || section === 'scan') && (
+        {section === 'products' && (
           <div className="price-tags-print-action">
             {tab === 'markdowns' ? (
               <Button
@@ -984,7 +993,6 @@ export function PriceTagsPage() {
               tabIndex={section === item.id ? 0 : -1}
               disabled={lockedNavigation || (!!pendingBluetoothJob && item.id !== 'products')}
               onClick={() => {
-                if (item.id === 'scan') prepareScanSound();
                 setSection(item.id);
               }}
               onKeyDown={(event) => {

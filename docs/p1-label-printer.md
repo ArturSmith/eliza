@@ -41,8 +41,10 @@ Editor preview, P1 jobs/test labels and custom browser sheets use the same rende
 
 ## Phone workspace
 
-Price Tags uses a phone-width app frame (up to 560 CSS px) with a fixed header and safe-area-aware bottom navigation: Products, Scanner, Layout, Printer, More. Only the central panel scrolls. The print action stays above navigation on Products/Scanner. More contains the employee/device details, replay guide, Lock and management access.
+Price Tags uses a phone-width app frame (up to 560 CSS px) with a fixed header and safe-area-aware bottom navigation: Products, Layout, Printer, More. Only the central panel scrolls. The print action stays above navigation on Products. More contains the employee/device details, replay guide, Lock and management access.
 
-Layout and printer tools are embedded tabs; they no longer require modal dialogs. Scanner starts an inline continuous camera only while that tab is active, and stops when leaving. Manual barcode entry with Enter also selects labels. Product and markdown selections survive tab switches. Layout edits still require Save layout before leaving the tab.
+Layout and printer tools are embedded tabs; they no longer require modal dialogs. The scanner button beside the product search toggles an inline continuous camera; it stops when closed or when leaving Products. Manual barcode entry with Enter also selects labels. Product and markdown selections survive tab switches. Layout edits still require Save layout before leaving the tab.
 
 Controls use touch-size targets and 16 px inputs. The viewport opts into safe areas and Android Chrome keyboard content resizing. The phone workflow checks 320×568, 360×640, 390×844, 430×932 and 568×320, including Russian text, long names, no horizontal page overflow, bottom-bar position, scanning and printing. Camera/Bluetooth hardware and real soft-keyboard behavior still need an on-device check.
+
+The product-list filters use short visible labels (Changed / All / Markdowns) with full accessible names, single-line labels, aligned optional count badges and a selected underline. Zero badges are hidden and large counts display as 99+ to keep narrow phone layouts stable.

@@ -112,12 +112,9 @@ body:has(.price-tags-app) {
 .price-tags-tabs {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px;
-  padding: 4px;
+  gap: 0;
   margin: 0 0 12px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  border-bottom: 1px solid var(--border);
 }
 .price-tags-tabs button {
   min-width: 0;
@@ -125,31 +122,47 @@ body:has(.price-tags-app) {
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 6px 4px;
+  gap: 5px;
+  padding: 10px 3px;
   border: 0;
-  border-radius: 10px;
-  color: var(--muted);
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
   background: transparent;
+  color: var(--muted);
   font: inherit;
-  font-size: 12px;
-  line-height: 1.2;
+  font-size: 13px;
+  line-height: 20px;
   font-weight: 600;
   cursor: pointer;
-  overflow-wrap: anywhere;
+}
+.price-tags-filter-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .price-tags-tabs button[aria-selected='true'] {
-  background: var(--accent);
-  color: var(--on-accent);
+  color: var(--text);
+  border-bottom-color: var(--accent);
 }
 .price-tags-counter {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 18px;
-  padding: 2px 4px;
+  height: 18px;
+  padding: 0 4px;
+  flex-shrink: 0;
   border-radius: 6px;
-  background: color-mix(in srgb, var(--border) 55%, transparent);
-  color: inherit;
+  background: var(--border);
+  color: var(--muted);
   font-size: 10px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.price-tags-tabs button[aria-selected='true'] .price-tags-counter {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
 }
 .price-tags-controls,
 .price-tags-search-field {
@@ -164,12 +177,13 @@ body:has(.price-tags-app) {
 }
 .price-tags-search-row {
   display: flex;
+  flex-wrap: wrap;
   min-width: 0;
   gap: 8px;
 }
 .price-tags-search-row input {
   min-width: 0;
-  flex: 1;
+  flex: 1 1 0;
 }
 .price-tags-shell input:not([type='checkbox']),
 .price-tags-shell select {
@@ -183,12 +197,37 @@ body:has(.price-tags-app) {
   font: inherit;
   font-size: 16px;
 }
-.price-tags-scan-shortcut.button {
+.price-tags-search-row .camera-scan-button {
   width: 48px;
-  min-width: 48px;
+  height: 48px;
   min-height: 48px;
-  padding: 10px;
+  flex: 0 0 48px;
   border-radius: 12px;
+}
+.price-tags-search-row .camera-scan-inline {
+  flex: 0 0 100%;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.price-tags-search-row .camera-scan-inline p {
+  margin-top: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.price-tags-search-row .camera-scan-preview {
+  border-radius: 12px;
+  overflow: hidden;
+}
+.price-tags-search-row .camera-scan-preview video {
+  width: 100%;
+  max-height: 30dvh;
+  object-fit: cover;
+}
+.price-tags-product-tools:has(.camera-scan-inline) {
+  position: static;
 }
 .price-tags-product-list {
   display: grid;
@@ -320,7 +359,7 @@ body:has(.price-tags-app) {
 }
 .price-tags-bottom-nav {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   padding: 4px max(4px, env(safe-area-inset-right, 0px)) max(6px, env(safe-area-inset-bottom, 0px))
     max(4px, env(safe-area-inset-left, 0px));
   gap: 2px;
@@ -359,27 +398,6 @@ body:has(.price-tags-app) {
 .price-tags-tabs button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
-}
-.price-tags-scanner .camera-scan-inline {
-  padding: 0;
-  border: 0;
-  background: none;
-  margin-bottom: 12px;
-}
-.price-tags-scanner .camera-scan-inline > p {
-  font-size: 13px;
-  color: var(--muted);
-}
-.price-tags-scanner .camera-scan-preview {
-  width: 100%;
-  border-radius: 16px;
-  overflow: hidden;
-}
-.price-tags-scanner video {
-  width: 100%;
-  max-height: 30dvh;
-  object-fit: cover;
-  aspect-ratio: 4 / 3;
 }
 .price-tags-settings-panel {
   display: grid;

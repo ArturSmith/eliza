@@ -104,12 +104,14 @@ test('prints selected weight labels and regular price tags together', async ({ p
     page.locator('.price-tags-print-sheet .price-tag:not(.price-tag-weight)'),
   ).toContainText('Bottled water');
   await expect(page.locator('.price-tags-print-sheet .price-tag')).toHaveCount(2);
-  await expect(changedTab).toContainText('0');
+  await expect(changedTab).toHaveAttribute('title', 'Price changed · 0');
+  await expect(changedTab.locator('.price-tags-counter')).toHaveCount(0);
   await changedTab.click();
   await expect(page.locator('.price-tags-product-entry')).toHaveCount(0);
   await expect(page.getByText('No price changes waiting for tags.')).toBeVisible();
   await page.reload();
-  await expect(changedTab).toContainText('0');
+  await expect(changedTab).toHaveAttribute('title', 'Price changed · 0');
+  await expect(changedTab.locator('.price-tags-counter')).toHaveCount(0);
   await page.getByRole('tab', { name: 'All products', exact: true }).click();
   await expect(page.locator('.price-tags-product-entry')).toHaveCount(2);
 });

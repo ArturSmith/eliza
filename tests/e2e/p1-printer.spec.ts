@@ -279,15 +279,31 @@ test('P1 printing uses local controls and only completes price changes after phy
       expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(
         viewport.height + 1,
       );
+      if (name === 'Products') {
+        const filters = page.getByRole('tablist', { name: 'Product lists' });
+        const labelSizes = await filters
+          .locator('.price-tags-filter-label')
+          .evaluateAll((elements) =>
+            elements.map((element) => ({
+              height: element.getBoundingClientRect().height,
+              fits: element.scrollWidth <= element.clientWidth,
+            })),
+          );
+        expect(labelSizes.every((label) => label.height <= 21 && label.fits)).toBe(true);
+      }
     }
   }
   await page.setViewportSize({ width: 390, height: 844 });
-  await nav.getByRole('tab', { name: 'Scanner', exact: true }).click();
+  await expect(nav.getByRole('tab')).toHaveCount(4);
+  await expect(nav.getByRole('tab', { name: 'Scanner', exact: true })).toHaveCount(0);
+  await nav.getByRole('tab', { name: 'Products', exact: true }).click();
+  await page.getByRole('button', { name: 'Scan with camera', exact: true }).click();
   await expect(page.getByLabel('Camera preview')).toBeVisible();
   await page.locator('#price-tags-search').fill('0400000000046');
   await page.locator('#price-tags-search').press('Enter');
   await expect(row.locator('input[type="checkbox"]')).toBeChecked();
   await nav.getByRole('tab', { name: 'Products', exact: true }).click();
+  await page.getByRole('button', { name: 'Close camera', exact: true }).click();
   await expect(page.getByLabel('Camera preview')).toHaveCount(0);
   await expect(row.locator('input[type="checkbox"]')).toBeChecked();
   await page.screenshot({ path: '/private/tmp/eliza-price-tags-mobile.png' });
@@ -299,7 +315,7 @@ test('P1 printing uses local controls and only completes price changes after phy
   await page.evaluate(() => localStorage.setItem('eliza.language', 'ru'));
   await page.reload();
   const russianNav = page.getByRole('tablist', { name: 'Навигация по ценникам' });
-  for (const name of ['Товары', 'Сканер', 'Макет', 'Принтер', 'Ещё']) {
+  for (const name of ['Товары', 'Макет', 'Принтер', 'Ещё']) {
     await russianNav.getByRole('tab', { name, exact: true }).click();
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
       320,
@@ -310,4 +326,11 @@ test('P1 printing uses local controls and only completes price changes after phy
   await russianNav.getByRole('tab', { name: 'Товары', exact: true }).click();
   await page.getByRole('tab', { name: 'Все товары', exact: true }).click();
   await page.screenshot({ path: '/private/tmp/eliza-price-tags-small-russian.png' });
+  const russianLabels = await page.locator('.price-tags-filter-label').evaluateAll((elements) =>
+    elements.map((element) => ({
+      height: element.getBoundingClientRect().height,
+      fits: element.scrollWidth <= element.clientWidth,
+    })),
+  );
+  expect(russianLabels.every((label) => label.height <= 21 && label.fits)).toBe(true);
 });
