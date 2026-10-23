@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import type { LabelLayout } from './tag-layout';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { t } from '../i18n';
 import { Button } from '../components/ui/button';
 import { Dialog } from '../components/ui/dialog';
@@ -13,7 +14,7 @@ import {
   type PrinterDevice,
 } from './p1';
 
-export function useLabelPrinter(busy: boolean) {
+export function useLabelPrinter(busy: boolean, layout?: LabelLayout | null) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<'browser' | 'p1'>(() => {
     try {
@@ -75,17 +76,29 @@ export function useLabelPrinter(busy: boolean) {
       device.gatt?.disconnect();
     };
   }, [device]);
-  useEffect(() => {
-    if (open && preview.current)
-      preview.current.replaceChildren(
-        renderLabel({
-          name: t('Test label'),
-          price: '123.45',
-          barcode: '0400000000046',
-          details: ['Eliza · P1', '50 × 60 mm'],
-        }),
-      );
-  }, [open, mode]);
+  const mountPreview = useCallback(
+    (node: HTMLDivElement | null) => {
+      preview.current = node;
+      if (!node) return;
+      try {
+        node.replaceChildren(
+          renderLabel(
+            {
+              name: t('Test label'),
+              price: '123.45',
+              barcode: '0400000000046',
+              details: ['Eliza · P1', '50 × 60 mm'],
+            },
+            layout,
+          ),
+        );
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t('Label preview is unavailable.'));
+      }
+    },
+    [layout],
+  );
+
   function selectMode(value: 'browser' | 'p1') {
     setMode(value);
     try {
@@ -172,7 +185,9 @@ export function useLabelPrinter(busy: boolean) {
       throw new Error(t('Connect the P1 printer before printing.'));
     const gapMm = Number(gap.replace(',', '.'));
     // Render and validate the entire job before transmitting anything.
-    const jobs = labels.map((label) => labelBytes(renderLabel(label), gapMm, speed === 'fast'));
+    const jobs = labels.map((label) =>
+      labelBytes(renderLabel(label, layout), gapMm, speed === 'fast'),
+    );
     sending.current = true;
     setWorking(true);
     setMessage('');
@@ -330,7 +345,7 @@ export function useLabelPrinter(busy: boolean) {
                   {t('Print test label')}
                 </Button>
               </div>
-              <div className="label-printer-preview" ref={preview} />
+              <div className="label-printer-preview" ref={mountPreview} />
             </>
           )}
         </div>

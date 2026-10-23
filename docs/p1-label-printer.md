@@ -14,7 +14,7 @@ Employee controls live in Price Tags → Printer, not management settings. The c
 
 - Browser printing remains the default. Choosing P1 is explicit; disconnection never silently falls back to browser printing.
 - Printer mode, label gap and speed are local browser preferences. They do not change the store’s tag design or the manager’s laptop. Reconnect using the chooser after reloading.
-- Regular, weight and markdown data come from the existing authenticated server snapshots. P1 uses a dedicated fixed-size template, not the A4 browser sheet. Cyrillic/currency render to a monochrome bitmap; the printer does not need the same fonts/code page.
+- Regular, weight and markdown data come from the existing authenticated server snapshots. P1 uses a dedicated 50 × 60 mm template. A saved custom layout is also available to browser printing as a 50 × 60 mm image on the existing print sheet. Cyrillic/currency render to a monochrome bitmap; the printer does not need the same fonts/code page.
 - For weighted products the existing scale barcode and package-price calculation are reused. Markdown labels use each unit’s existing unique barcode, never mint new ones.
 - All labels are rendered/validated before transmitting. Barcodes keep integer dot widths and quiet zones; codes too wide for the paper fail rather than being squeezed.
 - Fast mode is the default: exact occupied raster bands are sent at their original coordinates instead of transmitting blank paper. Dot sizes, barcode quiet zones and label dimensions remain unchanged. Serial BLE writes retain 20-byte payloads, with 4 ms pacing for writes without response; acknowledged writes do not add artificial delays. Actual speed depends on the Android device, connection and firmware.
@@ -28,3 +28,13 @@ Browser requirements: https://developer.chrome.com/docs/capabilities/bluetooth
 ## Automated verification
 
 `tests/p1-printing.unit.test.ts` covers raster size, polarity, transparent pixels, gap validation, exact reconstruction from compact bands, both pacing profiles, serial chunking and errors. `tests/e2e/p1-printer.spec.ts` exercises the actual UI/API using a simulated BLE peripheral, checks physical-confirmation ordering, failure behavior and reconnect requirements. Existing `price-tags-weight.spec.ts` verifies browser printing remains intact. These tests do not replace a real P1 print and barcode scan.
+
+## Label layout editor
+
+Price Tags → Edit label layout opens the device-local editor. Select a product first to preview its current content, or use the sample label. Drag objects with mouse or touch; keyboard arrows move the focused object one dot, Shift+arrow one millimetre. Numeric X/Y and width/height use millimetres; text controls use points and alignment. Store name, product name, price, extra details and barcode have independent boxes. Text blocks can be hidden; barcodes remain visible.
+
+Portrait and landscape are logical editing orientations. The physical P1 stock stays 50 × 60 mm: landscape is rotated exactly 90° into the 400 × 480 dot paper raster, without resampling. Oversized barcodes block saving/printing rather than being squeezed. Overlapping objects show a warning. Prices stay on one line without ellipsis.
+
+Save layout persists a versioned, validated template in local storage keyed by store and station device IDs. It is shared by employees on that station, not synchronized to other devices. Saving does not change the manager’s store-wide tag design or prices. Closing without saving discards the draft. Reset positions resets the draft for the current orientation; Use default layouts removes the custom template and restores existing browser/P1 behavior.
+
+Editor preview, P1 jobs/test labels and custom browser sheets use the same renderer. The existing server snapshots, weight calculation, markdown barcodes and physical-print confirmation remain in place. Test a physical label and scan its barcode after changing a layout. `tests/tag-layout.unit.test.ts` covers boundaries/schema/isolation; the P1 browser workflow also covers dragging, keyboard movement, orientation, persistence, custom browser images and pixel-exact rotation.

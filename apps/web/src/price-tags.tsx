@@ -1,3 +1,6 @@
+import { TagLayoutEditor, useStoredLabelLayout } from './printing/tag-layout-editor';
+import { labelLayoutStorageKey } from './printing/tag-layout';
+import { renderLabel } from './printing/label-image';
 import { useLabelPrinter } from './printing/use-label-printer';
 import type { LabelContent } from './printing/label-image';
 import { PageOnboarding } from './onboarding/PageOnboarding';
@@ -87,7 +90,15 @@ export function PriceTagsPage() {
     items: PrintItem[];
   } | null>(null);
   const [preparingPrint, setPreparingPrint] = useState(false);
-  const printer = useLabelPrinter(completingPrint || preparingPrint || !!pendingBluetoothJob);
+  const tagLayout = useStoredLabelLayout(
+    context.data ? labelLayoutStorageKey(context.data.store.id, context.data.device.id) : null,
+  );
+  const printer = useLabelPrinter(
+    completingPrint || preparingPrint || !!pendingBluetoothJob,
+    tagLayout.layout,
+  );
+  const [customPrintImages, setCustomPrintImages] = useState<string[] | null>(null);
+
   const [bluetoothError, setBluetoothError] = useState<unknown>(null);
   const [bluetoothNotice, setBluetoothNotice] = useState('');
   async function sendLabels(labels: LabelContent[]) {
@@ -252,45 +263,31 @@ export function PriceTagsPage() {
     onSettled: () => setPreparingPrint(false),
     onSuccess: (job) => {
       setCompletingPrint(true);
+      setCustomPrintImages(null);
       setMarkdownPrintItems([]);
       setPrintItems(job.items);
       requestAnimationFrame(() =>
         requestAnimationFrame(async () => {
           try {
             if (printer.mode === 'p1') {
-              await sendLabels(
-                job.items.map(({ product, weightLabel }) => ({
-                  name: product.name,
-                  store: context.data!.store.tagDesign.showStoreName
-                    ? context.data!.store.name
-                    : undefined,
-                  price: formatLabelPrice(weightLabel ? packagePrice(weightLabel) : product.price),
-                  barcode: weightLabel?.barcode || product.barcode || undefined,
-                  details: [
-                    ...(product.regularPrice
-                      ? [
-                          t('Discount from') +
-                            ' ' +
-                            formatLabelPrice(
-                              weightLabel
-                                ? packagePrice({ ...weightLabel, price: product.regularPrice })
-                                : product.regularPrice,
-                            ),
-                        ]
-                      : []),
-                    ...(weightLabel
-                      ? [
-                          t('Net weight (kg)') + ': ' + weightLabel.weight,
-                          formatLabelPrice(product.price) + '/' + t('kg'),
-                        ]
-                      : [t(product.unit)]),
-                    ...(context.data!.store.tagDesign.showSku ? [product.sku] : []),
-                  ],
-                })),
-              );
+              await sendLabels(normalContents(job.items));
               setPendingBluetoothJob(job);
               return;
             }
+            if (tagLayout.layout) {
+              const images = normalContents(job.items).map((label) =>
+                renderLabel(label, tagLayout.layout).toDataURL('image/png'),
+              );
+              setCustomPrintImages(images);
+              await new Promise<void>((resolve) =>
+                requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+              );
+              await Promise.all(
+                [...document.querySelectorAll<HTMLImageElement>('.price-tag-custom img')].map(
+                  (image) => image.decode(),
+                ),
+              );
+            } else setCustomPrintImages(null);
             window.print();
             await api('/price-tags/prints/' + job.id + '/complete', {});
             setSelected((before) =>
@@ -314,29 +311,31 @@ export function PriceTagsPage() {
     onSettled: () => setPreparingPrint(false),
     onSuccess: ({ labels }) => {
       setCompletingPrint(true);
+      setCustomPrintImages(null);
       setPrintItems([]);
       setMarkdownPrintItems(labels);
       requestAnimationFrame(() =>
         requestAnimationFrame(async () => {
           try {
-            if (printer.mode === 'p1')
-              await sendLabels(
-                labels.map((label) => ({
-                  name: label.name,
-                  store: context.data!.store.tagDesign.showStoreName
-                    ? context.data!.store.name
-                    : undefined,
-                  price: formatLabelPrice(label.price),
-                  barcode: label.barcode,
-                  details: [
-                    t('Discount from') + ' ' + formatLabelPrice(label.regularPrice),
-                    ...(label.expiryDate
-                      ? [t('Expires') + ' ' + label.expiryDate.slice(0, 10)]
-                      : []),
-                  ],
-                })),
-              );
-            else window.print();
+            if (printer.mode === 'p1') await sendLabels(markdownContents(labels));
+            else {
+              if (tagLayout.layout) {
+                setCustomPrintImages(
+                  markdownContents(labels).map((label) =>
+                    renderLabel(label, tagLayout.layout).toDataURL('image/png'),
+                  ),
+                );
+                await new Promise<void>((resolve) =>
+                  requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+                );
+                await Promise.all(
+                  [...document.querySelectorAll<HTMLImageElement>('.price-tag-custom img')].map(
+                    (image) => image.decode(),
+                  ),
+                );
+              } else setCustomPrintImages(null);
+              window.print();
+            }
             void queryClient.invalidateQueries({ queryKey: ['price-tags-markdown-labels'] });
           } catch (error) {
             setPrintError(error);
@@ -478,6 +477,50 @@ export function PriceTagsPage() {
     new Intl.NumberFormat(undefined, { style: 'currency', currency: value.store.currency }).format(
       Number(amount),
     );
+  const normalContents = (items: PrintItem[]): LabelContent[] =>
+    items.map(({ product, weightLabel }) => ({
+      name: product.name,
+      store:
+        tagLayout.layout || context.data!.store.tagDesign.showStoreName
+          ? context.data!.store.name
+          : undefined,
+      price: formatLabelPrice(weightLabel ? packagePrice(weightLabel) : product.price),
+      barcode: weightLabel?.barcode || product.barcode || undefined,
+      details: [
+        ...(product.regularPrice
+          ? [
+              t('Discount from') +
+                ' ' +
+                formatLabelPrice(
+                  weightLabel
+                    ? packagePrice({ ...weightLabel, price: product.regularPrice })
+                    : product.regularPrice,
+                ),
+            ]
+          : []),
+        ...(weightLabel
+          ? [
+              t('Net weight (kg)') + ': ' + weightLabel.weight,
+              formatLabelPrice(product.price) + '/' + t('kg'),
+            ]
+          : [t(product.unit)]),
+        ...(context.data!.store.tagDesign.showSku ? [product.sku] : []),
+      ],
+    }));
+  const markdownContents = (labels: MarkdownLabel[]): LabelContent[] =>
+    labels.map((label) => ({
+      name: label.name,
+      store:
+        tagLayout.layout || context.data!.store.tagDesign.showStoreName
+          ? context.data!.store.name
+          : undefined,
+      price: formatLabelPrice(label.price),
+      barcode: label.barcode,
+      details: [
+        t('Discount from') + ' ' + formatLabelPrice(label.regularPrice),
+        ...(label.expiryDate ? [t('Expires') + ' ' + label.expiryDate.slice(0, 10)] : []),
+      ],
+    }));
   const cannotPrint =
     preparingPrint ||
     printer.working ||
@@ -498,6 +541,39 @@ export function PriceTagsPage() {
             {value.store.name} · {value.device.name} · {value.operator.name}
           </p>
         </div>
+        <TagLayoutEditor
+          layout={tagLayout.layout}
+          storeName={value.store.name}
+          onSave={tagLayout.save}
+          preview={
+            (tab === 'markdowns'
+              ? markdownContents(allMarkdowns.filter((label) => chosenMarkdowns.includes(label.id)))
+              : normalContents(
+                  chosen.map((product) => ({
+                    product,
+                    weightLabel:
+                      product.unit === 'kilogram' &&
+                      /^\d+(?:[.,]\d{1,3})?$/.test(packageWeights[product.id]?.trim() ?? '') &&
+                      Number((packageWeights[product.id] ?? '').replace(',', '.')) > 0
+                        ? {
+                            barcode: product.barcode,
+                            name: product.name,
+                            sku: product.sku,
+                            price: product.price,
+                            weight: packageWeights[product.id].replace(',', '.'),
+                          }
+                        : undefined,
+                  })),
+                ))[0] ?? {
+              name: t('Sample product'),
+              price: formatLabelPrice('123.45'),
+              barcode: '0400000000046',
+              store: value.store.name,
+              details: [t('Label details')],
+            }
+          }
+          disabled={completingPrint || preparingPrint || printer.working || !!pendingBluetoothJob}
+        />
         {printer.controls}
         <Button
           variant="outline"
@@ -767,77 +843,101 @@ export function PriceTagsPage() {
         )}
       </div>
       <div className="price-tags-print-sheet" style={{ gap: `${design.gapMm}mm` }}>
-        {markdownPrintItems.map((label) => (
-          <article
-            key={label.id}
-            className="price-tag price-tag-weight price-tag-markdown"
-            style={{ width: `${design.weightWidthMm}mm`, height: `${design.weightHeightMm}mm` }}
-          >
-            {design.showStoreName && <small>{value.store.name}</small>}
-            <strong style={{ fontSize: `${design.nameFontPt}pt` }}>{label.name}</strong>
-            {design.showSku && <small>{label.sku}</small>}
-            <div className="price-tag-price" style={{ fontSize: `${design.priceFontPt}pt` }}>
-              {price(label.price)}
-            </div>
-            <small>
-              {t('Discount from')} <s>{price(label.regularPrice)}</s>
-            </small>
-            {label.expiryDate && (
-              <small>
-                {t('Expires')} {label.expiryDate}
-              </small>
+        {customPrintImages ? (
+          customPrintImages.map((src, index) => (
+            <article
+              className="price-tag price-tag-custom"
+              key={index}
+              style={{ width: '50mm', height: '60mm', padding: 0, border: 0 }}
+            >
+              <img
+                src={src}
+                alt={t('Label preview')}
+                style={{ width: '50mm', height: '60mm', display: 'block' }}
+              />
+            </article>
+          ))
+        ) : (
+          <>
+            {markdownPrintItems.map((label) => (
+              <article
+                key={label.id}
+                className="price-tag price-tag-weight price-tag-markdown"
+                style={{ width: `${design.weightWidthMm}mm`, height: `${design.weightHeightMm}mm` }}
+              >
+                {design.showStoreName && <small>{value.store.name}</small>}
+                <strong style={{ fontSize: `${design.nameFontPt}pt` }}>{label.name}</strong>
+                {design.showSku && <small>{label.sku}</small>}
+                <div className="price-tag-price" style={{ fontSize: `${design.priceFontPt}pt` }}>
+                  {price(label.price)}
+                </div>
+                <small>
+                  {t('Discount from')} <s>{price(label.regularPrice)}</s>
+                </small>
+                {label.expiryDate && (
+                  <small>
+                    {t('Expires')} {label.expiryDate}
+                  </small>
+                )}
+                <Ean13Barcode code={label.barcode} showDigits={design.showBarcodeNumber} />
+              </article>
+            ))}
+            {printItems.map(({ product, weightLabel }) =>
+              weightLabel ? (
+                <article
+                  key={product.id}
+                  className="price-tag price-tag-weight"
+                  style={{
+                    width: `${design.weightWidthMm}mm`,
+                    height: `${design.weightHeightMm}mm`,
+                  }}
+                >
+                  {design.showStoreName && <small>{value.store.name}</small>}
+                  <strong style={{ fontSize: `${design.nameFontPt}pt` }}>{weightLabel.name}</strong>
+                  {design.showSku && <small>{weightLabel.sku}</small>}
+                  <div>
+                    {t('Net weight (kg)')}: {weightLabel.weight}
+                  </div>
+                  <small>
+                    {price(weightLabel.price)}/{t('kg')}
+                  </small>
+                  {product.regularPrice && (
+                    <small>
+                      {t('Discount from')}{' '}
+                      <s>{price(packagePrice({ ...weightLabel, price: product.regularPrice }))}</s>
+                    </small>
+                  )}
+                  <b style={{ fontSize: `${design.priceFontPt}pt` }}>
+                    {price(packagePrice(weightLabel))}
+                  </b>
+                  <Ean13Barcode code={weightLabel.barcode} showDigits={design.showBarcodeNumber} />
+                </article>
+              ) : (
+                <article
+                  key={product.id}
+                  className="price-tag"
+                  style={{
+                    width: `${design.regularWidthMm}mm`,
+                    height: `${design.regularHeightMm}mm`,
+                  }}
+                >
+                  {design.showStoreName && <small>{value.store.name}</small>}
+                  <strong style={{ fontSize: `${design.nameFontPt}pt` }}>{product.name}</strong>
+                  <div className="price-tag-price" style={{ fontSize: `${design.priceFontPt}pt` }}>
+                    {price(product.price)}
+                  </div>
+                  {product.regularPrice && (
+                    <small>
+                      {t('Discount from')} <s>{price(product.regularPrice)}</s>
+                    </small>
+                  )}
+                  {design.showSku && <small>{product.sku}</small>}
+                  {design.showUnit && <small>{product.unit}</small>}
+                  {design.showBarcodeNumber && product.barcode && <small>{product.barcode}</small>}
+                </article>
+              ),
             )}
-            <Ean13Barcode code={label.barcode} showDigits={design.showBarcodeNumber} />
-          </article>
-        ))}
-        {printItems.map(({ product, weightLabel }) =>
-          weightLabel ? (
-            <article
-              key={product.id}
-              className="price-tag price-tag-weight"
-              style={{ width: `${design.weightWidthMm}mm`, height: `${design.weightHeightMm}mm` }}
-            >
-              {design.showStoreName && <small>{value.store.name}</small>}
-              <strong style={{ fontSize: `${design.nameFontPt}pt` }}>{weightLabel.name}</strong>
-              {design.showSku && <small>{weightLabel.sku}</small>}
-              <div>
-                {t('Net weight (kg)')}: {weightLabel.weight}
-              </div>
-              <small>
-                {price(weightLabel.price)}/{t('kg')}
-              </small>
-              {product.regularPrice && (
-                <small>
-                  {t('Discount from')}{' '}
-                  <s>{price(packagePrice({ ...weightLabel, price: product.regularPrice }))}</s>
-                </small>
-              )}
-              <b style={{ fontSize: `${design.priceFontPt}pt` }}>
-                {price(packagePrice(weightLabel))}
-              </b>
-              <Ean13Barcode code={weightLabel.barcode} showDigits={design.showBarcodeNumber} />
-            </article>
-          ) : (
-            <article
-              key={product.id}
-              className="price-tag"
-              style={{ width: `${design.regularWidthMm}mm`, height: `${design.regularHeightMm}mm` }}
-            >
-              {design.showStoreName && <small>{value.store.name}</small>}
-              <strong style={{ fontSize: `${design.nameFontPt}pt` }}>{product.name}</strong>
-              <div className="price-tag-price" style={{ fontSize: `${design.priceFontPt}pt` }}>
-                {price(product.price)}
-              </div>
-              {product.regularPrice && (
-                <small>
-                  {t('Discount from')} <s>{price(product.regularPrice)}</s>
-                </small>
-              )}
-              {design.showSku && <small>{product.sku}</small>}
-              {design.showUnit && <small>{product.unit}</small>}
-              {design.showBarcodeNumber && product.barcode && <small>{product.barcode}</small>}
-            </article>
-          ),
+          </>
         )}
       </div>
     </div>

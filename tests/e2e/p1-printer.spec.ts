@@ -107,6 +107,45 @@ test('P1 printing uses local controls and only completes price changes after phy
     if (/\/price-tags\/prints\/[^/]+\/complete$/.test(request.url())) complete++;
   });
   await page.goto('/price-tags');
+  await page.getByRole('button', { name: 'Edit label layout' }).click();
+  const editor = page.getByRole('dialog', { name: 'Label layout', exact: true });
+  await expect(editor.locator('.tag-layout-artwork canvas')).toHaveJSProperty('width', 400);
+  await expect(editor.getByRole('alert')).toHaveCount(0);
+  const nameObject = editor.getByRole('button', { name: 'Move Product name', exact: true });
+  const nameBox = (await nameObject.boundingBox())!;
+  await page.mouse.move(nameBox.x + nameBox.width / 2, nameBox.y + nameBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(nameBox.x + nameBox.width / 2 + 10, nameBox.y + nameBox.height / 2 + 12, {
+    steps: 4,
+  });
+  await page.mouse.up();
+  expect(Number(await editor.getByLabel('Horizontal position (mm)').inputValue())).toBeGreaterThan(
+    2,
+  );
+  expect(Number(await editor.getByLabel('Vertical position (mm)').inputValue())).toBeGreaterThan(
+    5.5,
+  );
+  await nameObject.focus();
+  await page.keyboard.press('ArrowDown');
+  await editor.getByLabel('Label orientation').selectOption('landscape');
+  await expect(editor.locator('.tag-layout-artwork canvas')).toHaveJSProperty('width', 480);
+  await expect(editor.locator('.tag-layout-artwork canvas')).toHaveJSProperty('height', 400);
+  await editor.getByRole('button', { name: 'Reset positions' }).click();
+  await editor.getByLabel('Selected object').selectOption('price');
+  await editor.getByLabel('Horizontal position (mm)').fill('3');
+  await editor.getByLabel('Vertical position (mm)').fill('14');
+  await expect(editor.getByRole('alert')).toHaveCount(0);
+  await page.screenshot({ path: '/private/tmp/eliza-tag-layout-desktop.png' });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: '/private/tmp/eliza-tag-layout-mobile.png' });
+  await editor.getByRole('button', { name: 'Save layout', exact: true }).click();
+  await expect(editor).not.toBeVisible();
+  await page.reload();
+  await page.getByRole('button', { name: 'Edit label layout' }).click();
+  await expect(editor.getByLabel('Label orientation')).toHaveValue('landscape');
+  await editor.getByLabel('Selected object').selectOption('price');
+  await expect(editor.getByLabel('Horizontal position (mm)')).toHaveValue('3');
+  await editor.getByRole('button', { name: 'Close dialog' }).click();
   await page.getByRole('button', { name: /^Printer:/ }).click();
   const dialog = page.getByRole('dialog', { name: 'Label printer' });
   await dialog.getByLabel('Print using').selectOption('p1');
@@ -163,7 +202,7 @@ test('P1 printing uses local controls and only completes price changes after phy
   expect(await page.evaluate(() => (window as any).__printer.browserPrinted)).toBe(false);
   const sent = await page.evaluate(() => (window as any).__printer.bytes as number[]);
   expect(new TextDecoder().decode(Uint8Array.from(sent.slice(0, 38)))).toContain('GAP 3 mm');
-  expect(sent.length).toBeLessThan(12000);
+  expect(sent.length).toBeLessThan(24000); // Arbitrary layouts can occupy more of the paper.
   await page.getByRole('button', { name: 'All labels printed correctly' }).click();
   await expect(confirmation).not.toBeVisible();
   await expect(row).toHaveCount(0);
@@ -180,4 +219,36 @@ test('P1 printing uses local controls and only completes price changes after phy
   await page.reload();
   await expect(page.getByRole('button', { name: /^Printer: Not connected/ })).toBeVisible();
   await expect(page.getByRole('button', { name: /Print selected tags/ })).toBeDisabled();
+  await page.getByRole('button', { name: /^Printer:/ }).click();
+  await dialog.getByLabel('Print using').selectOption('browser');
+  await dialog.getByRole('button', { name: 'Close dialog' }).click();
+  await page.getByRole('tab', { name: 'All products', exact: true }).click();
+  await row.locator('input[type="checkbox"]').check();
+  await page.getByRole('button', { name: /Print selected tags/ }).click();
+  await expect.poll(() => page.evaluate(() => (window as any).__printer.browserPrinted)).toBe(true);
+  await expect(page.locator('.price-tag-custom img')).toHaveJSProperty('naturalWidth', 400);
+  await expect(page.locator('.price-tag-custom img')).toHaveJSProperty('naturalHeight', 480);
+  // Rotation must preserve every black/white pixel without interpolation.
+  const pixelExact = await page.evaluate(async () => {
+    const { renderLabel, renderLayoutView } = await import('/src/printing/label-image.ts');
+    const savedKey = Object.keys(localStorage).find((key) => key.startsWith('eliza:tag-layout:'))!;
+    const layout = JSON.parse(localStorage.getItem(savedKey)!);
+    const content = {
+      name: 'Йогурт',
+      price: '60.00',
+      barcode: '0400000000046',
+      store: 'P1 labels',
+    };
+    const view = renderLayoutView(content, layout),
+      paper = renderLabel(content, layout);
+    const a = view.getContext('2d')!.getImageData(0, 0, 480, 400).data;
+    const b = paper.getContext('2d')!.getImageData(0, 0, 400, 480).data;
+    for (let y = 0; y < 400; y++)
+      for (let x = 0; x < 480; x++)
+        for (let c = 0; c < 4; c++) {
+          if (a[(y * 480 + x) * 4 + c] !== b[((479 - x) * 400 + y) * 4 + c]) return false;
+        }
+    return true;
+  });
+  expect(pixelExact).toBe(true);
 });
