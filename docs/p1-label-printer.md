@@ -38,3 +38,11 @@ Portrait and landscape are logical editing orientations. The physical P1 stock s
 Save layout persists a versioned, validated template in local storage keyed by store and station device IDs. It is shared by employees on that station, not synchronized to other devices. Saving does not change the manager’s store-wide tag design or prices. Closing without saving discards the draft. Reset positions resets the draft for the current orientation; Use default layouts removes the custom template and restores existing browser/P1 behavior.
 
 Editor preview, P1 jobs/test labels and custom browser sheets use the same renderer. The existing server snapshots, weight calculation, markdown barcodes and physical-print confirmation remain in place. Test a physical label and scan its barcode after changing a layout. `tests/tag-layout.unit.test.ts` covers boundaries/schema/isolation; the P1 browser workflow also covers dragging, keyboard movement, orientation, persistence, custom browser images and pixel-exact rotation.
+
+## Phone workspace
+
+Price Tags uses a phone-width app frame (up to 560 CSS px) with a fixed header and safe-area-aware bottom navigation: Products, Scanner, Layout, Printer, More. Only the central panel scrolls. The print action stays above navigation on Products/Scanner. More contains the employee/device details, replay guide, Lock and management access.
+
+Layout and printer tools are embedded tabs; they no longer require modal dialogs. Scanner starts an inline continuous camera only while that tab is active, and stops when leaving. Manual barcode entry with Enter also selects labels. Product and markdown selections survive tab switches. Layout edits still require Save layout before leaving the tab.
+
+Controls use touch-size targets and 16 px inputs. The viewport opts into safe areas and Android Chrome keyboard content resizing. The phone workflow checks 320×568, 360×640, 390×844, 430×932 and 568×320, including Russian text, long names, no horizontal page overflow, bottom-bar position, scanning and printing. Camera/Bluetooth hardware and real soft-keyboard behavior still need an on-device check.

@@ -215,6 +215,125 @@ export function useLabelPrinter(busy: boolean, layout?: LabelLayout | null) {
       setWorking(false);
     }
   }
+  const panel = (
+    <div className="label-printer-settings">
+      <label>
+        {t('Print using')}
+        <select
+          value={mode}
+          disabled={busy || working}
+          onChange={(e) => selectMode(e.target.value as 'browser' | 'p1')}
+        >
+          <option value="browser">{t('Browser printing')}</option>
+          <option value="p1">P1 Bluetooth · 50 × 60 mm</option>
+        </select>
+      </label>
+      {mode === 'p1' && (
+        <>
+          <details className="label-printer-help">
+            <summary>{t('Connection help')}</summary>
+            <p className="muted">
+              {t(
+                'Experimental P1 / TSPL support. Close Toprint before connecting. Confirm compatibility with one test label first.',
+              )}
+            </p>
+          </details>
+          <div ref={feedback} className="label-printer-feedback">
+            {connectionStage && (
+              <p role="status">
+                {connectionStage === 'choosing'
+                  ? t(
+                      'Choose your P1 in Chrome’s Bluetooth device window. Pairing in Android settings alone does not connect Eliza.',
+                    )
+                  : t('Connecting to the selected printer…')}
+              </p>
+            )}
+            {working && !connectionStage && (
+              <p role="status">
+                {t('Sending to printer. Keep this screen open until the transfer finishes.')}
+              </p>
+            )}
+            {message && <p role="status">{message}</p>}
+            {error && (
+              <p role="alert" className="error">
+                {error}
+              </p>
+            )}
+          </div>
+          <p role="status">
+            {connected ? `${t('Connected')}: ${device?.name ?? 'P1'}` : t('Not connected')}
+          </p>
+          <div className="label-printer-buttons">
+            <Button disabled={working || busy} onClick={() => void connect()}>
+              {t('Connect printer')}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!connected || working || busy}
+              onClick={() => {
+                device?.gatt?.disconnect();
+                channel.current = null;
+                setConnected(false);
+              }}
+            >
+              {t('Disconnect printer')}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!connected || working || busy}
+              onClick={() => {
+                setError('');
+                void printLabels([
+                  {
+                    name: t('Test label'),
+                    price: '123.45',
+                    barcode: '0400000000046',
+                    details: ['Eliza · P1', '50 × 60 mm'],
+                  },
+                ]).catch((err) => setError(err.message));
+              }}
+            >
+              {t('Print test label')}
+            </Button>
+          </div>
+          <label>
+            {t('Gap between labels (mm)')}
+            <input
+              type="number"
+              min="0.5"
+              max="6"
+              step="0.1"
+              value={gap}
+              disabled={working || busy}
+              onChange={(e) => setGap(e.target.value)}
+            />
+          </label>
+          <label>
+            {t('Print speed')}
+            <select
+              value={speed}
+              disabled={working || busy}
+              onChange={(event) => setSpeed(event.target.value as PrintSpeed)}
+            >
+              <option value="fast">{t('Fast')}</option>
+              <option value="compatible">{t('Compatibility (slower)')}</option>
+            </select>
+          </label>
+          <small className="muted">
+            {t(
+              'Fast mode sends less image data without reducing barcode quality. If labels are incomplete, restart the printer and try Compatibility mode.',
+            )}
+          </small>
+          <small className="muted">
+            {t(
+              'Label size is 50 × 60 mm. The 2 mm gap is a starting value; measure the gap on your roll.',
+            )}
+          </small>
+          <div className="label-printer-preview" ref={mountPreview} />
+        </>
+      )}
+    </div>
+  );
   const controls = (
     <>
       <Button variant="outline" disabled={busy || working} onClick={() => setOpen(true)}>
@@ -235,122 +354,9 @@ export function useLabelPrinter(busy: boolean, layout?: LabelLayout | null) {
           'Connect on this Android device. A manager’s laptop cannot connect the printer for this device.',
         )}
       >
-        <div className="label-printer-settings">
-          <label>
-            {t('Print using')}
-            <select
-              value={mode}
-              disabled={busy || working}
-              onChange={(e) => selectMode(e.target.value as 'browser' | 'p1')}
-            >
-              <option value="browser">{t('Browser printing')}</option>
-              <option value="p1">P1 Bluetooth · 50 × 60 mm</option>
-            </select>
-          </label>
-          {mode === 'p1' && (
-            <>
-              <p className="muted">
-                {t(
-                  'Experimental P1 / TSPL support. Close Toprint before connecting. Confirm compatibility with one test label first.',
-                )}
-              </p>
-              <div ref={feedback} className="label-printer-feedback">
-                {connectionStage && (
-                  <p role="status">
-                    {connectionStage === 'choosing'
-                      ? t(
-                          'Choose your P1 in Chrome’s Bluetooth device window. Pairing in Android settings alone does not connect Eliza.',
-                        )
-                      : t('Connecting to the selected printer…')}
-                  </p>
-                )}
-                {working && !connectionStage && (
-                  <p role="status">
-                    {t('Sending to printer. Keep this screen open until the transfer finishes.')}
-                  </p>
-                )}
-                {message && <p role="status">{message}</p>}
-                {error && (
-                  <p role="alert" className="error">
-                    {error}
-                  </p>
-                )}
-              </div>
-              <p role="status">
-                {connected ? `${t('Connected')}: ${device?.name ?? 'P1'}` : t('Not connected')}
-              </p>
-              <label>
-                {t('Gap between labels (mm)')}
-                <input
-                  type="number"
-                  min="0.5"
-                  max="6"
-                  step="0.1"
-                  value={gap}
-                  disabled={working || busy}
-                  onChange={(e) => setGap(e.target.value)}
-                />
-              </label>
-              <label>
-                {t('Print speed')}
-                <select
-                  value={speed}
-                  disabled={working || busy}
-                  onChange={(event) => setSpeed(event.target.value as PrintSpeed)}
-                >
-                  <option value="fast">{t('Fast')}</option>
-                  <option value="compatible">{t('Compatibility (slower)')}</option>
-                </select>
-              </label>
-              <small className="muted">
-                {t(
-                  'Fast mode sends less image data without reducing barcode quality. If labels are incomplete, restart the printer and try Compatibility mode.',
-                )}
-              </small>
-              <small className="muted">
-                {t(
-                  'Label size is 50 × 60 mm. The 2 mm gap is a starting value; measure the gap on your roll.',
-                )}
-              </small>
-              <div className="label-printer-buttons">
-                <Button disabled={working || busy} onClick={() => void connect()}>
-                  {t('Connect printer')}
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={!connected || working || busy}
-                  onClick={() => {
-                    device?.gatt?.disconnect();
-                    channel.current = null;
-                    setConnected(false);
-                  }}
-                >
-                  {t('Disconnect printer')}
-                </Button>
-                <Button
-                  variant="outline"
-                  disabled={!connected || working || busy}
-                  onClick={() => {
-                    setError('');
-                    void printLabels([
-                      {
-                        name: t('Test label'),
-                        price: '123.45',
-                        barcode: '0400000000046',
-                        details: ['Eliza · P1', '50 × 60 mm'],
-                      },
-                    ]).catch((err) => setError(err.message));
-                  }}
-                >
-                  {t('Print test label')}
-                </Button>
-              </div>
-              <div className="label-printer-preview" ref={mountPreview} />
-            </>
-          )}
-        </div>
+        {panel}
       </Dialog>
     </>
   );
-  return { mode, connected, working, printLabels, controls };
+  return { mode, connected, working, printLabels, controls, panel };
 }

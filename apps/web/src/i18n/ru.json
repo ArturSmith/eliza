@@ -2340,5 +2340,14 @@
   "Reset positions": "Сбросить расположение",
   "Use default layouts": "Использовать стандартные макеты",
   "Increase the barcode area: the barcode must fit without shrinking its bars.": "Увеличьте область штрихкода: он должен помещаться без уменьшения ширины штрихов.",
-  "Label preview": "Предпросмотр ценника"
+  "Label preview": "Предпросмотр ценника",
+  "Layout saved on this device.": "Макет сохранён на этом устройстве.",
+  "Layout": "Макет",
+  "Price Tags navigation": "Навигация по ценникам",
+  "Printer status": "Состояние принтера",
+  "Scan products": "Сканировать товары",
+  "Scanner": "Сканер",
+  "More": "Ещё",
+  "Connection help": "Помощь с подключением",
+  "Print tags": "Печатать ценники"
 }

@@ -446,7 +446,7 @@ export const pageTours: Record<OnboardingPage, Tour> = {
         body: 'Prepare shelf tags and individual markdown labels for the shop floor.',
       },
       {
-        selector: '.price-tags-tabs',
+        selector: '.price-tags-tabs, .price-tags-bottom-nav',
         title: 'Choose the label type',
         body: 'Switch between changed prices, all products and individual markdown labels.',
       },

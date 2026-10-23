@@ -13,7 +13,17 @@ import {
   type TagDesign,
 } from '@eliza/contracts';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Copy, LockKeyhole, Printer } from 'lucide-react';
+import {
+  Copy,
+  LockKeyhole,
+  Printer,
+  ScanLine,
+  Tags,
+  LayoutTemplate,
+  MoreHorizontal,
+  ShieldCheck,
+  UserRound,
+} from 'lucide-react';
 import { api, queryClient } from './api';
 import { t, useLanguage } from './i18n';
 import { Button } from './components/ui/button';
@@ -82,6 +92,13 @@ export function PriceTagsPage() {
     refetchOnWindowFocus: true,
     refetchInterval: 15_000,
   });
+  const [section, setSection] = useState<'products' | 'scan' | 'layout' | 'printer' | 'more'>(
+    'products',
+  );
+  const contentScroll = useRef<HTMLElement>(null);
+  useEffect(() => {
+    contentScroll.current?.scrollTo({ top: 0 });
+  }, [section]);
   const [tab, setTab] = useState<'changed' | 'all' | 'markdowns'>('changed');
   const [completingPrint, setCompletingPrint] = useState(false);
   const [confirmingPrint, setConfirmingPrint] = useState(false);
@@ -526,322 +543,474 @@ export function PriceTagsPage() {
     printer.working ||
     !!pendingBluetoothJob ||
     (printer.mode === 'p1' && !printer.connected);
+  const navigation = [
+    { id: 'products', label: t('Products'), icon: Tags },
+    { id: 'scan', label: t('Scanner'), icon: ScanLine },
+    { id: 'layout', label: t('Layout'), icon: LayoutTemplate },
+    { id: 'printer', label: t('Printer'), icon: Printer },
+    { id: 'more', label: t('More'), icon: MoreHorizontal },
+  ] as const;
+  const lockedNavigation = preparingPrint || completingPrint || printer.working || confirmingPrint;
+  const layoutEditor = (
+    <TagLayoutEditor
+      embedded
+      layout={tagLayout.layout}
+      storeName={value.store.name}
+      onSave={tagLayout.save}
+      preview={
+        (tab === 'markdowns'
+          ? markdownContents(allMarkdowns.filter((label) => chosenMarkdowns.includes(label.id)))
+          : normalContents(
+              chosen.map((product) => ({
+                product,
+                weightLabel:
+                  product.unit === 'kilogram' &&
+                  /^\d+(?:[.,]\d{1,3})?$/.test(packageWeights[product.id]?.trim() ?? '') &&
+                  Number((packageWeights[product.id] ?? '').replace(',', '.')) > 0
+                    ? {
+                        barcode: product.barcode,
+                        name: product.name,
+                        sku: product.sku,
+                        price: product.price,
+                        weight: packageWeights[product.id].replace(',', '.'),
+                      }
+                    : undefined,
+              })),
+            ))[0] ?? {
+          name: t('Sample product'),
+          price: formatLabelPrice('123.45'),
+          barcode: '0400000000046',
+          store: value.store.name,
+          details: [t('Label details')],
+        }
+      }
+      disabled={completingPrint || preparingPrint || printer.working || !!pendingBluetoothJob}
+    />
+  );
   return (
-    <div className="price-tags-shell" data-tour-scope="price-tags">
+    <div className="price-tags-shell price-tags-app" data-tour-scope="price-tags">
       <header className="price-tags-header">
-        <PageOnboarding
-          storeId={value.store.id}
-          employeeId={value.operator.id}
-          endpoint="/price-tags/onboarding"
-          scope='[data-tour-scope="price-tags"]'
-        />
-        <div>
+        <div className="price-tags-heading">
           <h1>{t('Price Tags')}</h1>
-          <p>
-            {value.store.name} · {value.device.name} · {value.operator.name}
+          <p title={value.store.name + ' · ' + value.operator.name}>
+            {value.store.name} · {value.operator.name}
           </p>
         </div>
-        <TagLayoutEditor
-          layout={tagLayout.layout}
-          storeName={value.store.name}
-          onSave={tagLayout.save}
-          preview={
-            (tab === 'markdowns'
-              ? markdownContents(allMarkdowns.filter((label) => chosenMarkdowns.includes(label.id)))
-              : normalContents(
-                  chosen.map((product) => ({
-                    product,
-                    weightLabel:
-                      product.unit === 'kilogram' &&
-                      /^\d+(?:[.,]\d{1,3})?$/.test(packageWeights[product.id]?.trim() ?? '') &&
-                      Number((packageWeights[product.id] ?? '').replace(',', '.')) > 0
-                        ? {
-                            barcode: product.barcode,
-                            name: product.name,
-                            sku: product.sku,
-                            price: product.price,
-                            weight: packageWeights[product.id].replace(',', '.'),
-                          }
-                        : undefined,
-                  })),
-                ))[0] ?? {
-              name: t('Sample product'),
-              price: formatLabelPrice('123.45'),
-              barcode: '0400000000046',
-              store: value.store.name,
-              details: [t('Label details')],
-            }
-          }
-          disabled={completingPrint || preparingPrint || printer.working || !!pendingBluetoothJob}
-        />
-        {printer.controls}
-        <Button
-          variant="outline"
-          onClick={() => lock.mutate()}
-          disabled={
-            lock.isPending ||
-            completingPrint ||
-            preparingPrint ||
-            printer.working ||
-            !!pendingBluetoothJob
+        <button
+          type="button"
+          className={'price-tags-printer-status' + (printer.connected ? ' connected' : '')}
+          disabled={lockedNavigation || !!pendingBluetoothJob}
+          onClick={() => setSection('printer')}
+          aria-label={t('Printer status')}
+          title={
+            printer.mode === 'p1'
+              ? printer.connected
+                ? t('Connected')
+                : t('Not connected')
+              : t('Browser printing')
           }
         >
-          {t('Lock')}
-        </Button>
-        <a href="/management-access?from=price-tags">{t('Management sign in')}</a>
+          <Printer size={20} aria-hidden="true" />
+          <span className="status-dot" aria-hidden="true" />
+        </button>
       </header>
-      <div className="price-tags-tabs" role="tablist" aria-label={t('Product lists')}>
-        <button role="tab" aria-selected={tab === 'changed'} onClick={() => setTab('changed')}>
-          {t('Price changed')} <span className="price-tags-counter">{changedCount}</span>
-        </button>
-        <button role="tab" aria-selected={tab === 'all'} onClick={() => setTab('all')}>
-          {t('All products')}
-        </button>
-        <button role="tab" aria-selected={tab === 'markdowns'} onClick={() => setTab('markdowns')}>
-          {t('Markdown labels')} <span className="price-tags-counter">{allMarkdowns.length}</span>
-        </button>
-      </div>
-      <div className="price-tags-controls">
-        <div className="price-tags-search-field">
-          <label htmlFor="price-tags-search">{t('Find products')}</label>
-          <div className="price-tags-search-row">
-            <input
-              id="price-tags-search"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setScanFeedback(null);
-                setCopyFeedback(null);
-              }}
-              placeholder={t('Name, SKU, PLU or barcode')}
-            />
-            <CameraBarcodeScanner
-              inline
-              continuous
-              disabled={products.isPending || !!products.error}
-              onOpen={prepareScanSound}
-              onScan={selectScannedProduct}
-            />
-          </div>
-        </div>
-      </div>
-      {scanFeedback && (
-        <p className={`price-tags-scan-feedback ${scanFeedback.type}`} role="status">
-          {scanFeedback.text}
-        </p>
-      )}
-      {copyFeedback && (
-        <p className={'price-tags-scan-feedback ' + copyFeedback.type} role="status">
-          {copyFeedback.text}
-        </p>
-      )}
-      {printer.mode === 'p1' && (
-        <p className="muted" role="status">
-          {t(
-            'P1 labels: 50 × 60 mm. Keep this screen open while sending. Check each markdown label before attaching it.',
-          )}
-        </p>
-      )}
-      {printer.working && (
-        <p role="status">
-          {t('Sending to printer. Keep this screen open until the transfer finishes.')}
-        </p>
-      )}
-      {bluetoothNotice && <p role="status">{bluetoothNotice}</p>}
-      {pendingBluetoothJob && (
-        <section className="label-printer-confirm" aria-label={t('Confirm label printing')}>
-          <p>
-            {t(
-              'Did all selected labels print correctly? Confirm only after checking the paper. Until then, prices remain in the Price changed list.',
-            )}
-          </p>
-          <Button disabled={confirmingPrint} onClick={() => void confirmBluetoothPrint()}>
-            {t('All labels printed correctly')}
-          </Button>
-          <Button
-            variant="outline"
-            disabled={confirmingPrint}
-            onClick={() => setPendingBluetoothJob(null)}
-          >
-            {t('Not all labels printed')}
-          </Button>
-        </section>
-      )}
-      <ErrorMessage error={bluetoothError} />
-      <ErrorMessage
-        error={
-          products.error ??
-          markdownLabels.error ??
-          print.error ??
-          printMarkdowns.error ??
-          printError
-        }
-      />
-      {tab === 'markdowns' && (
-        <p className="price-tags-list-description muted">
-          {t(
-            'Each label is for one physical item. Print it and attach it to the matching package.',
-          )}
-        </p>
-      )}
-      {tab !== 'markdowns' && !products.isPending && !products.error && !visible.length && (
-        <p className="price-tags-empty">
-          {t(
-            tab === 'changed' && !search
-              ? 'No price changes waiting for tags.'
-              : 'No products found.',
-          )}
-        </p>
-      )}
-      {tab === 'markdowns' &&
-        !markdownLabels.isPending &&
-        !markdownLabels.error &&
-        !visibleMarkdowns.length && (
-          <p className="price-tags-empty">
-            {t(search ? 'No markdown labels found.' : 'No markdown labels waiting to print.')}
-          </p>
-        )}
-      {tab === 'markdowns' ? (
-        <div className="price-tags-product-list" role="tabpanel">
-          {visibleMarkdowns.map((label) => (
-            <div key={label.id} className="price-tags-markdown-entry">
-              <label className="price-tags-product">
-                <input
-                  type="checkbox"
-                  checked={selectedMarkdownIds.includes(label.id)}
-                  onChange={(event) =>
-                    setSelectedMarkdownIds((before) =>
-                      event.target.checked
-                        ? [...before, label.id]
-                        : before.filter((id) => id !== label.id),
-                    )
-                  }
+      <main
+        className="price-tags-content"
+        ref={contentScroll}
+        id="price-tags-active-panel"
+        role="tabpanel"
+        aria-labelledby={'price-tags-nav-' + section}
+      >
+        {(section === 'products' || section === 'scan') && (
+          <>
+            {section === 'scan' && (
+              <section className="price-tags-scanner" aria-label={t('Scanner')}>
+                <h2>{t('Scan products')}</h2>
+                <CameraBarcodeScanner
+                  alwaysOn
+                  inline
+                  continuous
+                  disabled={products.isPending || !!products.error}
+                  onOpen={prepareScanSound}
+                  onScan={selectScannedProduct}
                 />
-                <span>
-                  <strong>{label.name}</strong>
-                  <small>{label.sku}</small>
-                  <small className="price-tags-markdown-code">{label.barcode}</small>
-                  {label.expiryDate && (
-                    <small>
-                      {t('Expires')} {label.expiryDate}
-                    </small>
-                  )}
-                </span>
-                <b>{price(label.price)}</b>
-              </label>
-              <div className="price-tags-markdown-actions">
-                <small>
-                  {t('Discount from')} <s>{price(label.regularPrice)}</s>
-                </small>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => void copyBarcode(label.barcode)}
+              </section>
+            )}
+            <div className="price-tags-product-tools">
+              <div className="price-tags-tabs" role="tablist" aria-label={t('Product lists')}>
+                <button
+                  role="tab"
+                  aria-selected={tab === 'changed'}
+                  onClick={() => setTab('changed')}
                 >
-                  <Copy size={15} /> {t('Copy barcode')}
-                </Button>
+                  {t('Price changed')} <span className="price-tags-counter">{changedCount}</span>
+                </button>
+                <button role="tab" aria-selected={tab === 'all'} onClick={() => setTab('all')}>
+                  {t('All products')}
+                </button>
+                <button
+                  role="tab"
+                  aria-selected={tab === 'markdowns'}
+                  onClick={() => setTab('markdowns')}
+                >
+                  {t('Markdown labels')}{' '}
+                  <span className="price-tags-counter">{allMarkdowns.length}</span>
+                </button>
+              </div>
+              <div className="price-tags-controls">
+                <div className="price-tags-search-field">
+                  <label htmlFor="price-tags-search">{t('Find products')}</label>
+                  <div className="price-tags-search-row">
+                    <input
+                      id="price-tags-search"
+                      onKeyDown={(event) => {
+                        if (section === 'scan' && event.key === 'Enter') {
+                          event.preventDefault();
+                          prepareScanSound();
+                          selectScannedProduct(search.trim());
+                        }
+                      }}
+                      value={search}
+                      onChange={(event) => {
+                        setSearch(event.target.value);
+                        setScanFeedback(null);
+                        setCopyFeedback(null);
+                      }}
+                      placeholder={t('Name, SKU, PLU or barcode')}
+                    />
+                    {section === 'products' && (
+                      <Button
+                        variant="outline"
+                        className="price-tags-scan-shortcut"
+                        aria-label={t('Scan with camera')}
+                        onClick={() => {
+                          prepareScanSound();
+                          setSection('scan');
+                        }}
+                      >
+                        <ScanLine size={22} />
+                      </Button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
-          ))}
-        </div>
-      ) : (
-        <div className="price-tags-product-list" role="tabpanel">
-          {visible.map((product) => (
-            <div key={product.id} className="price-tags-product-entry">
-              <label className="price-tags-product">
-                <input
-                  type="checkbox"
-                  checked={selected.includes(product.id)}
-                  onChange={(event) =>
-                    setSelected((before) =>
-                      event.target.checked
-                        ? [...before, product.id]
-                        : before.filter((id) => id !== product.id),
-                    )
-                  }
-                />
-                <span>
-                  <strong>{product.name}</strong>
-                  <small>
-                    {product.sku} ·{' '}
-                    {product.unit === 'kilogram'
-                      ? `PLU ${product.plu || '—'}`
-                      : product.barcode || product.plu}
-                  </small>
-                </span>
-                <b>
-                  {price(product.price)}
-                  {product.unit === 'kilogram' ? `/${t('kg')}` : ''}
-                </b>
-              </label>
-              {product.unit === 'kilogram' && selected.includes(product.id) && (
-                <div className="price-tags-weight-details">
-                  <input
-                    aria-label={`${t('Enter package weight')} — ${product.name}`}
-                    inputMode="decimal"
-                    placeholder={t('Enter package weight')}
-                    value={packageWeights[product.id] ?? ''}
-                    onChange={(event) =>
-                      setPackageWeights((before) => ({
-                        ...before,
-                        [product.id]: event.target.value,
-                      }))
-                    }
-                  />
-                  {!value.store.scaleBarcode.enabled ||
-                  value.store.scaleBarcode.mode !== 'weight' ? (
-                    <p className="price-tags-scan-feedback error">
-                      {t('Ask a manager to enable weight barcodes in Store settings.')}
-                    </p>
-                  ) : !/^\d+$/.test(product.plu) ? (
-                    <p className="price-tags-scan-feedback error">
-                      {t('Add a numeric PLU to this product before creating a weight barcode.')}
-                    </p>
-                  ) : null}
-                </div>
+            {scanFeedback && (
+              <p className={`price-tags-scan-feedback ${scanFeedback.type}`} role="status">
+                {scanFeedback.text}
+              </p>
+            )}
+            {copyFeedback && (
+              <p className={'price-tags-scan-feedback ' + copyFeedback.type} role="status">
+                {copyFeedback.text}
+              </p>
+            )}
+            {printer.working && (
+              <p role="status">
+                {t('Sending to printer. Keep this screen open until the transfer finishes.')}
+              </p>
+            )}
+            {bluetoothNotice && <p role="status">{bluetoothNotice}</p>}
+            {pendingBluetoothJob && (
+              <section className="label-printer-confirm" aria-label={t('Confirm label printing')}>
+                <p>
+                  {t(
+                    'Did all selected labels print correctly? Confirm only after checking the paper. Until then, prices remain in the Price changed list.',
+                  )}
+                </p>
+                <Button disabled={confirmingPrint} onClick={() => void confirmBluetoothPrint()}>
+                  {t('All labels printed correctly')}
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={confirmingPrint}
+                  onClick={() => setPendingBluetoothJob(null)}
+                >
+                  {t('Not all labels printed')}
+                </Button>
+              </section>
+            )}
+            <ErrorMessage error={bluetoothError} />
+            <ErrorMessage
+              error={
+                products.error ??
+                markdownLabels.error ??
+                print.error ??
+                printMarkdowns.error ??
+                printError
+              }
+            />
+            {tab === 'markdowns' && (
+              <p className="price-tags-list-description muted">
+                {t(
+                  'Each label is for one physical item. Print it and attach it to the matching package.',
+                )}
+              </p>
+            )}
+            {tab !== 'markdowns' && !products.isPending && !products.error && !visible.length && (
+              <p className="price-tags-empty">
+                {t(
+                  tab === 'changed' && !search
+                    ? 'No price changes waiting for tags.'
+                    : 'No products found.',
+                )}
+              </p>
+            )}
+            {tab === 'markdowns' &&
+              !markdownLabels.isPending &&
+              !markdownLabels.error &&
+              !visibleMarkdowns.length && (
+                <p className="price-tags-empty">
+                  {t(search ? 'No markdown labels found.' : 'No markdown labels waiting to print.')}
+                </p>
               )}
-            </div>
-          ))}
-        </div>
-      )}
-      <div className="price-tags-print-action">
-        {tab === 'markdowns' ? (
-          <Button
-            onClick={() => {
-              setPrintError(null);
-              printMarkdowns.mutate(chosenMarkdowns);
-            }}
-            disabled={
-              cannotPrint || !chosenMarkdowns.length || printMarkdowns.isPending || completingPrint
-            }
-          >
-            <Printer size={17} /> {t('Print selected labels')} ({chosenMarkdowns.length})
-          </Button>
-        ) : (
-          <Button
-            onClick={() => {
-              setPrintError(null);
-              print.mutate(chosen);
-            }}
-            disabled={
-              cannotPrint ||
-              !chosen.length ||
-              !weightReady ||
-              print.isPending ||
-              completingPrint ||
-              chosen.some(
-                (product) =>
-                  product.unit === 'kilogram' &&
-                  (!value.store.scaleBarcode.enabled ||
-                    value.store.scaleBarcode.mode !== 'weight' ||
-                    !/^\d+$/.test(product.plu)),
-              )
-            }
-          >
-            <Printer size={17} /> {t('Print selected tags')} ({chosen.length})
-          </Button>
+            {tab === 'markdowns' ? (
+              <div className="price-tags-product-list" role="tabpanel">
+                {visibleMarkdowns.map((label) => (
+                  <div key={label.id} className="price-tags-markdown-entry">
+                    <label className="price-tags-product">
+                      <input
+                        type="checkbox"
+                        checked={selectedMarkdownIds.includes(label.id)}
+                        onChange={(event) =>
+                          setSelectedMarkdownIds((before) =>
+                            event.target.checked
+                              ? [...before, label.id]
+                              : before.filter((id) => id !== label.id),
+                          )
+                        }
+                      />
+                      <span>
+                        <strong>{label.name}</strong>
+                        <small>{label.sku}</small>
+                        <small className="price-tags-markdown-code">{label.barcode}</small>
+                        {label.expiryDate && (
+                          <small>
+                            {t('Expires')} {label.expiryDate}
+                          </small>
+                        )}
+                      </span>
+                      <b>{price(label.price)}</b>
+                    </label>
+                    <div className="price-tags-markdown-actions">
+                      <small>
+                        {t('Discount from')} <s>{price(label.regularPrice)}</s>
+                      </small>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => void copyBarcode(label.barcode)}
+                      >
+                        <Copy size={15} /> {t('Copy barcode')}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="price-tags-product-list" role="tabpanel">
+                {visible.map((product) => (
+                  <div key={product.id} className="price-tags-product-entry">
+                    <label className="price-tags-product">
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(product.id)}
+                        onChange={(event) =>
+                          setSelected((before) =>
+                            event.target.checked
+                              ? [...before, product.id]
+                              : before.filter((id) => id !== product.id),
+                          )
+                        }
+                      />
+                      <span>
+                        <strong>{product.name}</strong>
+                        <small>
+                          {product.sku} ·{' '}
+                          {product.unit === 'kilogram'
+                            ? `PLU ${product.plu || '—'}`
+                            : product.barcode || product.plu}
+                        </small>
+                      </span>
+                      <b>
+                        {price(product.price)}
+                        {product.unit === 'kilogram' ? `/${t('kg')}` : ''}
+                      </b>
+                    </label>
+                    {product.unit === 'kilogram' && selected.includes(product.id) && (
+                      <div className="price-tags-weight-details">
+                        <input
+                          aria-label={`${t('Enter package weight')} — ${product.name}`}
+                          inputMode="decimal"
+                          placeholder={t('Enter package weight')}
+                          value={packageWeights[product.id] ?? ''}
+                          onChange={(event) =>
+                            setPackageWeights((before) => ({
+                              ...before,
+                              [product.id]: event.target.value,
+                            }))
+                          }
+                        />
+                        {!value.store.scaleBarcode.enabled ||
+                        value.store.scaleBarcode.mode !== 'weight' ? (
+                          <p className="price-tags-scan-feedback error">
+                            {t('Ask a manager to enable weight barcodes in Store settings.')}
+                          </p>
+                        ) : !/^\d+$/.test(product.plu) ? (
+                          <p className="price-tags-scan-feedback error">
+                            {t(
+                              'Add a numeric PLU to this product before creating a weight barcode.',
+                            )}
+                          </p>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
-      </div>
+        {section === 'layout' && layoutEditor}
+        {section === 'printer' && (
+          <section className="price-tags-settings-panel" aria-label={t('Label printer')}>
+            <h2>{t('Label printer')}</h2>
+            <p className="muted">
+              {t(
+                'Connect on this Android device. A manager’s laptop cannot connect the printer for this device.',
+              )}
+            </p>
+            {printer.panel}
+            {printer.mode === 'p1' && (
+              <p className="muted" role="status">
+                {t(
+                  'P1 labels: 50 × 60 mm. Keep this screen open while sending. Check each markdown label before attaching it.',
+                )}
+              </p>
+            )}
+          </section>
+        )}
+        <section className="price-tags-more" hidden={section !== 'more'} aria-label={t('More')}>
+          <h2>{t('More')}</h2>
+          <div className="price-tags-account">
+            <UserRound size={22} />
+            <div>
+              <strong>{value.operator.name}</strong>
+              <small>
+                {value.store.name} · {value.device.name}
+              </small>
+            </div>
+          </div>
+          <PageOnboarding
+            storeId={value.store.id}
+            employeeId={value.operator.id}
+            endpoint="/price-tags/onboarding"
+            scope='[data-tour-scope="price-tags"]'
+          />
+          <Button
+            variant="outline"
+            onClick={() => lock.mutate()}
+            disabled={lock.isPending || lockedNavigation || !!pendingBluetoothJob}
+          >
+            <LockKeyhole size={20} />
+            {t('Lock')}
+          </Button>
+          <a className="price-tags-management-link" href="/management-access?from=price-tags">
+            <ShieldCheck size={20} />
+            {t('Management sign in')}
+          </a>
+        </section>
+      </main>
+      <footer className="price-tags-bottom">
+        {(section === 'products' || section === 'scan') && (
+          <div className="price-tags-print-action">
+            {tab === 'markdowns' ? (
+              <Button
+                aria-label={`${t('Print selected labels')} (${chosenMarkdowns.length})`}
+                onClick={() => {
+                  setPrintError(null);
+                  printMarkdowns.mutate(chosenMarkdowns);
+                }}
+                disabled={
+                  cannotPrint ||
+                  !chosenMarkdowns.length ||
+                  printMarkdowns.isPending ||
+                  completingPrint
+                }
+              >
+                <Printer size={17} /> {t('Print labels')} ({chosenMarkdowns.length})
+              </Button>
+            ) : (
+              <Button
+                aria-label={`${t('Print selected tags')} (${chosen.length})`}
+                onClick={() => {
+                  setPrintError(null);
+                  print.mutate(chosen);
+                }}
+                disabled={
+                  cannotPrint ||
+                  !chosen.length ||
+                  !weightReady ||
+                  print.isPending ||
+                  completingPrint ||
+                  chosen.some(
+                    (product) =>
+                      product.unit === 'kilogram' &&
+                      (!value.store.scaleBarcode.enabled ||
+                        value.store.scaleBarcode.mode !== 'weight' ||
+                        !/^\d+$/.test(product.plu)),
+                  )
+                }
+              >
+                <Printer size={17} /> {t('Print tags')} ({chosen.length})
+              </Button>
+            )}
+          </div>
+        )}
+        <nav
+          className="price-tags-bottom-nav"
+          role="tablist"
+          aria-label={t('Price Tags navigation')}
+        >
+          {navigation.map((item, index) => (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              id={'price-tags-nav-' + item.id}
+              aria-label={item.label}
+              aria-selected={section === item.id}
+              aria-controls="price-tags-active-panel"
+              tabIndex={section === item.id ? 0 : -1}
+              disabled={lockedNavigation || (!!pendingBluetoothJob && item.id !== 'products')}
+              onClick={() => {
+                if (item.id === 'scan') prepareScanSound();
+                setSection(item.id);
+              }}
+              onKeyDown={(event) => {
+                if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+                event.preventDefault();
+                const next =
+                  event.key === 'Home'
+                    ? 0
+                    : event.key === 'End'
+                      ? navigation.length - 1
+                      : (index + (event.key === 'ArrowRight' ? 1 : -1) + navigation.length) %
+                        navigation.length;
+                const target = event.currentTarget.parentElement?.children[next] as
+                  HTMLButtonElement | undefined;
+                if (target && !target.disabled) {
+                  setSection(navigation[next].id);
+                  target.focus();
+                }
+              }}
+            >
+              <item.icon size={22} aria-hidden="true" />
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
+      </footer>
       <div className="price-tags-print-sheet" style={{ gap: `${design.gapMm}mm` }}>
         {customPrintImages ? (
           customPrintImages.map((src, index) => (

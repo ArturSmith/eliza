@@ -19,7 +19,7 @@ test('P1 printing uses local controls and only completes price changes after phy
     timezone: 'Europe/Oslo',
   });
   const product = await request('/products', {
-    name: 'Йогурт — натуральный',
+    name: 'Йогурт — натуральный с клубникой, без добавленного сахара, семейная упаковка 500 граммов',
     sku: 'YOG',
     category: 'Dairy',
     unit: 'piece',
@@ -106,9 +106,11 @@ test('P1 printing uses local controls and only completes price changes after phy
   page.on('request', (request) => {
     if (/\/price-tags\/prints\/[^/]+\/complete$/.test(request.url())) complete++;
   });
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/price-tags');
-  await page.getByRole('button', { name: 'Edit label layout' }).click();
-  const editor = page.getByRole('dialog', { name: 'Label layout', exact: true });
+  const nav = page.getByRole('tablist', { name: 'Price Tags navigation' });
+  await nav.getByRole('tab', { name: 'Layout', exact: true }).click();
+  const editor = page.getByRole('region', { name: 'Label layout', exact: true });
   await expect(editor.locator('.tag-layout-artwork canvas')).toHaveJSProperty('width', 400);
   await expect(editor.getByRole('alert')).toHaveCount(0);
   const nameObject = editor.getByRole('button', { name: 'Move Product name', exact: true });
@@ -139,15 +141,15 @@ test('P1 printing uses local controls and only completes price changes after phy
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: '/private/tmp/eliza-tag-layout-mobile.png' });
   await editor.getByRole('button', { name: 'Save layout', exact: true }).click();
-  await expect(editor).not.toBeVisible();
+  await expect(editor.getByRole('status')).toContainText('Layout saved on this device.');
+  await nav.getByRole('tab', { name: 'Products', exact: true }).click();
   await page.reload();
-  await page.getByRole('button', { name: 'Edit label layout' }).click();
+  await nav.getByRole('tab', { name: 'Layout', exact: true }).click();
   await expect(editor.getByLabel('Label orientation')).toHaveValue('landscape');
   await editor.getByLabel('Selected object').selectOption('price');
   await expect(editor.getByLabel('Horizontal position (mm)')).toHaveValue('3');
-  await editor.getByRole('button', { name: 'Close dialog' }).click();
-  await page.getByRole('button', { name: /^Printer:/ }).click();
-  const dialog = page.getByRole('dialog', { name: 'Label printer' });
+  await nav.getByRole('tab', { name: 'Printer', exact: true }).click();
+  const dialog = page.getByRole('region', { name: 'Label printer' });
   await dialog.getByLabel('Print using').selectOption('p1');
   await expect(dialog.locator('canvas')).toHaveJSProperty('width', 400);
   await expect(dialog.locator('canvas')).toHaveJSProperty('height', 480);
@@ -192,7 +194,7 @@ test('P1 printing uses local controls and only completes price changes after phy
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: '/private/tmp/eliza-p1-printer-mobile.png' });
-  await dialog.getByRole('button', { name: 'Close dialog' }).click();
+  await nav.getByRole('tab', { name: 'Products', exact: true }).click();
   const row = page.locator('.price-tags-product-entry', { hasText: 'Йогурт' });
   await row.locator('input[type="checkbox"]').check();
   await page.getByRole('button', { name: /Print selected tags/ }).click();
@@ -217,11 +219,14 @@ test('P1 printing uses local controls and only completes price changes after phy
   expect(complete).toBe(1);
   await expect(confirmation).not.toBeVisible();
   await page.reload();
-  await expect(page.getByRole('button', { name: /^Printer: Not connected/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Printer status' })).toHaveAttribute(
+    'title',
+    'Not connected',
+  );
   await expect(page.getByRole('button', { name: /Print selected tags/ })).toBeDisabled();
-  await page.getByRole('button', { name: /^Printer:/ }).click();
+  await nav.getByRole('tab', { name: 'Printer', exact: true }).click();
   await dialog.getByLabel('Print using').selectOption('browser');
-  await dialog.getByRole('button', { name: 'Close dialog' }).click();
+  await nav.getByRole('tab', { name: 'Products', exact: true }).click();
   await page.getByRole('tab', { name: 'All products', exact: true }).click();
   await row.locator('input[type="checkbox"]').check();
   await page.getByRole('button', { name: /Print selected tags/ }).click();
@@ -251,4 +256,58 @@ test('P1 printing uses local controls and only completes price changes after phy
     return true;
   });
   expect(pixelExact).toBe(true);
+  for (const viewport of [
+    { width: 320, height: 568 },
+    { width: 360, height: 640 },
+    { width: 390, height: 844 },
+    { width: 430, height: 932 },
+    { width: 568, height: 320 },
+  ]) {
+    await page.setViewportSize(viewport);
+    for (const name of ['Products', 'Layout', 'Printer', 'More']) {
+      await nav.getByRole('tab', { name, exact: true }).click();
+      await expect(nav.getByRole('tab', { name, exact: true })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      );
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        viewport.width,
+      );
+      const bottom = (await nav.boundingBox())!;
+      expect(bottom.y + bottom.height).toBeLessThanOrEqual(viewport.height + 1);
+      expect(bottom.y).toBeGreaterThan(0);
+      expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThanOrEqual(
+        viewport.height + 1,
+      );
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await nav.getByRole('tab', { name: 'Scanner', exact: true }).click();
+  await expect(page.getByLabel('Camera preview')).toBeVisible();
+  await page.locator('#price-tags-search').fill('0400000000046');
+  await page.locator('#price-tags-search').press('Enter');
+  await expect(row.locator('input[type="checkbox"]')).toBeChecked();
+  await nav.getByRole('tab', { name: 'Products', exact: true }).click();
+  await expect(page.getByLabel('Camera preview')).toHaveCount(0);
+  await expect(row.locator('input[type="checkbox"]')).toBeChecked();
+  await page.screenshot({ path: '/private/tmp/eliza-price-tags-mobile.png' });
+  await nav.getByRole('tab', { name: 'Printer', exact: true }).click();
+  await page.screenshot({ path: '/private/tmp/eliza-price-tags-printer-mobile.png' });
+  await nav.getByRole('tab', { name: 'Layout', exact: true }).click();
+  await page.screenshot({ path: '/private/tmp/eliza-price-tags-layout-mobile.png' });
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.evaluate(() => localStorage.setItem('eliza.language', 'ru'));
+  await page.reload();
+  const russianNav = page.getByRole('tablist', { name: 'Навигация по ценникам' });
+  for (const name of ['Товары', 'Сканер', 'Макет', 'Принтер', 'Ещё']) {
+    await russianNav.getByRole('tab', { name, exact: true }).click();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      320,
+    );
+    const bottom = (await russianNav.boundingBox())!;
+    expect(bottom.y + bottom.height).toBeLessThanOrEqual(569);
+  }
+  await russianNav.getByRole('tab', { name: 'Товары', exact: true }).click();
+  await page.getByRole('tab', { name: 'Все товары', exact: true }).click();
+  await page.screenshot({ path: '/private/tmp/eliza-price-tags-small-russian.png' });
 });
