@@ -13,11 +13,12 @@ Employee controls live in Price Tags → Printer, not management settings. The c
 ## Behavior
 
 - Browser printing remains the default. Choosing P1 is explicit; disconnection never silently falls back to browser printing.
-- Printer mode and label gap are local browser preferences. They do not change the store’s tag design or the manager’s laptop. Reconnect using the chooser after reloading.
+- Printer mode, label gap and speed are local browser preferences. They do not change the store’s tag design or the manager’s laptop. Reconnect using the chooser after reloading.
 - Regular, weight and markdown data come from the existing authenticated server snapshots. P1 uses a dedicated fixed-size template, not the A4 browser sheet. Cyrillic/currency render to a monochrome bitmap; the printer does not need the same fonts/code page.
 - For weighted products the existing scale barcode and package-price calculation are reused. Markdown labels use each unit’s existing unique barcode, never mint new ones.
 - All labels are rendered/validated before transmitting. Barcodes keep integer dot widths and quiet zones; codes too wide for the paper fail rather than being squeezed.
-- Conservative 20-byte BLE writes with 30 ms pacing can take about 40 seconds per label. Keep the screen open. No silent retries of partially sent jobs.
+- Fast mode is the default: exact occupied raster bands are sent at their original coordinates instead of transmitting blank paper. Dot sizes, barcode quiet zones and label dimensions remain unchanged. Serial BLE writes retain 20-byte payloads, with 4 ms pacing for writes without response; acknowledged writes do not add artificial delays. Actual speed depends on the Android device, connection and firmware.
+- Compatibility mode retains the original full 400 × 480 raster and 20-byte / 30 ms transport that was confirmed working on the P1. If Fast mode produces incomplete labels, restart the printer, inspect already printed labels and run a single test in Compatibility mode. No silent retries of partially sent jobs. Keep the screen open while sending.
 - Regular price-change jobs require explicit physical-print confirmation before `/prints/:id/complete` updates printed prices. Partial failures leave selections and price-change state untouched. Never attach duplicate markdown barcodes to separate items.
 - No hardware acknowledgement / paper-out detection is claimed. Receipt printing and the store-wide price-tag designer are unchanged. This is not yet an ESC/POS or universal printer adapter.
 
@@ -26,4 +27,4 @@ Browser requirements: https://developer.chrome.com/docs/capabilities/bluetooth
 
 ## Automated verification
 
-`tests/p1-printing.unit.test.ts` covers raster size, polarity, transparent pixels, gap validation, serial chunking and errors. `tests/e2e/p1-printer.spec.ts` exercises the actual UI/API using a simulated BLE peripheral, checks physical-confirmation ordering, failure behavior and reconnect requirements. Existing `price-tags-weight.spec.ts` verifies browser printing remains intact. These tests do not replace a real P1 print and barcode scan.
+`tests/p1-printing.unit.test.ts` covers raster size, polarity, transparent pixels, gap validation, exact reconstruction from compact bands, both pacing profiles, serial chunking and errors. `tests/e2e/p1-printer.spec.ts` exercises the actual UI/API using a simulated BLE peripheral, checks physical-confirmation ordering, failure behavior and reconnect requirements. Existing `price-tags-weight.spec.ts` verifies browser printing remains intact. These tests do not replace a real P1 print and barcode scan.

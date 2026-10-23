@@ -53,13 +53,20 @@ test('P1 printing uses local controls and only completes price changes after phy
     const originalTimeout = window.setTimeout.bind(window);
     window.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: unknown[]) =>
       originalTimeout(handler, timeout === 30 ? 0 : timeout, ...args)) as typeof window.setTimeout;
-    const state = { bytes: [] as number[], fail: false, browserPrinted: false, completionCalls: 0 };
+    const state = {
+      bytes: [] as number[],
+      fail: false,
+      browserPrinted: false,
+      completionCalls: 0,
+      discovery: 'success',
+      options: null as unknown,
+    };
     (window as any).__printer = state;
     window.print = () => {
       state.browserPrinted = true;
     };
     const device = Object.assign(new EventTarget(), {
-      name: 'P1_TEST',
+      name: 'P1 BBS 7E',
       gatt: {
         connected: false,
         async connect() {
@@ -83,7 +90,15 @@ test('P1 printing uses local controls and only completes price changes after phy
       },
     });
     Object.defineProperty(navigator, 'bluetooth', {
-      value: { requestDevice: async () => device },
+      value: {
+        requestDevice: async (options: unknown) => {
+          state.options = options;
+          if (state.discovery === 'cancel')
+            throw new DOMException('No device selected', 'NotFoundError');
+          if (state.discovery === 'blocked') throw new DOMException('Blocked', 'SecurityError');
+          return device;
+        },
+      },
       configurable: true,
     });
   });
@@ -98,8 +113,44 @@ test('P1 printing uses local controls and only completes price changes after phy
   await expect(dialog.locator('canvas')).toHaveJSProperty('width', 400);
   await expect(dialog.locator('canvas')).toHaveJSProperty('height', 480);
   await dialog.getByLabel('Gap between labels (mm)').fill('3');
-  await dialog.getByRole('button', { name: 'Connect printer', exact: true }).click();
-  await expect(dialog.getByText('Connected: P1_TEST')).toBeVisible();
+  await expect(dialog.getByLabel('Print speed')).toHaveValue('fast');
+  await dialog.getByLabel('Print speed').selectOption('compatible');
+  expect(await page.evaluate(() => localStorage.getItem('eliza:label-printer-speed'))).toBe(
+    'compatible',
+  );
+  await dialog.getByLabel('Print speed').selectOption('fast');
+  const connect = dialog.getByRole('button', { name: 'Connect printer', exact: true });
+  await page.evaluate(() => {
+    (window as any).__bluetooth = (navigator as any).bluetooth;
+    Object.defineProperty(navigator, 'bluetooth', { value: undefined, configurable: true });
+  });
+  await connect.click();
+  await expect(dialog.getByRole('alert')).toContainText(
+    'Bluetooth printing is unavailable in this browser',
+  );
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'bluetooth', {
+      value: (window as any).__bluetooth,
+      configurable: true,
+    });
+    (window as any).__printer.discovery = 'cancel';
+  });
+  await connect.click();
+  await expect(dialog.getByText(/No printer selected/)).toBeVisible();
+  await page.evaluate(() => {
+    (window as any).__printer.discovery = 'blocked';
+  });
+  await connect.click();
+  await expect(dialog.getByRole('alert')).toContainText('Bluetooth access was blocked');
+  await page.evaluate(() => {
+    (window as any).__printer.discovery = 'success';
+  });
+  await connect.click();
+  await expect(dialog.getByText('Connected: P1 BBS 7E')).toBeVisible();
+  expect(await page.evaluate(() => (window as any).__printer.options)).toEqual({
+    acceptAllDevices: true,
+    optionalServices: ['000018f0-0000-1000-8000-00805f9b34fb'],
+  });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({ path: '/private/tmp/eliza-p1-printer-mobile.png' });
   await dialog.getByRole('button', { name: 'Close dialog' }).click();
@@ -112,6 +163,7 @@ test('P1 printing uses local controls and only completes price changes after phy
   expect(await page.evaluate(() => (window as any).__printer.browserPrinted)).toBe(false);
   const sent = await page.evaluate(() => (window as any).__printer.bytes as number[]);
   expect(new TextDecoder().decode(Uint8Array.from(sent.slice(0, 38)))).toContain('GAP 3 mm');
+  expect(sent.length).toBeLessThan(12000);
   await page.getByRole('button', { name: 'All labels printed correctly' }).click();
   await expect(confirmation).not.toBeVisible();
   await expect(row).toHaveCount(0);

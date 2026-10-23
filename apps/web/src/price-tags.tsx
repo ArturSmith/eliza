@@ -568,7 +568,7 @@ export function PriceTagsPage() {
       )}
       {printer.working && (
         <p role="status">
-          {t('Sending to printer. Keep this screen open; a label may take about 40 seconds.')}
+          {t('Sending to printer. Keep this screen open until the transfer finishes.')}
         </p>
       )}
       {bluetoothNotice && <p role="status">{bluetoothNotice}</p>}

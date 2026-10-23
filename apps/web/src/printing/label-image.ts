@@ -66,7 +66,7 @@ export function renderLabel(label: LabelContent): HTMLCanvasElement {
   }
   return canvas;
 }
-export function labelBytes(canvas: HTMLCanvasElement, gap: number) {
+export function labelBytes(canvas: HTMLCanvasElement, gap: number, compact = true) {
   const pixels = canvas.getContext('2d')!.getImageData(0, 0, 400, 480);
-  return encodeLabel(pixels.data, 400, 480, gap);
+  return encodeLabel(pixels.data, 400, 480, gap, compact);
 }

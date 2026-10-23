@@ -8,6 +8,7 @@ import {
   p1Service,
   printerBluetooth,
   sendLabel,
+  type PrintSpeed,
   type PrinterCharacteristic,
   type PrinterDevice,
 } from './p1';
@@ -21,6 +22,22 @@ export function useLabelPrinter(busy: boolean) {
       return 'browser';
     }
   });
+  const [speed, setSpeed] = useState<PrintSpeed>(() => {
+    try {
+      return localStorage.getItem('eliza:label-printer-speed') === 'compatible'
+        ? 'compatible'
+        : 'fast';
+    } catch {
+      return 'fast';
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('eliza:label-printer-speed', speed);
+    } catch {
+      /* Optional preference. */
+    }
+  }, [speed]);
   const [gap, setGap] = useState(() => {
     try {
       const saved = localStorage.getItem('eliza:label-printer-gap');
@@ -39,6 +56,8 @@ export function useLabelPrinter(busy: boolean) {
   const [device, setDevice] = useState<PrinterDevice | null>(null);
   const [connected, setConnected] = useState(false);
   const [working, setWorking] = useState(false);
+  const [connectionStage, setConnectionStage] = useState<'choosing' | 'connecting' | null>(null);
+  const feedback = useRef<HTMLDivElement>(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const channel = useRef<PrinterCharacteristic | null>(null);
@@ -75,6 +94,9 @@ export function useLabelPrinter(busy: boolean) {
       /* Selection works without storage. */
     }
   }
+  useEffect(() => {
+    if (error || message || connectionStage) feedback.current?.scrollIntoView({ block: 'nearest' });
+  }, [error, message, connectionStage]);
   async function connect() {
     if (working || busy) return;
     setWorking(true);
@@ -83,17 +105,27 @@ export function useLabelPrinter(busy: boolean) {
     let selected: PrinterDevice | undefined;
     try {
       const bluetooth = printerBluetooth();
-      if (!window.isSecureContext || !bluetooth)
-        throw new Error(t('Use Chrome on Android over HTTPS to connect a Bluetooth printer.'));
+      if (!window.isSecureContext)
+        throw new Error(
+          t('Bluetooth requires a secure HTTPS page. Open the HTTPS address of Eliza in Chrome.'),
+        );
+      if (!bluetooth)
+        throw new Error(
+          t(
+            'Bluetooth printing is unavailable in this browser. Open Eliza directly in Chrome on Android, not inside another app.',
+          ),
+        );
+      setConnectionStage('choosing');
       channel.current = null;
       setConnected(false);
       device?.gatt?.disconnect();
       selected = await bluetooth.requestDevice({
-        filters: [{ namePrefix: 'P1' }, { services: [p1Service] }],
+        acceptAllDevices: true,
         optionalServices: [p1Service],
       });
       if (!selected.gatt)
         throw new Error(t('This printer does not support the P1 Bluetooth connection.'));
+      setConnectionStage('connecting');
       const server = await selected.gatt.connect();
       const service = await server.getPrimaryService(p1Service);
       const characteristic = await service.getCharacteristic(p1Characteristic);
@@ -105,9 +137,32 @@ export function useLabelPrinter(busy: boolean) {
       selectMode('p1');
     } catch (err) {
       selected?.gatt?.disconnect();
-      if (selected || !(err instanceof DOMException && err.name === 'NotFoundError'))
+      if (!selected && err instanceof DOMException && err.name === 'NotFoundError') {
+        setMessage(
+          t(
+            'No printer selected. Close Toprint, restart the printer and check Chrome’s Nearby devices permission, then try again.',
+          ),
+        );
+      } else if (
+        err instanceof DOMException &&
+        ['SecurityError', 'NotAllowedError'].includes(err.name)
+      ) {
+        setError(
+          t(
+            'Bluetooth access was blocked. Open Eliza directly in Chrome and allow Nearby devices in Android settings for Chrome.',
+          ),
+        );
+      } else if (selected && err instanceof DOMException && err.name === 'NotFoundError') {
+        setError(
+          t(
+            'The printer was found, but its P1 / TSPL service is unavailable. This firmware may need a different printer profile.',
+          ),
+        );
+      } else {
         setError(err instanceof Error ? err.message : t('Could not connect to the printer.'));
+      }
     } finally {
+      setConnectionStage(null);
       setWorking(false);
     }
   }
@@ -117,7 +172,7 @@ export function useLabelPrinter(busy: boolean) {
       throw new Error(t('Connect the P1 printer before printing.'));
     const gapMm = Number(gap.replace(',', '.'));
     // Render and validate the entire job before transmitting anything.
-    const jobs = labels.map((label) => labelBytes(renderLabel(label), gapMm));
+    const jobs = labels.map((label) => labelBytes(renderLabel(label), gapMm, speed === 'fast'));
     sending.current = true;
     setWorking(true);
     setMessage('');
@@ -129,7 +184,7 @@ export function useLabelPrinter(busy: boolean) {
               'Printer disconnected. Check the labels before retrying; do not attach duplicate markdown barcodes.',
             ),
           );
-        await sendLabel(channel.current, job);
+        await sendLabel(channel.current, job, undefined, speed);
       }
       setMessage(
         t('Sent to printer. Check the physical labels; Bluetooth does not confirm printing.'),
@@ -184,6 +239,28 @@ export function useLabelPrinter(busy: boolean) {
                   'Experimental P1 / TSPL support. Close Toprint before connecting. Confirm compatibility with one test label first.',
                 )}
               </p>
+              <div ref={feedback} className="label-printer-feedback">
+                {connectionStage && (
+                  <p role="status">
+                    {connectionStage === 'choosing'
+                      ? t(
+                          'Choose your P1 in Chrome’s Bluetooth device window. Pairing in Android settings alone does not connect Eliza.',
+                        )
+                      : t('Connecting to the selected printer…')}
+                  </p>
+                )}
+                {working && !connectionStage && (
+                  <p role="status">
+                    {t('Sending to printer. Keep this screen open until the transfer finishes.')}
+                  </p>
+                )}
+                {message && <p role="status">{message}</p>}
+                {error && (
+                  <p role="alert" className="error">
+                    {error}
+                  </p>
+                )}
+              </div>
               <p role="status">
                 {connected ? `${t('Connected')}: ${device?.name ?? 'P1'}` : t('Not connected')}
               </p>
@@ -199,6 +276,22 @@ export function useLabelPrinter(busy: boolean) {
                   onChange={(e) => setGap(e.target.value)}
                 />
               </label>
+              <label>
+                {t('Print speed')}
+                <select
+                  value={speed}
+                  disabled={working || busy}
+                  onChange={(event) => setSpeed(event.target.value as PrintSpeed)}
+                >
+                  <option value="fast">{t('Fast')}</option>
+                  <option value="compatible">{t('Compatibility (slower)')}</option>
+                </select>
+              </label>
+              <small className="muted">
+                {t(
+                  'Fast mode sends less image data without reducing barcode quality. If labels are incomplete, restart the printer and try Compatibility mode.',
+                )}
+              </small>
               <small className="muted">
                 {t(
                   'Label size is 50 × 60 mm. The 2 mm gap is a starting value; measure the gap on your roll.',
@@ -239,17 +332,6 @@ export function useLabelPrinter(busy: boolean) {
               </div>
               <div className="label-printer-preview" ref={preview} />
             </>
-          )}
-          {working && (
-            <p role="status">
-              {t('Sending to printer. Keep this screen open; a label may take about 40 seconds.')}
-            </p>
-          )}
-          {message && <p role="status">{message}</p>}
-          {error && (
-            <p role="alert" className="error">
-              {error}
-            </p>
           )}
         </div>
       </Dialog>

@@ -2299,5 +2299,17 @@
   "Confirm label printing": "Подтверждение печати этикеток",
   "Did all selected labels print correctly? Confirm only after checking the paper. Until then, prices remain in the Price changed list.": "Все выбранные этикетки напечатались правильно? Подтверждайте только после проверки бумаги. До этого товары остаются в списке «Цена изменена».",
   "All labels printed correctly": "Все этикетки напечатались правильно",
-  "Not all labels printed": "Напечатались не все этикетки"
+  "Not all labels printed": "Напечатались не все этикетки",
+  "Bluetooth requires a secure HTTPS page. Open the HTTPS address of Eliza in Chrome.": "Для Bluetooth нужна защищённая страница HTTPS. Откройте HTTPS-адрес Eliza в Chrome.",
+  "Bluetooth printing is unavailable in this browser. Open Eliza directly in Chrome on Android, not inside another app.": "Этот браузер не предоставляет доступ к Bluetooth. Откройте Eliza напрямую в Chrome на Android, а не внутри другого приложения.",
+  "No printer selected. Close Toprint, restart the printer and check Chrome’s Nearby devices permission, then try again.": "Принтер не выбран. Закройте Toprint, перезапустите принтер и проверьте разрешение «Устройства поблизости» для Chrome. Затем повторите подключение.",
+  "Bluetooth access was blocked. Open Eliza directly in Chrome and allow Nearby devices in Android settings for Chrome.": "Доступ к Bluetooth заблокирован. Откройте Eliza напрямую в Chrome и разрешите ему доступ к «Устройствам поблизости» в настройках Android.",
+  "The printer was found, but its P1 / TSPL service is unavailable. This firmware may need a different printer profile.": "Принтер найден, но служба P1 / TSPL недоступна. Для этой прошивки может потребоваться другой профиль принтера.",
+  "Choose your P1 in Chrome’s Bluetooth device window. Pairing in Android settings alone does not connect Eliza.": "Выберите P1 в окне Bluetooth-устройств Chrome. Одного сопряжения в настройках Android недостаточно для подключения Eliza.",
+  "Connecting to the selected printer…": "Подключение к выбранному принтеру…",
+  "Print speed": "Скорость печати",
+  "Fast": "Быстрая",
+  "Compatibility (slower)": "Совместимость (медленнее)",
+  "Fast mode sends less image data without reducing barcode quality. If labels are incomplete, restart the printer and try Compatibility mode.": "Быстрый режим передаёт меньше данных без снижения качества штрихкода. Если этикетки печатаются не полностью, перезапустите принтер и выберите режим совместимости.",
+  "Sending to printer. Keep this screen open until the transfer finishes.": "Отправка на принтер. Не закрывайте экран до завершения передачи."
 }
