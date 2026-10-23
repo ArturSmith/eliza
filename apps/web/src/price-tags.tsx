@@ -1,3 +1,5 @@
+import { useLabelPrinter } from './printing/use-label-printer';
+import type { LabelContent } from './printing/label-image';
 import { PageOnboarding } from './onboarding/PageOnboarding';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
@@ -79,6 +81,40 @@ export function PriceTagsPage() {
   });
   const [tab, setTab] = useState<'changed' | 'all' | 'markdowns'>('changed');
   const [completingPrint, setCompletingPrint] = useState(false);
+  const [confirmingPrint, setConfirmingPrint] = useState(false);
+  const [pendingBluetoothJob, setPendingBluetoothJob] = useState<{
+    id: string;
+    items: PrintItem[];
+  } | null>(null);
+  const [preparingPrint, setPreparingPrint] = useState(false);
+  const printer = useLabelPrinter(completingPrint || preparingPrint || !!pendingBluetoothJob);
+  const [bluetoothError, setBluetoothError] = useState<unknown>(null);
+  const [bluetoothNotice, setBluetoothNotice] = useState('');
+  async function sendLabels(labels: LabelContent[]) {
+    setBluetoothNotice('');
+    await printer.printLabels(labels);
+    setBluetoothNotice(
+      t('Sent to printer. Check the physical labels; Bluetooth does not confirm printing.'),
+    );
+  }
+  async function confirmBluetoothPrint() {
+    if (!pendingBluetoothJob || confirmingPrint) return;
+    setConfirmingPrint(true);
+    setBluetoothError(null);
+    try {
+      await api('/price-tags/prints/' + pendingBluetoothJob.id + '/complete', {});
+      setSelected((before) =>
+        before.filter((id) => !pendingBluetoothJob.items.some((item) => item.product.id === id)),
+      );
+      setPendingBluetoothJob(null);
+      await queryClient.invalidateQueries({ queryKey: ['price-tags-products'] });
+    } catch (error) {
+      setBluetoothError(error);
+    } finally {
+      setConfirmingPrint(false);
+    }
+  }
+
   const [selected, setSelected] = useState<string[]>([]);
   const [packageWeights, setPackageWeights] = useState<Record<string, string>>({});
   const [printItems, setPrintItems] = useState<PrintItem[]>([]);
@@ -174,6 +210,7 @@ export function PriceTagsPage() {
   });
   const print = useMutation({
     mutationFn: async (items: Product[]) => {
+      setPreparingPrint(true);
       // Validate package weights before creating the print snapshot.
       const weights = new Map(
         items
@@ -212,6 +249,7 @@ export function PriceTagsPage() {
         }),
       };
     },
+    onSettled: () => setPreparingPrint(false),
     onSuccess: (job) => {
       setCompletingPrint(true);
       setMarkdownPrintItems([]);
@@ -219,6 +257,40 @@ export function PriceTagsPage() {
       requestAnimationFrame(() =>
         requestAnimationFrame(async () => {
           try {
+            if (printer.mode === 'p1') {
+              await sendLabels(
+                job.items.map(({ product, weightLabel }) => ({
+                  name: product.name,
+                  store: context.data!.store.tagDesign.showStoreName
+                    ? context.data!.store.name
+                    : undefined,
+                  price: formatLabelPrice(weightLabel ? packagePrice(weightLabel) : product.price),
+                  barcode: weightLabel?.barcode || product.barcode || undefined,
+                  details: [
+                    ...(product.regularPrice
+                      ? [
+                          t('Discount from') +
+                            ' ' +
+                            formatLabelPrice(
+                              weightLabel
+                                ? packagePrice({ ...weightLabel, price: product.regularPrice })
+                                : product.regularPrice,
+                            ),
+                        ]
+                      : []),
+                    ...(weightLabel
+                      ? [
+                          t('Net weight (kg)') + ': ' + weightLabel.weight,
+                          formatLabelPrice(product.price) + '/' + t('kg'),
+                        ]
+                      : [t(product.unit)]),
+                    ...(context.data!.store.tagDesign.showSku ? [product.sku] : []),
+                  ],
+                })),
+              );
+              setPendingBluetoothJob(job);
+              return;
+            }
             window.print();
             await api('/price-tags/prints/' + job.id + '/complete', {});
             setSelected((before) =>
@@ -235,17 +307,42 @@ export function PriceTagsPage() {
     },
   });
   const printMarkdowns = useMutation({
-    mutationFn: (unitIds: string[]) =>
-      api<{ labels: MarkdownLabel[] }>('/price-tags/markdown-prints', { unitIds }),
+    mutationFn: async (unitIds: string[]) => {
+      setPreparingPrint(true);
+      return api<{ labels: MarkdownLabel[] }>('/price-tags/markdown-prints', { unitIds });
+    },
+    onSettled: () => setPreparingPrint(false),
     onSuccess: ({ labels }) => {
       setCompletingPrint(true);
       setPrintItems([]);
       setMarkdownPrintItems(labels);
       requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          window.print();
-          setCompletingPrint(false);
-          void queryClient.invalidateQueries({ queryKey: ['price-tags-markdown-labels'] });
+        requestAnimationFrame(async () => {
+          try {
+            if (printer.mode === 'p1')
+              await sendLabels(
+                labels.map((label) => ({
+                  name: label.name,
+                  store: context.data!.store.tagDesign.showStoreName
+                    ? context.data!.store.name
+                    : undefined,
+                  price: formatLabelPrice(label.price),
+                  barcode: label.barcode,
+                  details: [
+                    t('Discount from') + ' ' + formatLabelPrice(label.regularPrice),
+                    ...(label.expiryDate
+                      ? [t('Expires') + ' ' + label.expiryDate.slice(0, 10)]
+                      : []),
+                  ],
+                })),
+              );
+            else window.print();
+            void queryClient.invalidateQueries({ queryKey: ['price-tags-markdown-labels'] });
+          } catch (error) {
+            setPrintError(error);
+          } finally {
+            setCompletingPrint(false);
+          }
         }),
       );
     },
@@ -377,6 +474,15 @@ export function PriceTagsPage() {
   );
   const packagePrice = (label: WeightLabel) =>
     fromScaled((toScaled(label.price, 2) * toScaled(label.weight, 3) + 500n) / 1000n, 2);
+  const formatLabelPrice = (amount: string) =>
+    new Intl.NumberFormat(undefined, { style: 'currency', currency: value.store.currency }).format(
+      Number(amount),
+    );
+  const cannotPrint =
+    preparingPrint ||
+    printer.working ||
+    !!pendingBluetoothJob ||
+    (printer.mode === 'p1' && !printer.connected);
   return (
     <div className="price-tags-shell" data-tour-scope="price-tags">
       <header className="price-tags-header">
@@ -392,7 +498,18 @@ export function PriceTagsPage() {
             {value.store.name} · {value.device.name} · {value.operator.name}
           </p>
         </div>
-        <Button variant="outline" onClick={() => lock.mutate()} disabled={lock.isPending}>
+        {printer.controls}
+        <Button
+          variant="outline"
+          onClick={() => lock.mutate()}
+          disabled={
+            lock.isPending ||
+            completingPrint ||
+            preparingPrint ||
+            printer.working ||
+            !!pendingBluetoothJob
+          }
+        >
           {t('Lock')}
         </Button>
         <a href="/management-access?from=price-tags">{t('Management sign in')}</a>
@@ -442,6 +559,39 @@ export function PriceTagsPage() {
           {copyFeedback.text}
         </p>
       )}
+      {printer.mode === 'p1' && (
+        <p className="muted" role="status">
+          {t(
+            'P1 labels: 50 × 60 mm. Keep this screen open while sending. Check each markdown label before attaching it.',
+          )}
+        </p>
+      )}
+      {printer.working && (
+        <p role="status">
+          {t('Sending to printer. Keep this screen open; a label may take about 40 seconds.')}
+        </p>
+      )}
+      {bluetoothNotice && <p role="status">{bluetoothNotice}</p>}
+      {pendingBluetoothJob && (
+        <section className="label-printer-confirm" aria-label={t('Confirm label printing')}>
+          <p>
+            {t(
+              'Did all selected labels print correctly? Confirm only after checking the paper. Until then, prices remain in the Price changed list.',
+            )}
+          </p>
+          <Button disabled={confirmingPrint} onClick={() => void confirmBluetoothPrint()}>
+            {t('All labels printed correctly')}
+          </Button>
+          <Button
+            variant="outline"
+            disabled={confirmingPrint}
+            onClick={() => setPendingBluetoothJob(null)}
+          >
+            {t('Not all labels printed')}
+          </Button>
+        </section>
+      )}
+      <ErrorMessage error={bluetoothError} />
       <ErrorMessage
         error={
           products.error ??
@@ -585,7 +735,9 @@ export function PriceTagsPage() {
               setPrintError(null);
               printMarkdowns.mutate(chosenMarkdowns);
             }}
-            disabled={!chosenMarkdowns.length || printMarkdowns.isPending || completingPrint}
+            disabled={
+              cannotPrint || !chosenMarkdowns.length || printMarkdowns.isPending || completingPrint
+            }
           >
             <Printer size={17} /> {t('Print selected labels')} ({chosenMarkdowns.length})
           </Button>
@@ -596,6 +748,7 @@ export function PriceTagsPage() {
               print.mutate(chosen);
             }}
             disabled={
+              cannotPrint ||
               !chosen.length ||
               !weightReady ||
               print.isPending ||

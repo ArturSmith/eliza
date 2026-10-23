@@ -288,3 +288,52 @@
     max-height: 24mm;
   }
 }
+
+.label-printer-settings {
+  display: grid;
+  gap: 14px;
+}
+.label-printer-settings label {
+  display: grid;
+  gap: 6px;
+}
+.label-printer-buttons,
+.label-printer-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.label-printer-confirm {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+.label-printer-confirm p {
+  flex-basis: 100%;
+}
+.label-printer-preview {
+  max-width: 200px;
+  margin: 0 auto;
+}
+.label-printer-preview canvas {
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+}
+@media print {
+  .label-printer-confirm {
+    display: none !important;
+  }
+}
+.label-printer-settings select,
+.label-printer-settings input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
