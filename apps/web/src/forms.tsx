@@ -32,7 +32,6 @@ import { Dialog } from './components/ui/dialog';
 import { prepareProductImage } from './product-image';
 import { BarcodeLookup } from './barcode-lookup';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
-import { PriceActions } from './price-actions';
 export function ErrorMessage({ error }: { error: unknown }) {
   useLanguage();
   return error ? (
@@ -647,13 +646,6 @@ export function ProductForm({
             placeholder={t('e.g. 4011')}
           />
         </Field>
-        {initial && ['piece', 'pack', 'box'].includes(initial.unit) && (
-          <PriceActions
-            product={initial}
-            currency={currency}
-            regularPriceChanged={price !== (initial.regularPrice ?? initial.price)}
-          />
-        )}
       </div>
       <ErrorMessage error={error ?? mutation.error} />
       <div className="form-actions">

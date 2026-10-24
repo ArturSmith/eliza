@@ -289,3 +289,212 @@
     flex-wrap: wrap;
   }
 }
+
+.discount-workspace-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-bottom: 20px;
+}
+.discount-workspace-tabs button {
+  min-height: 46px;
+  padding: 10px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.discount-workspace-tabs button[aria-selected='true'] {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
+}
+.discount-workspace-tabs button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.discount-workspace-tabs button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.promotions-page [hidden] {
+  display: none !important;
+}
+.unit-markdown-workspace {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.15fr);
+  gap: 24px;
+  align-items: start;
+}
+.unit-markdown-picker,
+.unit-markdown-settings {
+  min-width: 0;
+  padding: 24px;
+}
+.unit-markdown-workspace h2 {
+  font-size: 20px;
+  margin: 0 0 10px;
+  overflow-wrap: anywhere;
+}
+.unit-markdown-picker > p {
+  margin-bottom: 16px;
+}
+.unit-markdown-picker > p:last-child {
+  margin: 14px 0 0;
+  font-size: 13px;
+}
+.unit-markdown-picker fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.unit-markdown-picker .field {
+  margin-bottom: 12px;
+}
+.unit-markdown-products {
+  max-height: 400px;
+}
+.unit-markdown-products strong,
+.unit-markdown-products small {
+  overflow-wrap: anywhere;
+}
+.unit-markdown-settings .price-actions {
+  border: 0;
+  margin: 16px 0 0;
+  padding: 0;
+}
+.unit-markdown-availability {
+  padding: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border-radius: 10px;
+  font-size: 14px;
+}
+.unit-markdown-settings .cash-history-row {
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.unit-markdown-settings .price-action-label-actions {
+  flex-wrap: wrap;
+}
+.unit-markdown-empty {
+  padding: 24px 0;
+}
+@media (max-width: 850px) {
+  .unit-markdown-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 640px) {
+  .unit-markdown-picker,
+  .unit-markdown-settings {
+    padding: 16px;
+  }
+  .discount-workspace-tabs {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.unit-markdown-combobox {
+  position: relative;
+}
+.unit-markdown-combobox .field {
+  margin-bottom: 8px;
+}
+.unit-markdown-search-row {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 0;
+}
+.unit-markdown-search-row input {
+  min-width: 0;
+  width: 100%;
+  padding-right: 46px;
+  min-height: 44px;
+}
+.unit-markdown-show-products {
+  position: absolute;
+  inset-block: 1px;
+  right: 1px;
+  width: 44px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 0 8px 8px 0;
+  color: var(--muted);
+  background: var(--surface);
+  cursor: pointer;
+}
+.unit-markdown-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline: 0;
+  z-index: 30;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px var(--color-shadow-15251026);
+}
+.unit-markdown-dropdown .unit-markdown-products {
+  max-height: min(320px, 40dvh);
+  overflow-y: auto;
+}
+.unit-markdown-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 56px;
+  padding: 12px;
+  text-align: left;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+.unit-markdown-option > span {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.unit-markdown-option strong,
+.unit-markdown-selection strong {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+.unit-markdown-option small,
+.unit-markdown-selection small {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.unit-markdown-option svg {
+  flex-shrink: 0;
+}
+.unit-markdown-option:hover,
+.unit-markdown-option.highlighted,
+.unit-markdown-option[aria-selected='true'] {
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+.unit-markdown-selection {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  margin-top: 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--page);
+}
+
+.unit-markdown-picker {
+  overflow: visible;
+}

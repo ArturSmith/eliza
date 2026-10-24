@@ -2351,5 +2351,22 @@
   "Connection help": "Помощь с подключением",
   "Print tags": "Печатать ценники",
   "Changed": "Изменены",
-  "Markdowns": "Уценка"
+  "Markdowns": "Уценка",
+  "Manage product and category promotions and individual unit markdowns in one place.": "Управляйте акциями на товары и категории и поштучной уценкой в одном месте.",
+  "Discount management": "Управление скидками",
+  "Product and category promotions": "Акции на товары и категории",
+  "Unit markdowns": "Поштучная уценка",
+  "Choose a product to mark down": "Выберите товар для уценки",
+  "Reduce the price of a selected number of physical items. Each item gets its own barcode; other units keep their current price.": "Снизьте цену на выбранное количество единиц товара. Каждая получит свой штрихкод, а остальные сохранят текущую цену.",
+  "Find a product for markdown": "Найти товар для уценки",
+  "Product for unit markdown": "Товар для поштучной уценки",
+  "Unit markdowns require an active product sold as pieces, packs or boxes with a selling price. Stock availability is checked after selection.": "Для поштучной уценки нужен активный товар с ценой продажи, продаваемый поштучно, упаковками или коробками. Доступное количество проверяется после выбора.",
+  "Select a product to continue": "Выберите товар для продолжения",
+  "Then set the final selling price and the number of items to create individual markdown labels.": "Затем укажите итоговую цену продажи и количество единиц, чтобы создать отдельные этикетки уценки.",
+  "Loading pricing…": "Загрузка цен и остатков…",
+  "Available for unit markdown: {quantity}": "Доступно для поштучной уценки: {quantity}",
+  "Set a selling price before creating markdown labels.": "Перед созданием этикеток уценки задайте цену продажи товара.",
+  "These labels are also available in the Price Tags workspace for the shop-floor employee.": "Эти этикетки также доступны сотруднику зала в режиме «Ценники».",
+"Choose products or categories for a promotion, or select one product in Unit markdowns to discount a limited number of items.": "Выберите товары или категории для акции либо один товар во вкладке «Поштучная уценка», чтобы снизить цену на ограниченное количество единиц.",
+  "Show available products": "Показать доступные товары"
 }

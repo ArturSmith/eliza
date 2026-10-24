@@ -1,3 +1,4 @@
+import { canOpenPromotions } from './promotions-access';
 import { PageOnboarding } from './onboarding/PageOnboarding';
 import { BrandLogo } from './brand';
 import { countText, t, useLanguage, getLocale } from './i18n';
@@ -22,6 +23,7 @@ import {
   LogOut,
   Monitor,
   Package,
+  PackagePlus,
   Plus,
   Receipt,
   ScrollText,
@@ -102,7 +104,7 @@ const navGroups = [
       {
         to: '/replenishment',
         label: 'Replenishment',
-        icon: ListChecks,
+        icon: PackagePlus,
         permission: 'purchases.read',
       },
       { to: '/purchases', label: 'Purchases', icon: Truck, permission: 'purchases.read' },
@@ -256,6 +258,10 @@ export function Shell() {
     );
   }
   const { user, store } = session.data;
+  const canVisit = (item: { to: string; permission: Permission }) =>
+    item.to === '/promotions'
+      ? canOpenPromotions(user.permissions)
+      : user.permissions.includes(item.permission);
   const current = nav.find((n) => n.to === location.pathname);
   return (
     <div className="app-shell">
@@ -280,7 +286,7 @@ export function Shell() {
         </div>
         <nav aria-label={t('Main navigation')}>
           {navGroups.map((group) => {
-            const items = group.items.filter((item) => user.permissions.includes(item.permission));
+            const items = group.items.filter(canVisit);
             if (!items.length) return null;
             const expanded = !collapsedGroups.includes(group.label);
             const groupId = `nav-${group.label.toLowerCase().replace(/[^a-z]+/g, '-')}`;
@@ -352,7 +358,7 @@ export function Shell() {
             <strong>{t(current?.label ?? 'Page')}</strong>
           </div>
           <div className="topbar-right">
-            {(!current || user.permissions.includes(current.permission)) && (
+            {(!current || canVisit(current)) && (
               <PageOnboarding storeId={store.id} employeeId={user.id} endpoint="/auth/onboarding" />
             )}
             <span className="local-badge">
@@ -385,7 +391,7 @@ export function Shell() {
         </header>
         <main data-tour-scope="management">
           <ErrorMessage error={logout.error} />
-          {current && !user.permissions.includes(current.permission) ? (
+          {current && !canVisit(current) ? (
             <Empty
               title={t('Access restricted')}
               description={t('Ask your store owner for access to this area.')}

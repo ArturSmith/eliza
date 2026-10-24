@@ -403,15 +403,15 @@ export const pageTours: Record<OnboardingPage, Tour> = {
       {
         selector: '.page-heading, .receipt-page-header, h1',
         title: 'Promotions',
-        body: 'Create product or category promotions while keeping the regular selling price unchanged.',
+        body: 'Manage product and category promotions and individual unit markdowns in one place.',
       },
       {
-        selector: '.promotion-target-step',
+        selector: '.promotion-target-step, .unit-markdown-picker',
         title: 'Choose eligible products',
-        body: 'Apply the promotion to specific products or whole categories, then select the targets.',
+        body: 'Choose products or categories for a promotion, or select one product in Unit markdowns to discount a limited number of items.',
       },
       {
-        selector: '.promotion-settings',
+        selector: '.promotion-settings, .unit-markdown-settings',
         title: 'Set the discount and timing',
         body: 'Choose a discount, set the schedule and review before saving. Use unit markdown labels for selected physical items.',
       },

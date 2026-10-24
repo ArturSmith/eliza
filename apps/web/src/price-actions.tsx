@@ -23,9 +23,9 @@ type Details = {
     id: string;
     name: string;
     unit: string;
-    price: string;
+    price: string | null;
     regularPrice: string | null;
-    checkoutPrice: string;
+    checkoutPrice: string | null;
     stock: string;
   };
   batches: { quantity: string; sellable: boolean }[];
@@ -70,10 +70,14 @@ export function PriceActions({
   product,
   currency,
   regularPriceChanged = false,
+  embedded = false,
+  onBusyChange,
 }: {
   product: Product;
   currency?: string;
   regularPriceChanged?: boolean;
+  embedded?: boolean;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   useLanguage();
   const [expanded, setExpanded] = useState(false);
@@ -122,6 +126,10 @@ export function PriceActions({
       void refresh();
     },
   });
+  useEffect(() => {
+    onBusyChange?.(action.isPending || labelAction.isPending);
+    return () => onBusyChange?.(false);
+  }, [action.isPending, labelAction.isPending, onBusyChange]);
   const current = details.data?.product;
   const activeLabels = (markdowns.data ?? []).filter((unit) => unit.status === 'AVAILABLE');
   const labelHistory = (markdowns.data ?? []).filter((unit) => unit.status !== 'AVAILABLE');
@@ -137,6 +145,7 @@ export function PriceActions({
     ) ?? 0;
   const wholeUnit = !!current && ['piece', 'pack', 'box'].includes(current.unit);
   const validPrice =
+    current?.checkoutPrice != null &&
     Number.isFinite(Number(price)) &&
     Number(price) >= 0 &&
     price !== '' &&
@@ -149,20 +158,33 @@ export function PriceActions({
   const canApply = !!current && !regularPriceChanged && validPrice && wholeUnit && validQuantity;
   return (
     <section className="price-actions price-actions-collapsible" aria-label={t('Unit markdown')}>
-      <button
-        type="button"
-        className="price-actions-toggle"
-        aria-expanded={expanded}
-        onClick={() => setExpanded(!expanded)}
-      >
-        <span>
-          <strong>{t('Unit markdown')}</strong>
-          <small>{t('Create one-use barcode labels for specific physical items.')}</small>
-        </span>
-        <ChevronDown size={20} aria-hidden="true" />
-      </button>
-      {expanded && (
+      {embedded ? (
+        <header className="price-actions-heading">
+          <h3>{t('Unit markdown')}</h3>
+          <p className="muted">{t('Create one-use barcode labels for specific physical items.')}</p>
+        </header>
+      ) : (
+        <button
+          type="button"
+          className="price-actions-toggle"
+          aria-expanded={expanded}
+          onClick={() => setExpanded(!expanded)}
+        >
+          <span>
+            <strong>{t('Unit markdown')}</strong>
+            <small>{t('Create one-use barcode labels for specific physical items.')}</small>
+          </span>
+          <ChevronDown size={20} aria-hidden="true" />
+        </button>
+      )}
+      {(embedded || expanded) && (
         <div className="price-actions-content">
+          {details.isPending && <p role="status">{t('Loading pricing…')}</p>}
+          {markdowns.error && (
+            <p className="error" role="alert">
+              {translateError(String(markdowns.error))}
+            </p>
+          )}
           {details.error && (
             <p className="error" role="alert">
               {translateError(String(details.error))}
@@ -182,10 +204,23 @@ export function PriceActions({
             <>
               <p className="muted">
                 {t('Current checkout price')}:{' '}
-                <strong>{formatMoney(current.checkoutPrice, currency)}</strong>
-                {current.checkoutPrice !== current.price &&
+                <strong>
+                  {current.checkoutPrice === null
+                    ? t('Not set')
+                    : formatMoney(current.checkoutPrice, currency)}
+                </strong>
+                {current.price !== null &&
+                  current.checkoutPrice !== current.price &&
                   ` · ${t('Regular price')}: ${formatMoney(current.price, currency)}`}
               </p>
+              <p className="unit-markdown-availability">
+                {t('Available for unit markdown: {quantity}', { quantity: available })}
+              </p>
+              {current.checkoutPrice === null && (
+                <p className="notice">
+                  {t('Set a selling price before creating markdown labels.')}
+                </p>
+              )}
               <label className="field">
                 <span>{t('Discounted selling price')}</span>
                 <input
@@ -209,7 +244,13 @@ export function PriceActions({
               </label>
               <label className="field">
                 <span>{t('Reason')}</span>
-                <select value={reason} onChange={(e) => setReason(e.target.value)}>
+                <select
+                  value={reason}
+                  onChange={(e) => {
+                    setReason(e.target.value);
+                    setRequestId(crypto.randomUUID());
+                  }}
+                >
                   <option value="EXPIRING_SOON">{t('Expiring soon')}</option>
                   <option value="DAMAGED_PACKAGING">{t('Damaged packaging')}</option>
                   <option value="CLEARANCE">{t('Clearance')}</option>
@@ -222,7 +263,10 @@ export function PriceActions({
                 <input
                   type="datetime-local"
                   value={validUntil}
-                  onChange={(e) => setValidUntil(e.target.value)}
+                  onChange={(e) => {
+                    setValidUntil(e.target.value);
+                    setRequestId(crypto.randomUUID());
+                  }}
                 />
               </label>
               <label className="field">
@@ -354,6 +398,11 @@ export function PriceActions({
           )}
           {!!labels.length && (
             <>
+              <p className="muted">
+                {t(
+                  'These labels are also available in the Price Tags workspace for the shop-floor employee.',
+                )}
+              </p>
               <div className="notice" role="status">
                 {t(
                   replacedLabel
