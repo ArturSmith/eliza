@@ -3377,31 +3377,6 @@ input.shopping-section-title {
   border-top: 1px solid var(--border);
 }
 
-.trend {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 6px;
-}
-.trend li {
-  display: grid;
-  grid-template-columns: 70px 1fr 60px;
-  align-items: center;
-  gap: 10px;
-  font-variant-numeric: tabular-nums;
-}
-.trend-track {
-  height: 8px;
-  background: var(--color-background-f2f4f0);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.trend-track div {
-  height: 100%;
-  background: var(--green);
-  max-width: 100%;
-}
 .unavailable-list {
   margin: 0;
   padding-left: 18px;

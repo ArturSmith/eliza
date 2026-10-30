@@ -2368,5 +2368,19 @@
   "Set a selling price before creating markdown labels.": "Перед созданием этикеток уценки задайте цену продажи товара.",
   "These labels are also available in the Price Tags workspace for the shop-floor employee.": "Эти этикетки также доступны сотруднику зала в режиме «Ценники».",
 "Choose products or categories for a promotion, or select one product in Unit markdowns to discount a limited number of items.": "Выберите товары или категории для акции либо один товар во вкладке «Поштучная уценка», чтобы снизить цену на ограниченное количество единиц.",
-  "Show available products": "Показать доступные товары"
+  "Show available products": "Показать доступные товары",
+  "{n} supplier prices differ from the last invoice": "Цены поставщиков не совпадают с последней накладной: {n} поз.",
+  "The recorded quote no longer matches what was last actually paid.": "Сохранённая цена поставщика отличается от цены, фактически оплаченной при последней поставке.",
+  "{n} still have unchanged retail prices. {below} now sell below cost.": "Розничная цена ещё не изменена у {n} товаров. Из них продаются ниже себестоимости: {below}.",
+  "{name} has been open for {h} hours": "{name}: смена открыта уже {h} ч.",
+  "{n} units in stock.": "Количество на складе: {n}.",
+  "{n} units in stock. {missing} products have missing cost, so the value is incomplete.": "Количество на складе: {n}. Без закупочной цены: {missing} товаров, поэтому стоимость запасов рассчитана не полностью.",
+  "Unknown units in stock.": "Количество на складе неизвестно.",
+  "Unknown units in stock. {missing} products have missing cost, so the value is incomplete.": "Количество на складе неизвестно. Без закупочной цены: {missing} товаров, поэтому стоимость запасов рассчитана не полностью.",
+  "Pricing and discounts": "Цены и скидки",
+  "Sales and gross profit by the price actually used at checkout.": "Продажи и валовая прибыль по фактической цене на кассе.",
+  "Price source": "Тип цены",
+  "Product promotion": "Акция на товар",
+  "Category promotion": "Акция на категорию",
+  "Legacy markdown": "Ранее оформленная уценка"
 }

@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from 'vitest';
 import { setLanguage } from '../apps/web/src/i18n';
-import { dashboardText, dashboardSummary } from '../apps/web/src/i18n/dashboard';
+import { dashboardSeverity, dashboardText, dashboardSummary } from '../apps/web/src/i18n/dashboard';
 import { ownerSummary } from '../packages/contracts/src/analytics';
 afterEach(() => setLanguage('en'));
 it('translates dynamic alerts without altering business names', () => {
@@ -44,4 +44,39 @@ it('translates week/month summaries and all measured drivers', () => {
 it('keeps English server text unchanged', () => {
   setLanguage('en');
   expect(dashboardText('12 products are out of stock')).toBe('12 products are out of stock');
+});
+
+it('translates supplier quote alerts and all severity codes', () => {
+  setLanguage('ru');
+  expect(dashboardText('11 supplier prices differ from the last invoice')).toBe(
+    'Цены поставщиков не совпадают с последней накладной: 11 поз.',
+  );
+  expect(dashboardText('The recorded quote no longer matches what was last actually paid.')).toBe(
+    'Сохранённая цена поставщика отличается от цены, фактически оплаченной при последней поставке.',
+  );
+  expect(['critical', 'important', 'attention', 'info'].map(dashboardSeverity)).toEqual([
+    'Критично',
+    'Важно',
+    'Внимание',
+    'Информация',
+  ]);
+  setLanguage('en');
+  expect(dashboardText('11 supplier prices differ from the last invoice')).toBe(
+    '11 supplier prices differ from the last invoice',
+  );
+  expect(dashboardSeverity('attention')).toBe('Attention');
+});
+it('translates compound margin, dead-stock and open-shift notifications', () => {
+  setLanguage('ru');
+  for (const text of [
+    '3 still have unchanged retail prices. 2 now sell below cost.',
+    '12.500 units in stock.',
+    '12.500 units in stock. 3 products have missing cost, so the value is incomplete.',
+    'Unknown units in stock.',
+    'Unknown units in stock. 3 products have missing cost, so the value is incomplete.',
+  ])
+    expect(dashboardText(text)).not.toMatch(/[A-Za-z]/);
+  expect(dashboardText('Register Attention has been open for 28 hours')).toBe(
+    'Register Attention: смена открыта уже 28 ч.',
+  );
 });

@@ -4,7 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { api, queryClient, useSession } from './api';
 import { ErrorMessage } from './forms';
 import { formatMoney } from './receipts';
-import { dashboardText } from './i18n/dashboard';
+import { dashboardSeverity, dashboardText } from './i18n/dashboard';
 import { t, useLanguage } from './i18n';
 import './action-center.css';
 
@@ -208,7 +208,7 @@ export function ActionCenterPage() {
             <div className="action-head">
               <div>
                 <span className="action-group">{t(i.group)}</span>
-                <span className={'badge badge-' + i.severity}>{t(i.severity)}</span>
+                <span className={'badge badge-' + i.severity}>{dashboardSeverity(i.severity)}</span>
                 <h2>{dashboardText(i.title)}</h2>
               </div>
               <span className="muted">{t(i.status)}</span>

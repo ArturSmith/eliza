@@ -1,5 +1,5 @@
 import { metricFormula } from './metric-formulas';
-import { dashboardText, dashboardSummary } from './i18n/dashboard';
+import { dashboardSeverity, dashboardText, dashboardSummary } from './i18n/dashboard';
 import { useState, useId, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -9,7 +9,7 @@ import { Button } from './components/ui/button';
 import { formatMoney } from './receipts';
 import { SalesSummary } from './sales-summary';
 import { t, useLanguage, getLocale } from './i18n';
-import { tone, type Period, type Severity } from '@eliza/contracts';
+import { tone, type Period } from '@eliza/contracts';
 
 type Dashboard = any;
 type OverviewFinancialSummary = {
@@ -85,13 +85,6 @@ function FinancialCard({
   );
 }
 
-const severityLabel: Record<Severity, string> = {
-  critical: 'Critical',
-  important: 'Important',
-  attention: 'Attention',
-  info: 'Info',
-};
-
 function Insights({ insights }: { insights: any[] }) {
   useLanguage();
   const active = insights.filter(
@@ -128,7 +121,7 @@ function Insights({ insights }: { insights: any[] }) {
             <li key={insight.id} className={'insight insight-' + insight.severity}>
               <div className="insight-head">
                 <span className={'badge badge-' + insight.severity}>
-                  {t(severityLabel[insight.severity as Severity])}
+                  {dashboardSeverity(insight.severity)}
                 </span>
                 <strong>{dashboardText(insight.title)}</strong>
               </div>
@@ -723,26 +716,6 @@ export function OwnerDashboardPage() {
                   ),
                 ])}
             />
-          )}
-
-          {period === 'month' && data.marginTrend && (
-            <section className="panel">
-              <div className="panel-heading">
-                <h2>{t('Gross margin trend')}</h2>
-                <p>{t('Last 12 months.')}</p>
-              </div>
-              <ol className="trend panel-padding">
-                {data.marginTrend.map((m: any) => (
-                  <li key={m.month}>
-                    <span className="muted">{m.month}</span>
-                    <div className="trend-track">
-                      <div style={{ width: (m.margin ?? 0) * 2 + '%' }} />
-                    </div>
-                    <strong>{m.margin === null ? t('n/a') : m.margin.toFixed(1) + '%'}</strong>
-                  </li>
-                ))}
-              </ol>
-            </section>
           )}
 
           <section className="panel">

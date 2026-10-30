@@ -23,7 +23,9 @@
     "desktop:postgres": "node apps/desktop/scripts/build-postgres.mjs",
     "desktop:dev": "pnpm build && pnpm --filter @eliza/desktop start",
     "desktop:package:mac": "pnpm build && pnpm --filter @eliza/desktop package:mac",
-    "test:desktop": "pnpm build && node tests/desktop/offline-smoke.mjs"
+    "test:desktop": "pnpm build && node tests/desktop/offline-smoke.mjs",
+    "simulate:store": "tsc -p packages/contracts/tsconfig.json && tsc -p apps/api/tsconfig.json && node scripts/simulate-store.mjs run",
+    "simulate:serve": "npm --prefix apps/web run build && node scripts/simulate-store.mjs serve"
   },
   "devDependencies": {
     "@playwright/test": "^1.55.0",

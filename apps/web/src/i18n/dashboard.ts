@@ -8,6 +8,8 @@ const templates = [
   'Purchase cost increased on {n} products',
   'Purchase costs increased on {n} products',
   '{n} still have unchanged retail prices.',
+  '{n} still have unchanged retail prices. {below} now sell below cost.',
+  '{n} supplier prices differ from the last invoice',
   '{n} products sell below cost',
   'Refund rate is {n}% of sales',
   'The usual rate is {n}%.',
@@ -17,12 +19,25 @@ const templates = [
   'Waste is {n}% above normal',
   '{n} shifts closed with a cash difference',
   '{n} shifts have been open over {h} hours',
+  '{name} has been open for {h} hours',
   '{n}h',
   '{n} products have not sold in {d} days',
+  '{n} units in stock.',
+  '{n} units in stock. {missing} products have missing cost, so the value is incomplete.',
+  'Unknown units in stock. {missing} products have missing cost, so the value is incomplete.',
   '{n} products are missing a purchase cost',
   '{n} products have no opening stock count',
   '{name} revenue',
 ];
+const severityLabels: Record<string, string> = {
+  critical: 'Critical',
+  important: 'Important',
+  attention: 'Attention',
+  info: 'Info',
+};
+export function dashboardSeverity(value: string): string {
+  return t(severityLabels[value] ?? value);
+}
 export function dashboardText(value: string): string {
   if (getLocale() !== 'ru-RU') return value;
   for (const template of templates) {
