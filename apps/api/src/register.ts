@@ -146,7 +146,7 @@ export class RegisterService {
     return this.operations.transaction(async (client) => {
       const device = (
         await client.query(
-          'SELECT d.*,s.name AS store_name,s.currency,s.timezone FROM devices d JOIN stores s ON s.id=d.store_id WHERE d.token_hash=$1 OR d.token_hash=$2 ORDER BY CASE WHEN d.token_hash=$1 THEN 0 ELSE 1 END LIMIT 1',
+          'SELECT d.*,s.name AS store_name,s.currency,s.timezone,s.advanced_features_enabled FROM devices d JOIN stores s ON s.id=d.store_id WHERE d.token_hash=$1 OR d.token_hash=$2 ORDER BY CASE WHEN d.token_hash=$1 THEN 0 ELSE 1 END LIMIT 1',
           [hash(cookie(req, 'eliza_register')), hash(cookie(req, 'eliza_device'))],
         )
       ).rows[0];
@@ -162,6 +162,7 @@ export class RegisterService {
           name: device.store_name,
           currency: device.currency,
           timezone: device.timezone,
+          advancedFeaturesEnabled: device.advanced_features_enabled,
         },
         employees: (
           await client.query(

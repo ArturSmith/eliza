@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, enableAdvancedFeatures } from './fixtures';
 test('replenishment shows new-product uncertainty and supports filters on desktop and mobile', async ({
   page,
 }) => {
@@ -9,6 +9,7 @@ test('replenishment shows new-product uncertainty and supports filters on deskto
   await page.getByLabel('Password', { exact: true }).fill('local-test-password-123');
   await page.getByRole('button', { name: 'Create my store' }).click();
   await expect(page.getByRole('link', { name: 'Products', exact: true })).toBeVisible();
+  await enableAdvancedFeatures(page);
   const headers = { Origin: 'http://localhost:5174', 'X-Eliza-Request': '1' };
   const created = await page.request.post('/api/products', {
     headers,

@@ -164,7 +164,13 @@ export type Product = Omit<ProductInput, 'cost'> & {
 };
 export type Session = {
   user: { id: string; name: string; email: string; role: string; permissions: Permission[] };
-  store: { id: string; name: string; currency: string; timezone: string };
+  store: {
+    id: string;
+    name: string;
+    currency: string;
+    timezone: string;
+    advancedFeaturesEnabled: boolean;
+  };
   device: { id: string; name: string; type: 'management' | 'pos' | 'price_tags' | 'price_check' };
 };
 export type Movement = {

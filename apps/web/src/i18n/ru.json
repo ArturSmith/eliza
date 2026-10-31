@@ -2382,5 +2382,14 @@
   "Price source": "Тип цены",
   "Product promotion": "Акция на товар",
   "Category promotion": "Акция на категорию",
-  "Legacy markdown": "Ранее оформленная уценка"
+  "Legacy markdown": "Ранее оформленная уценка",
+  "Advanced features": "Расширенные возможности",
+  "Show additional tools for managing your store.": "Показывать дополнительные инструменты управления магазином.",
+  "When enabled, these sections are shown to employees who have access:": "После включения сотрудникам с соответствующими правами доступны разделы:",
+  "Save store settings to apply this mode for the whole store. Turning it off keeps existing data.": "Сохраните настройки, чтобы применить режим ко всему магазину. При выключении данные сохраняются.",
+  "Advanced features are turned off": "Расширенные возможности выключены",
+  "A manager can enable this section in Store settings.": "Менеджер может включить этот раздел в настройках магазина.",
+  "Open store settings": "Открыть настройки магазина",
+  "Quantity to return": "Количество к возврату",
+  "Quantity to return for {name}": "Количество к возврату: {name}"
 }

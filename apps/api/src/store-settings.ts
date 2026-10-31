@@ -15,7 +15,7 @@ import { Database } from './database.js';
 import { AuthModule } from './auth.js';
 import { AccessGuard, Require, parse, hash, cookie, type AuthRequest } from './security.js';
 import { Operations, audit } from './operations.js';
-export const profileColumns = `name,currency,timezone,address,phone,business_number AS "businessNumber",receipt_footer AS "receiptFooter",default_tax_rate AS "defaultTaxRate",default_markup_percent AS "defaultMarkupPercent",scale_barcode AS "scaleBarcode",tag_design AS "tagDesign",no_sales_threshold_days AS "noSalesThresholdDays",long_shift_threshold_hours AS "longShiftThresholdHours",settings_version AS version`;
+export const profileColumns = `name,currency,timezone,address,phone,business_number AS "businessNumber",receipt_footer AS "receiptFooter",default_tax_rate AS "defaultTaxRate",default_markup_percent AS "defaultMarkupPercent",scale_barcode AS "scaleBarcode",tag_design AS "tagDesign",no_sales_threshold_days AS "noSalesThresholdDays",long_shift_threshold_hours AS "longShiftThresholdHours",advanced_features_enabled AS "advancedFeaturesEnabled",settings_version AS version`;
 @Controller('store-profile')
 @UseGuards(AccessGuard)
 class StoreSettingsController {
@@ -33,6 +33,7 @@ class StoreSettingsController {
   @Post() @Require('settings.manage') save(@Body() input: unknown, @Req() req: AuthRequest) {
     const b = parse(
       z.object({
+        advancedFeaturesEnabled: z.boolean().optional(),
         scaleBarcode: scaleBarcodeSchema.optional(),
         tagDesign: tagDesignSchema.optional(),
         defaultMarkupPercent: defaultMarkupSchema.optional(),
@@ -69,7 +70,7 @@ class StoreSettingsController {
         throw new ConflictException('Store settings changed. Reload to review the saved settings.');
       const result = (
         await c.query(
-          `UPDATE stores SET name=$2,address=$3,phone=$4,business_number=$5,receipt_footer=$6,default_tax_rate=$7,scale_barcode=$8::jsonb,default_markup_percent=$9,tag_design=$10::jsonb,no_sales_threshold_days=$11,long_shift_threshold_hours=$12,settings_version=settings_version+1 WHERE id=$1 RETURNING ${profileColumns}`,
+          `UPDATE stores SET name=$2,address=$3,phone=$4,business_number=$5,receipt_footer=$6,default_tax_rate=$7,scale_barcode=$8::jsonb,default_markup_percent=$9,tag_design=$10::jsonb,no_sales_threshold_days=$11,long_shift_threshold_hours=$12,advanced_features_enabled=$13,settings_version=settings_version+1 WHERE id=$1 RETURNING ${profileColumns}`,
           [
             req.context.store.id,
             b.name,
@@ -83,6 +84,7 @@ class StoreSettingsController {
             JSON.stringify(b.tagDesign ?? old.tagDesign),
             b.noSalesThresholdDays ?? old.noSalesThresholdDays,
             b.longShiftThresholdHours ?? old.longShiftThresholdHours,
+            b.advancedFeaturesEnabled ?? old.advancedFeaturesEnabled,
           ],
         )
       ).rows[0];

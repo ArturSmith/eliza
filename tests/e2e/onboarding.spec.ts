@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { enableAdvancedFeatures } from './fixtures';
 
 test('page walkthroughs support navigation, completion, replay, mobile and cross-browser persistence', async ({
   page,
@@ -82,6 +83,7 @@ test('page walkthroughs support navigation, completion, replay, mobile and cross
   await page.screenshot({ path: '/private/tmp/eliza-onboarding-desktop.png' });
   await page.keyboard.press('Escape');
 
+  await enableAdvancedFeatures(page);
   const anotherBrowser = await browser.newContext();
   try {
     const otherPage = await anotherBrowser.newPage();

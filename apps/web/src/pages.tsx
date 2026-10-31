@@ -1,3 +1,4 @@
+import { isFeatureVisible } from './advanced-features';
 import { canOpenPromotions } from './promotions-access';
 import { PageOnboarding } from './onboarding/PageOnboarding';
 import { BrandLogo } from './brand';
@@ -258,10 +259,12 @@ export function Shell() {
     );
   }
   const { user, store } = session.data;
+  const advancedHidden = !isFeatureVisible(location.pathname, store.advancedFeaturesEnabled);
   const canVisit = (item: { to: string; permission: Permission }) =>
-    item.to === '/promotions'
+    isFeatureVisible(item.to, store.advancedFeaturesEnabled) &&
+    (item.to === '/promotions'
       ? canOpenPromotions(user.permissions)
-      : user.permissions.includes(item.permission);
+      : user.permissions.includes(item.permission));
   const current = nav.find((n) => n.to === location.pathname);
   return (
     <div className="app-shell">
@@ -358,7 +361,7 @@ export function Shell() {
             <strong>{t(current?.label ?? 'Page')}</strong>
           </div>
           <div className="topbar-right">
-            {(!current || canVisit(current)) && (
+            {!advancedHidden && (!current || canVisit(current)) && (
               <PageOnboarding storeId={store.id} employeeId={user.id} endpoint="/auth/onboarding" />
             )}
             <span className="local-badge">
@@ -391,7 +394,19 @@ export function Shell() {
         </header>
         <main data-tour-scope="management">
           <ErrorMessage error={logout.error} />
-          {current && !canVisit(current) ? (
+          {advancedHidden ? (
+            <Empty
+              title={t('Advanced features are turned off')}
+              description={t('A manager can enable this section in Store settings.')}
+              action={
+                user.permissions.includes('settings.manage') ? (
+                  <Link to="/settings" className="button button-primary">
+                    {t('Open store settings')}
+                  </Link>
+                ) : undefined
+              }
+            />
+          ) : current && !canVisit(current) ? (
             <Empty
               title={t('Access restricted')}
               description={t('Ask your store owner for access to this area.')}

@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, enableAdvancedFeatures } from './fixtures';
 
 test('manager can open the Action Center, review an alert, and inspect no-sales controls', async ({
   page,
@@ -10,6 +10,7 @@ test('manager can open the Action Center, review an alert, and inspect no-sales 
   await page.getByLabel('Password', { exact: true }).fill('local-test-password-123');
   await page.getByRole('button', { name: 'Create my store' }).click();
   await expect(page.getByRole('link', { name: 'Products', exact: true })).toBeVisible();
+  await enableAdvancedFeatures(page);
   const response = await page.request.post('/api/products', {
     headers: { Origin: 'http://localhost:5174', 'X-Eliza-Request': '1' },
     data: {

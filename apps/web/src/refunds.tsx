@@ -364,7 +364,6 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
       </div>
       <fieldset disabled={!!pending || busy}>
         {detail.receipt.lines.map((l) => {
-          const remaining = fromScaled(toScaled(l.quantity, 3) - returnedFor(l), 3);
           return (
             <div className="refund-item" key={keyFor(l)}>
               <div className="refund-item-heading">
@@ -378,23 +377,14 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
                   {t('Sold')}: {l.quantity} {t(l.unit ?? '')}
                 </small>
               </div>
-              <Field
-                label={t('{value0} — {value1} {value2} remaining', {
-                  value0: l.name,
-                  value1: remaining,
-                  value2: t(l.unit ?? ''),
-                })}
-              >
+              <Field label={t('Quantity to return')}>
                 <input
                   inputMode="decimal"
-                  aria-describedby={'refund-remaining-' + keyFor(l)}
+                  aria-label={t('Quantity to return for {name}', { name: l.name })}
                   value={quantities[keyFor(l)] ?? '0'}
                   onChange={(e) => setQuantities({ ...quantities, [keyFor(l)]: e.target.value })}
                 />
               </Field>
-              <p className="muted" id={'refund-remaining-' + keyFor(l)}>
-                {t('Maximum refundable')}: {remaining} {t(l.unit ?? '')}
-              </p>
               <label className="refund-checkbox-row">
                 <input
                   type="checkbox"

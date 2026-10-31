@@ -22,6 +22,7 @@ export const stores = pgTable('stores', {
   name: text('name').notNull(),
   currency: text('currency').notNull(),
   timezone: text('timezone').notNull(),
+  advancedFeaturesEnabled: boolean('advanced_features_enabled').notNull().default(false),
 });
 export const roles = pgTable('roles', {
   id: id(),

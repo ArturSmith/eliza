@@ -134,3 +134,22 @@
   width: 100%;
   height: auto;
 }
+
+.advanced-features-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  cursor: pointer;
+}
+.advanced-features-toggle input {
+  width: 22px;
+  height: 22px;
+  accent-color: var(--green);
+  flex-shrink: 0;
+}
+.advanced-features-list {
+  padding-left: 20px;
+  line-height: 1.8;
+  margin-bottom: 16px;
+}

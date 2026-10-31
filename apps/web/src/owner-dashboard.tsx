@@ -414,7 +414,7 @@ export function TodayOperations() {
         </div>
         <HourlySales rows={today.hourly} currency={currency} />
       </section>
-      <Insights insights={today.insights ?? []} />
+      {session.store.advancedFeaturesEnabled && <Insights insights={today.insights ?? []} />}
     </div>
   );
 }

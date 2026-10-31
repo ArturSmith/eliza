@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, enableAdvancedFeatures } from './fixtures';
 import sharp from 'sharp';
 const pixel = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a7WQAAAAASUVORK5CYII=',
@@ -59,6 +59,7 @@ test('scans, edits, saves, and reopens a digital invoice inside Eliza AI', async
   await page.getByLabel('Password', { exact: true }).fill('local-test-password-123');
   await page.getByRole('button', { name: setup.needsSetup ? 'Create my store' : 'Sign in' }).click();
   await expect(page.getByRole('link', { name: 'Eliza AI' })).toBeVisible();
+  await enableAdvancedFeatures(page);
   let record: any = null;
   const conversation = { id: '17bf1957-f17b-4e22-9c29-a67757292e60', title: 'Invoice', created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
   let messages: any[] = [];

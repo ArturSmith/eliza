@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, enableAdvancedFeatures } from './fixtures';
 
 test('new stock-count draft renders in the list and reopens after reload', async ({ page }) => {
   const errors: string[] = [];
@@ -9,6 +9,9 @@ test('new stock-count draft renders in the list and reopens after reload', async
   await page.getByLabel('Email address').fill('counts@example.test');
   await page.getByLabel('Password', { exact: true }).fill('local-test-password-123');
   await page.getByRole('button', { name: 'Create my store' }).click();
+  await expect(page.getByRole('link', { name: 'Products', exact: true })).toBeVisible();
+  await enableAdvancedFeatures(page);
+  await page.reload();
   await expect(page.getByRole('link', { name: 'Stock counts', exact: true })).toBeVisible();
   for (const name of ['Milk', 'Bread']) {
     const response = await page.request.post('/api/products', {

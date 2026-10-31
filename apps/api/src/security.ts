@@ -99,6 +99,7 @@ export class AccessGuard implements CanActivate {
         name: row.store.name,
         currency: row.store.currency,
         timezone: row.store.timezone,
+        advancedFeaturesEnabled: row.store.advancedFeaturesEnabled,
       },
       device: { id: row.device.id, name: row.device.name, type: row.device.type as 'management' },
     };

@@ -1,3 +1,4 @@
+import { advancedFeatures } from './advanced-features';
 import { type ScaleBarcodeSettings, type TagDesign } from '@eliza/contracts';
 import { Ean13Barcode } from './ean13-barcode';
 import './store-settings.css';
@@ -8,6 +9,7 @@ import { api, refresh } from './api';
 import { Field, ErrorMessage } from './forms';
 import { Button } from './components/ui/button';
 type Profile = {
+  advancedFeaturesEnabled: boolean;
   scaleBarcode: ScaleBarcodeSettings;
   tagDesign: TagDesign;
   name: string;
@@ -72,9 +74,12 @@ function Editor({ profile }: { profile: Profile }) {
       <nav className="store-settings-nav" aria-label={t('Settings sections')}>
         <strong>{t('Settings sections')}</strong>
         <a href="#interface-settings">{t('Language')}</a>
+        <a href="#advanced-features">{t('Advanced features')}</a>
         <a href="#business-details">{t('Business details')}</a>
         <a href="#product-defaults">{t('Product defaults')}</a>
-        <a href="#inventory-alerts">{t('Inventory alerts')}</a>
+        {value.advancedFeaturesEnabled && (
+          <a href="#inventory-alerts">{t('Inventory alerts')}</a>
+        )}
         <a href="#shift-alerts">{t('Shift alerts')}</a>
         <a href="#scale-barcodes">{t('Scale barcodes')}</a>
         <a href="#price-tag-design">{t('Price tag design')}</a>
@@ -96,6 +101,35 @@ function Editor({ profile }: { profile: Profile }) {
                 <option value="ru" lang="ru">Русский</option>
               </select>
             </Field>
+          </section>
+          <section id="advanced-features" className="store-settings-section panel">
+            <header>
+              <h2>{t('Advanced features')}</h2>
+              <p className="muted">{t('Show additional tools for managing your store.')}</p>
+            </header>
+            <label className="advanced-features-toggle">
+              <input
+                type="checkbox"
+                role="switch"
+                aria-describedby="advanced-features-description"
+                checked={value.advancedFeaturesEnabled}
+                onChange={(event) =>
+                  setValue({ ...value, advancedFeaturesEnabled: event.target.checked })
+                }
+              />
+              <strong>{t('Advanced features')}</strong>
+            </label>
+            <p id="advanced-features-description" className="muted">
+              {t('When enabled, these sections are shown to employees who have access:')}
+            </p>
+            <ul className="advanced-features-list">
+              {advancedFeatures.map((feature) => (
+                <li key={feature.path}>{t(feature.label)}</li>
+              ))}
+            </ul>
+            <p className="muted">
+              {t('Save store settings to apply this mode for the whole store. Turning it off keeps existing data.')}
+            </p>
           </section>
           <section id="business-details" className="store-settings-section panel">
             <header>
@@ -166,7 +200,11 @@ function Editor({ profile }: { profile: Profile }) {
               )}
             </p>
           </section>
-          <section id="inventory-alerts" className="store-settings-section panel">
+          <section
+            id="inventory-alerts"
+            className="store-settings-section panel"
+            hidden={!value.advancedFeaturesEnabled}
+          >
             <header>
               <h2>{t('Inventory alerts')}</h2>
               <p className="muted">{t('Used by the Action Center to find stock without sales.')}</p>
