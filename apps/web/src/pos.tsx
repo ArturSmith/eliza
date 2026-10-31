@@ -1,3 +1,4 @@
+import { formatQuantity, quantityInputValue } from './quantity-format';
 import { PageOnboarding } from './onboarding/PageOnboarding';
 import { BrandLogo } from './brand';
 import { t, useLanguage, translateError } from './i18n';
@@ -1047,7 +1048,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                       </small>
                     )}
                     <span className="pos-stock">
-                      {Number(p.stock)} {t(' on hand')}
+                      {formatQuantity(p.stock)} {t(' on hand')}
                     </span>
                   </button>
                   <button
@@ -1484,8 +1485,8 @@ function CartLine({
   onRemove: () => void;
 }) {
   useLanguage();
-  const [quantityInput, setQuantityInput] = useState(line.quantity);
-  useEffect(() => setQuantityInput(line.quantity), [line.quantity]);
+  const [quantityInput, setQuantityInput] = useState(() => quantityInputValue(line.quantity));
+  useEffect(() => setQuantityInput(quantityInputValue(line.quantity)), [line.quantity]);
   return (
     <div className="cart-line">
       <div className="cart-line-top">
@@ -1522,7 +1523,7 @@ function CartLine({
               toScaled(quantityInput, 3) <= 0n ||
               !onChange(quantityInput)
             )
-              setQuantityInput(line.quantity);
+              setQuantityInput(quantityInputValue(line.quantity));
           }}
         />
         <span>{t(line.product.unit ?? '')}</span>

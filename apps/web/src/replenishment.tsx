@@ -1,3 +1,4 @@
+import { formatQuantity } from './quantity-format';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -85,7 +86,7 @@ export function ReplenishmentPage() {
   const quantity = (value: string | number | null) =>
     value === null
       ? '—'
-      : new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 3 }).format(Number(value));
+      : formatQuantity(value);
   const field = (key: keyof typeof draft, value: string) =>
     setDraft((previous) => ({ ...previous, [key]: value }));
   return (

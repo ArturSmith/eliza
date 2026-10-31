@@ -126,11 +126,11 @@ test('filters, favorites and paginates the checkout catalog', async ({ page }) =
     input.value = 'BAR24';
     input.closest('form')?.requestSubmit();
   });
-  await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('2.000');
+  await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('2');
   await page.getByLabel('Scan or search products').fill('BAR24');
   await page.getByLabel('Scan or search products').press('Enter');
   await expect(page.getByRole('alert')).toContainText('Not enough stock for Product 24.');
-  await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('2.000');
+  await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('2');
   await page.getByLabel('Scan or search products').fill('Product 24');
   await page
     .locator('.pos-product-card')
@@ -138,16 +138,16 @@ test('filters, favorites and paginates the checkout catalog', async ({ page }) =
     .locator('.pos-product')
     .click();
   await expect(page.getByRole('alert')).toContainText('Not enough stock for Product 24.');
-  await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('2.000');
+  await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('2');
   await page.getByLabel('Quantity for Product 24').fill('3');
   await page.getByLabel('Quantity for Product 24').blur();
-  await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('2.000');
+  await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('2');
   await expect(page.getByRole('alert')).toContainText('Not enough stock for Product 24.');
   await page.getByLabel('Scan or search products').fill('EMPTY');
   await page.getByLabel('Scan or search products').press('Enter');
   await expect(page.getByRole('alert')).toContainText('Out of stock: Unavailable');
   await expect(page.getByLabel('Scan or search products')).toHaveValue('');
-  await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('2.000');
+  await expect(page.getByLabel('Quantity for Product 24')).toHaveValue('2');
   await page.getByLabel('Scan or search products').fill('INACTIVE-CODE');
   await page.getByLabel('Scan or search products').press('Enter');
   await expect(page.getByRole('alert')).toContainText('This product is unavailable for sale.');

@@ -1,3 +1,4 @@
+import { formatQuantity, quantityInputValue } from './quantity-format';
 import { countText, t, useLanguage, getLocale } from './i18n';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -303,7 +304,7 @@ function CountEditor({ count }: { count: Count }) {
   const manage = session.user.permissions.includes('counts.manage'),
     finalize = session.user.permissions.includes('counts.finalize');
   const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(count.lines.map((l) => [l.product_id, l.counted_quantity ?? ''])),
+    Object.fromEntries(count.lines.map((l) => [l.product_id, quantityInputValue(l.counted_quantity ?? '')])),
   );
   const [error, setError] = useState<unknown>();
   const [busy, setBusy] = useState(false);
@@ -390,7 +391,7 @@ function CountEditor({ count }: { count: Count }) {
                       {l.sku} · {t(l.unit ?? '')}
                     </small>
                   </td>
-                  <td>{l.system_quantity ?? '—'}</td>
+                  <td>{formatQuantity(l.system_quantity)}</td>
                   <td>
                     {count.status === 'counting' && manage ? (
                       <input
@@ -401,10 +402,10 @@ function CountEditor({ count }: { count: Count }) {
                         onChange={(e) => setValues({ ...values, [l.product_id]: e.target.value })}
                       />
                     ) : (
-                      (l.counted_quantity ?? 'Not counted')
+                      (l.counted_quantity === null ? t('Not counted') : formatQuantity(l.counted_quantity))
                     )}
                   </td>
-                  <td>{l.difference ?? '—'}</td>
+                  <td>{formatQuantity(l.difference)}</td>
                   <td>{l.counter ?? '—'}</td>
                 </tr>
               ))}
@@ -439,7 +440,7 @@ function CountEditor({ count }: { count: Count }) {
                     variant="outline"
                     disabled={
                       count.lines.some((l) => l.counted_quantity === null) ||
-                      count.lines.some((l) => values[l.product_id] !== l.counted_quantity)
+                      count.lines.some((l) => values[l.product_id] !== quantityInputValue(l.counted_quantity ?? ''))
                     }
                     onClick={() => void action('review')}
                   >

@@ -1,3 +1,4 @@
+import { formatQuantity } from './quantity-format';
 import { metricFormula } from './metric-formulas';
 import { dashboardSeverity, dashboardText, dashboardSummary } from './i18n/dashboard';
 import { useState, useId, type ReactNode } from 'react';
@@ -638,10 +639,10 @@ export function OwnerDashboardPage() {
             empty="No products sold in this period."
             rows={data.products.byRevenue.map((p: any) => [
               p.name,
-              Number(p.units).toLocaleString(getLocale()),
+              formatQuantity(p.units),
               money(p.revenue),
               p.margin === null ? t('—') : p.margin.toFixed(1) + '%',
-              Number(p.stock).toLocaleString(getLocale()),
+              formatQuantity(p.stock),
               p.daysOfStock === null ? '—' : p.daysOfStock.toFixed(1) + ' ' + t('days'),
             ])}
           />

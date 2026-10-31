@@ -1,3 +1,4 @@
+import { formatQuantity } from './quantity-format';
 export type WhatsAppOrder = {
   number: string;
   supplierName: string;
@@ -18,7 +19,7 @@ export function formatWhatsAppOrder(
   if (order.expected_date) lines.push(`${labels.delivery}: ${order.expected_date.slice(0, 10)}`);
   lines.push('', `${labels.items}:`);
   for (const line of order.lines) {
-    lines.push(`• ${line.product_name} — ${Number(line.ordered_quantity)} ${line.unit}`);
+    lines.push(`• ${line.product_name} — ${formatQuantity(line.ordered_quantity)} ${line.unit}`);
   }
   return lines.join('\n');
 }

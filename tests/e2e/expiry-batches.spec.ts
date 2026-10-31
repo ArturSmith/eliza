@@ -53,7 +53,7 @@ test('receives one product with multiple expiry dates and preserves batch quanti
   await dialog.getByRole('button', { name: 'Add expiry batch', exact: true }).click();
   await batches.nth(1).getByLabel('Quantity', { exact: true }).fill('5');
   await batches.nth(1).getByLabel('Expiry date (optional)').fill('2036-01-01');
-  await expect(dialog.getByText('Total received: 10.000 piece')).toBeVisible();
+  await expect(dialog.getByText('Total received: 10 piece')).toBeVisible();
   await dialog.getByRole('button', { name: 'Add expiry batch', exact: true }).click();
   await dialog.getByRole('button', { name: 'Record delivery', exact: true }).click();
   await expect(

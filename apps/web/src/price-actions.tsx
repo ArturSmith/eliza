@@ -1,3 +1,4 @@
+import { formatQuantity } from './quantity-format';
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import JsBarcode from 'jsbarcode';
@@ -322,7 +323,7 @@ export function PriceActions({
                   {details.data.offers.map((offer) => (
                     <div key={offer.id} className="cash-history-row">
                       <span>
-                        {offer.stock} {t('remaining')} · {formatMoney(offer.price, currency)}
+                        {formatQuantity(offer.stock)} {t('remaining')} · {formatMoney(offer.price, currency)}
                         <small>
                           {offer.barcode}
                           {offer.expiryDate ? ` · ${t('Expires')} ${offer.expiryDate}` : ''}

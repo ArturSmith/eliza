@@ -10,7 +10,7 @@ it('translates dynamic alerts without altering business names', () => {
     'Необычная активность возвратов: Register Alpha',
   );
   expect(dashboardText('Fruit revenue')).toBe('Выручка: Fruit');
-  expect(dashboardText('2.5 days left')).toBe('Осталось дней: 2.5');
+  expect(dashboardText('2.5 days left')).toBe('Осталось дней: 2,5');
   expect(dashboardText('Retail prices have already been reviewed.')).toBe(
     'Розничные цены уже пересмотрены.',
   );

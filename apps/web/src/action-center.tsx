@@ -1,3 +1,4 @@
+import { formatQuantity } from './quantity-format';
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
@@ -408,7 +409,7 @@ export function ActionCenterPage() {
                         : t('Never sold')}
                     </td>
                     <td>{r.daysWithoutSale}</td>
-                    <td>{r.quantity}</td>
+                    <td>{formatQuantity(r.quantity)}</td>
                     <td>{r.suppliers || '—'}</td>
                     <td>
                       {r.unitCost === null

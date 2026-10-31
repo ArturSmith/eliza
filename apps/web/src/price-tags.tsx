@@ -1,3 +1,4 @@
+import { formatQuantity } from './quantity-format';
 import { TagLayoutEditor, useStoredLabelLayout } from './printing/tag-layout-editor';
 import { labelLayoutStorageKey } from './printing/tag-layout';
 import { renderLabel } from './printing/label-image';
@@ -514,7 +515,7 @@ export function PriceTagsPage() {
           : []),
         ...(weightLabel
           ? [
-              t('Net weight (kg)') + ': ' + weightLabel.weight,
+              t('Net weight (kg)') + ': ' + formatQuantity(weightLabel.weight),
               formatLabelPrice(product.price) + '/' + t('kg'),
             ]
           : [t(product.unit)]),
@@ -1073,7 +1074,7 @@ export function PriceTagsPage() {
                   <strong style={{ fontSize: `${design.nameFontPt}pt` }}>{weightLabel.name}</strong>
                   {design.showSku && <small>{weightLabel.sku}</small>}
                   <div>
-                    {t('Net weight (kg)')}: {weightLabel.weight}
+                    {t('Net weight (kg)')}: {formatQuantity(weightLabel.weight)}
                   </div>
                   <small>
                     {price(weightLabel.price)}/{t('kg')}

@@ -1,3 +1,4 @@
+import { formatQuantity } from './quantity-format';
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -137,7 +138,7 @@ export function DocumentPurchasePreparation({ data, documentId }: { data: Docume
       <p>{t('I matched {matched} products; {unmatched} need your review.', { matched: lines.filter((line) => line.productId).length, unmatched: lines.filter((line) => !line.productId).length })}</p>
       <p>{t('Select a product below to open the prefilled purchase order and review that row.')}</p>
       {preview.rows.some((row) => row.derivedCost) && <p className="notice">{t('Some unit costs were estimated from line total divided by quantity. Check tax and costs against the original document before saving.')}</p>}
-      {lines.map((line, index) => <button type="button" className="document-chat-product" key={index} onClick={() => openOrder(index)}><span><strong>{line.source?.description}</strong><small>{line.productId ? t('Matched to product in catalogue') : t('Needs product review')}</small><small>{t('Read quantity: {quantity}; unit cost: {cost}', { quantity: line.quantity || '—', cost: line.unitCost || '—' })}</small></span><span aria-hidden="true">→</span></button>)}
+      {lines.map((line, index) => <button type="button" className="document-chat-product" key={index} onClick={() => openOrder(index)}><span><strong>{line.source?.description}</strong><small>{line.productId ? t('Matched to product in catalogue') : t('Needs product review')}</small><small>{t('Read quantity: {quantity}; unit cost: {cost}', { quantity: formatQuantity(line.quantity), cost: line.unitCost || '—' })}</small></span><span aria-hidden="true">→</span></button>)}
       <Button type="button" onClick={() => openOrder(0)}>{t('Review full purchase order')}</Button>
     </div>}
     <Dialog elevated open={addingSupplier} onOpenChange={setAddingSupplier} title={t('Add supplier')} description={t('Keep supplier details available for your team.')}>

@@ -1,3 +1,4 @@
+import { formatQuantity } from './quantity-format';
 import { t, useLanguage, getLocale } from './i18n';
 import { useState } from 'react';
 import { ErrorMessage } from './forms';
@@ -64,7 +65,7 @@ export function ReceiptView({
             <div>
               <strong>{l.name}</strong>
               <small>
-                {l.quantity} {t(l.unit ?? '')} ×{' '}
+                {formatQuantity(l.quantity)} {t(l.unit ?? '')} ×{' '}
                 {formatMoney(
                   Number(l.discount) > 0 && l.baseUnitPrice ? l.baseUnitPrice : l.price,
                   receipt.currency,

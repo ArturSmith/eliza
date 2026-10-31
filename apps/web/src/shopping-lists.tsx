@@ -1,3 +1,4 @@
+import { formatQuantity, quantityInputValue } from './quantity-format';
 import { useState, useRef } from 'react';
 import { GripVertical } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -318,7 +319,7 @@ function ShoppingEditor({ list, onDeleted }: { list: ShoppingList; onDeleted: ()
     productId ? (offers.data?.filter((o) => o.productId === productId) ?? []) : [];
   const [name, setName] = useState(list.name),
     [notes, setNotes] = useState(list.notes),
-    [lines, setLines] = useState(list.lines);
+    [lines, setLines] = useState(() => list.lines.map((line) => ({ ...line, quantity: quantityInputValue(line.quantity) })));
   const [sections, setSections] = useState(list.sections ?? []);
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const pointerDrag = useRef<{ id: string; x: number; y: number; active: boolean } | null>(null);
@@ -417,7 +418,7 @@ function ShoppingEditor({ list, onDeleted }: { list: ShoppingList; onDeleted: ()
         sectionId,
         label: '',
         target,
-        quantity: suggestedOrderQuantity(target, p.stock, p.incoming, p.drafts, p.unit),
+        quantity: quantityInputValue(suggestedOrderQuantity(target, p.stock, p.incoming, p.drafts, p.unit)),
         supplierId: supplier?.active ? supplier.id : null,
         supplierName: supplier?.name ?? null,
         supplierActive: supplier?.active ?? null,
@@ -784,7 +785,7 @@ function ShoppingEditor({ list, onDeleted }: { list: ShoppingList; onDeleted: ()
                           </div>
                           <div className="shopping-line-side">
                             <span>
-                              {Number(line.quantity)} {t(line.unit)}
+                              {formatQuantity(line.quantity)} {t(line.unit)}
                             </span>
                             <span className="badge badge-green">{t('Ordered')}</span>
                           </div>

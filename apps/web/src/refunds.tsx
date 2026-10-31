@@ -1,3 +1,4 @@
+import { formatQuantity } from './quantity-format';
 import { PageOnboarding } from './onboarding/PageOnboarding';
 import { t, useLanguage, getLocale } from './i18n';
 import { useState } from 'react';
@@ -233,7 +234,7 @@ export function ReceiptDetailPage({
                     </p>
                     {r.lines.map((l, i) => (
                       <p key={i}>
-                        {l.name}: {l.quantity} ·{' '}
+                        {l.name}: {formatQuantity(l.quantity)} ·{' '}
                         {l.restock ? t('Returned to stock') : t('Not restocked')} ·{' '}
                         {formatMoney(l.total, detail.data.receipt.currency)}
                       </p>
@@ -374,7 +375,7 @@ function RefundForm({ context, detail }: { context: PosContext; detail: Detail }
                   </small>
                 )}
                 <small>
-                  {t('Sold')}: {l.quantity} {t(l.unit ?? '')}
+                  {t('Sold')}: {formatQuantity(l.quantity)} {t(l.unit ?? '')}
                 </small>
               </div>
               <Field label={t('Quantity to return')}>

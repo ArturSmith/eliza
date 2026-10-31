@@ -1,3 +1,4 @@
+import { formatQuantity } from '../quantity-format';
 import { getLocale, t } from './index';
 const templates = [
   '{n} products are out of stock',
@@ -54,7 +55,9 @@ export function dashboardText(value: string): string {
       })
       .join('');
     const match = new RegExp('^' + pattern + '$').exec(value);
-    if (match) return t(template, Object.fromEntries(names.map((name, i) => [name, match[i + 1]])));
+    if (match) return t(template, Object.fromEntries(names.map((name, i) => [
+      name, name === 'name' ? match[i + 1] : formatQuantity(match[i + 1]),
+    ])));
   }
   return t(value);
 }

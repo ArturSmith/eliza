@@ -1,3 +1,4 @@
+import { formatQuantity, quantityInputValue } from './quantity-format';
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
@@ -70,7 +71,7 @@ export function OfferDialog({
   const [supplierId, setSupplierId] = useState(offer?.supplierId ?? fixedSupplierId ?? '');
   const [productId, setProductId] = useState(offer?.productId ?? fixedProductId ?? '');
   const [supplierSku, setSupplierSku] = useState(offer?.supplierSku ?? '');
-  const [packSize, setPackSize] = useState(offer?.packSize ?? '1');
+  const [packSize, setPackSize] = useState(() => quantityInputValue(offer?.packSize ?? '1'));
   const [packCost, setPackCost] = useState(offer?.packCost ?? '');
   const [leadTime, setLeadTime] = useState(offer?.leadTimeDays?.toString() ?? '');
   const [error, setError] = useState<unknown>(null);
@@ -275,7 +276,7 @@ export function ProductSuppliers({ productId, unit }: { productId: string; unit:
                   <td>
                     {formatMoney(offer.packCost, currency)}
                     <small>
-                      {Number(offer.packSize)} × {t(offer.unit)}
+                      {formatQuantity(offer.packSize)} × {t(offer.unit)}
                     </small>
                   </td>
                   <td className="numeric">
@@ -399,7 +400,7 @@ export function SupplierCatalog({ supplierId }: { supplierId: string }) {
                   <td>
                     {formatMoney(offer.packCost, currency)}
                     <small>
-                      {Number(offer.packSize)} × {t(offer.unit)}
+                      {formatQuantity(offer.packSize)} × {t(offer.unit)}
                     </small>
                   </td>
                   <td className="numeric">

@@ -1,3 +1,4 @@
+import { formatQuantity } from './quantity-format';
 import { advancedFeatures } from './advanced-features';
 import { type ScaleBarcodeSettings, type TagDesign } from '@eliza/contracts';
 import { Ean13Barcode } from './ean13-barcode';
@@ -466,7 +467,7 @@ function Editor({ profile }: { profile: Profile }) {
                   {t('Sample weight product')}
                 </strong>
                 {value.tagDesign.showSku && <small>SKU-002</small>}
-                <span>0.500 {t('kg')}</span>
+                <span>{formatQuantity('0.500')} {t('kg')}</span>
                 {value.tagDesign.showWeightUnitPrice && (
                   <small>
                     99.00 {value.currency}/{t('kg')}

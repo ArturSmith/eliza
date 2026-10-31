@@ -1,3 +1,4 @@
+import { formatQuantity } from './quantity-format';
 import { PageOnboarding } from './onboarding/PageOnboarding';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -217,7 +218,7 @@ export function PriceCheckPage() {
                     </p>
                     {product.quantity && product.totalPrice && (
                       <p className="price-check-weight">
-                        {product.quantity} {t('kg')} · {t('Package price')}:{' '}
+                        {formatQuantity(product.quantity)} {t('kg')} · {t('Package price')}:{' '}
                         <strong>{formatMoney(product.totalPrice, currency)}</strong>
                       </p>
                     )}

@@ -1,3 +1,4 @@
+import { formatQuantity } from './quantity-format';
 import { metricFormula } from './metric-formulas';
 import { t, useLanguage, getLocale } from './i18n';
 import { AnalyticsCharts } from './analytics';
@@ -330,7 +331,7 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                       <td>{formatMoney(r.average, data.currency)}</td>
                       {filter.group === 'product' && (
                         <td>
-                          {r.quantity} {t(r.unit ?? '')}
+                          {formatQuantity(r.quantity)} {t(r.unit ?? '')}
                         </td>
                       )}
                       {[r.cash, r.card, r.discount, r.tax].map((v, i) => (

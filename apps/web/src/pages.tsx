@@ -1,3 +1,4 @@
+import { formatQuantity } from './quantity-format';
 import { isFeatureVisible } from './advanced-features';
 import { canOpenPromotions } from './promotions-access';
 import { PageOnboarding } from './onboarding/PageOnboarding';
@@ -512,7 +513,7 @@ export function Overview() {
                   <Badge tone={Number(p.stock) === 0 ? 'gray' : 'amber'}>
                     {Number(p.stock) === 0
                       ? t('Out of stock')
-                      : t('{value0} left', { value0: Number(p.stock) })}
+                      : t('{value0} left', { value0: formatQuantity(p.stock) })}
                   </Badge>
                 </div>
               ))}
@@ -807,7 +808,7 @@ export function ProductsPage() {
                       </small>
                     </td>
                     <td className="numeric">
-                      {Number(p.stock)}
+                      {formatQuantity(p.stock)}
                       <small>{t(p.unit ?? '')}</small>
                     </td>
                     <td className="code-cell">
@@ -1055,9 +1056,7 @@ export function InventoryPage() {
             {batches.data.batches.map((batch) => (
               <div className="stock-batch-row" key={batch.id}>
                 <strong>
-                  {new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 3 }).format(
-                    Number(batch.quantity),
-                  )}
+                  {formatQuantity(batch.quantity)}
                 </strong>
                 <span>
                   {'— '}
@@ -1175,10 +1174,10 @@ export function InventoryPage() {
                           <ArrowUpRight size={15} />
                         )}{' '}
                         {Number(m.quantity) > 0 ? '+' : ''}
-                        {Number(m.quantity)}
+                        {formatQuantity(m.quantity)}
                       </span>
                     </td>
-                    <td>{Number(m.balance)}</td>
+                    <td>{formatQuantity(m.balance)}</td>
                     <td className="reason">
                       {t(m.reason)}
                       {m.notes && <small>{m.notes}</small>}

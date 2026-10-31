@@ -1,3 +1,4 @@
+import { formatQuantity, quantityInputValue } from './quantity-format';
 import { HistoryPagination, type HistoryPage } from './history-pagination';
 import type { DocumentDraftLine } from './purchase-document';
 import { readDocumentHandoff } from './document-purchase';
@@ -950,7 +951,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
     handoff?.lines ??
       order?.lines.map((l) => ({
         productId: l.product_id,
-        quantity: l.ordered_quantity,
+        quantity: quantityInputValue(l.ordered_quantity),
         unitCost: l.unit_cost,
         taxRate: l.tax_rate,
         sellingPrice:
@@ -1223,7 +1224,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
                           </small>
                           <small>
                             {t('Read quantity: {quantity}; unit cost: {cost}', {
-                              quantity: line.source.quantity || '—',
+                              quantity: formatQuantity(line.source.quantity),
                               cost: line.source.unitCost || '—',
                             })}
                           </small>
@@ -1819,14 +1820,14 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
                       <small>{l.sku}</small>
                     </td>
                     <td className="table-number-column">
-                      {Number(l.ordered_quantity)} {t(l.unit ?? '')}
+                      {formatQuantity(l.ordered_quantity)} {t(l.unit ?? '')}
                     </td>
                     <td className="table-number-column">
-                      {Number(l.received_quantity)} {t(l.unit ?? '')}
+                      {formatQuantity(l.received_quantity)} {t(l.unit ?? '')}
                     </td>
                     {p.status === 'closed' && (
                       <td className="table-number-column">
-                        {Number(
+                        {formatQuantity(
                           fromScaled(
                             toScaled(l.ordered_quantity, 3) - toScaled(l.received_quantity, 3),
                             3,
@@ -1899,7 +1900,7 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
                           <li key={l.id}>
                             <span>{l.product_name}</span>
                             <span className="muted">
-                              {Number(l.quantity)} {t(l.unit ?? '')} ×{' '}
+                              {formatQuantity(l.quantity)} {t(l.unit ?? '')} ×{' '}
                               {formatMoney(l.unit_cost, currency)} {t('excl. tax ')}
                               {!l.expiry_batches?.length &&
                                 l.expiry_date &&
@@ -1909,7 +1910,7 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
                               <ul className="delivery-expiry-history">
                                 {l.expiry_batches.map((batch, index) => (
                                   <li key={index}>
-                                    {Number(batch.quantity)} {t(l.unit ?? '')} —{' '}
+                                    {formatQuantity(batch.quantity)} {t(l.unit ?? '')} —{' '}
                                     {batch.expiryDate
                                       ? `${t('Expiry date')}: ${batch.expiryDate}`
                                       : t('Unknown expiry')}
@@ -2187,10 +2188,10 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
               <header className="delivery-product-header">
                 <h3>{l.product_name}</h3>
                 <span className="muted">
-                  {fromScaled(
+                  {formatQuantity(fromScaled(
                     toScaled(l.ordered_quantity, 3) - toScaled(l.received_quantity, 3),
                     3,
-                  )}{' '}
+                  ))}{' '}
                   {t(l.unit ?? '')} {t('remaining')}
                 </span>
               </header>
@@ -2245,7 +2246,7 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
                 </Button>
                 {batchRows(l.id).length > 1 && (
                   <p className="muted">
-                    {t('Total received')}: {receivedQuantity(l.id) || '—'} {t(l.unit ?? '')}
+                    {t('Total received')}: {formatQuantity(receivedQuantity(l.id))} {t(l.unit ?? '')}
                   </p>
                 )}
               </div>
@@ -2352,7 +2353,7 @@ function CloseRemainder({ order }: { order: Order }) {
             .map((line) => (
               <li key={line.id}>
                 {line.product_name}:{' '}
-                {Number(
+                {formatQuantity(
                   fromScaled(
                     toScaled(line.ordered_quantity, 3) - toScaled(line.received_quantity, 3),
                     3,

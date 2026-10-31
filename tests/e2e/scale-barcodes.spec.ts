@@ -66,15 +66,15 @@ test('scans scale labels into exact kilogram quantities', async ({ page }) => {
     ((10 - ([...body].reduce((sum, d, i) => sum + Number(d) * (i % 2 ? 3 : 1), 0) % 10)) % 10);
   await page.getByLabel('Scan or search products').fill(barcode);
   await page.getByLabel('Scan or search products').press('Enter');
-  await expect(page.getByLabel('Quantity for Apples')).toHaveValue('1.250');
+  await expect(page.getByLabel('Quantity for Apples')).toHaveValue('1.25');
   await page.getByLabel('Scan or search products').fill(barcode);
   await page.getByLabel('Scan or search products').press('Enter');
-  await expect(page.getByLabel('Quantity for Apples')).toHaveValue('2.500');
+  await expect(page.getByLabel('Quantity for Apples')).toHaveValue('2.5');
   await page
     .getByLabel('Scan or search products')
     .fill(barcode.slice(0, 12) + ((Number(barcode[12]) + 1) % 10));
   await page.getByLabel('Scan or search products').press('Enter');
   await expect(page.getByText('Scale barcode checksum is invalid.', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('Quantity for Apples')).toHaveValue('2.500');
+  await expect(page.getByLabel('Quantity for Apples')).toHaveValue('2.5');
   expect(errors).toEqual([]);
 });

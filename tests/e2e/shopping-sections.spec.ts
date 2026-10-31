@@ -36,6 +36,7 @@ test('creates sections, moves items and renames headings', async ({ page }) => {
   await page.reload();
   await page.getByRole('button', { name: 'Open', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Store supplies', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Quantity to buy')).toHaveValue('1');
   await expect(
     page
       .locator('.shopping-section')

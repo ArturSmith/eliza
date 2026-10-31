@@ -1,3 +1,4 @@
+import { formatQuantity } from './quantity-format';
 import { t, useLanguage, getLocale } from './i18n';
 import { useState } from 'react';
 import { type Summary, type Totals, type Group, groups, rowLabel } from './sales-summary';
@@ -31,7 +32,7 @@ function Bars({
           </div>
           <small className="muted">
             {r.transactions} {t(' matching receipts ')}
-            {group === 'product' ? ' · ' + r.quantity + ' ' + t(r.unit ?? '') : ''}
+            {group === 'product' ? ' · ' + formatQuantity(r.quantity) + ' ' + t(r.unit ?? '') : ''}
           </small>
         </li>
       ))}

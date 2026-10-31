@@ -1,3 +1,4 @@
+import { formatQuantity, quantityInputValue } from './quantity-format';
 import { BrandLogo } from './brand';
 import { t, useLanguage, translateError } from './i18n';
 import {
@@ -610,7 +611,7 @@ export function ProductForm({
             <input
               name="minStock"
               inputMode="decimal"
-              defaultValue={initial?.minStock ?? '5'}
+              defaultValue={quantityInputValue(initial?.minStock ?? '5')}
               required
             />
           </Field>
@@ -886,7 +887,7 @@ export function AdjustmentForm({ products, onDone }: { products: Product[]; onDo
           value={
             selected && {
               title: selected.name,
-              subtitle: `${Number(selected.stock)} ${t(selected.unit)} ${t('on hand')}`,
+              subtitle: `${formatQuantity(selected.stock)} ${t(selected.unit)} ${t('on hand')}`,
             }
           }
           options={products
@@ -894,7 +895,7 @@ export function AdjustmentForm({ products, onDone }: { products: Product[]; onDo
             .map((p) => ({
               id: p.id,
               title: p.name,
-              subtitle: `${p.sku} · ${Number(p.stock)} ${t(p.unit ?? '')} ${t('on hand')}`,
+              subtitle: `${p.sku} · ${formatQuantity(p.stock)} ${t(p.unit ?? '')} ${t('on hand')}`,
               keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
             }))}
           onSelect={(id) => {
