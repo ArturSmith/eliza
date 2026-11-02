@@ -18,25 +18,30 @@ test('language persists, switches across tabs, and preserves forms and business 
   await page.getByRole('link', { name: 'Products', exact: true }).click();
   const second = await context.newPage();
   await second.goto('/settings');
-  await page.getByRole('button', { name: 'Add product', exact: true }).first().click();
+  await page.getByRole('link', { name: 'Add product', exact: true }).first().click();
   const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Product name', { exact: true }).fill('Cash');
-  await dialog.getByLabel('Description (optional)').fill('Original description');
-  await dialog.getByLabel('SKU', { exact: true }).fill('LANG-001');
-  await dialog.getByLabel('Category', { exact: true }).fill('Sales');
-  await dialog.getByLabel('Purchase cost', { exact: true }).fill('15');
-  await dialog.getByLabel('Selling price', { exact: true }).fill('30');
+  const productForm = page.locator('.product-details-page');
+  await productForm.getByLabel('Product name', { exact: true }).fill('Cash');
+  await productForm.getByLabel('Description (optional)').fill('Original description');
+  await productForm.getByLabel('SKU', { exact: true }).fill('LANG-001');
+  await productForm.getByLabel('Category', { exact: true }).fill('Sales');
+  await productForm.getByLabel('Unit', { exact: true }).selectOption('piece');
+  await productForm.getByLabel('Purchase cost (optional)', { exact: true }).fill('15');
+  await productForm.getByLabel('Selling price (optional)', { exact: true }).fill('30');
   await second.getByLabel('Language', { exact: true }).selectOption('ru');
-  await expect(dialog.getByLabel('Название товара', { exact: true })).toHaveValue('Cash');
-  await expect(dialog.getByLabel('Описание (необязательно)')).toHaveValue('Original description');
-  await expect(dialog.getByLabel('Категория', { exact: true })).toHaveValue('Sales');
-  await expect(dialog.getByLabel('Единица измерения', { exact: true })).toHaveValue('piece');
-  await dialog.getByRole('button', { name: 'Создать товар', exact: true }).click();
-  await expect(dialog).not.toBeVisible();
+  await expect(productForm.getByLabel('Название товара', { exact: true })).toHaveValue('Cash');
+  await expect(productForm.getByLabel('Описание (необязательно)')).toHaveValue(
+    'Original description',
+  );
+  await expect(productForm.getByLabel('Категория', { exact: true })).toHaveValue('Sales');
+  await expect(productForm.getByLabel('Единица измерения', { exact: true })).toHaveValue('piece');
+  await productForm.getByRole('button', { name: 'Добавить товар', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Изменить товар', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Назад к товарам', exact: true }).click();
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
   await expect(page.getByRole('heading', { name: 'Товары', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Изменить: Cash' })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Просмотреть Cash' })).toBeVisible();
   const products = await page.request.get('/api/products').then((r) => r.json());
   expect(products[0]).toMatchObject({
     name: 'Cash',

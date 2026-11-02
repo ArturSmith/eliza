@@ -1,3 +1,4 @@
+import { normalizeProductGallery } from './product-gallery.js';
 import {
   Body,
   Controller,
@@ -96,6 +97,7 @@ export class CatalogController {
         ? { taxRate: defaults.default_tax_rate, ...input }
         : input,
     );
+    Object.assign(body, normalizeProductGallery(body));
     const { store, user, device } = req.context;
     return this.database.db.transaction(async (tx) => {
       await tx.execute(
@@ -139,9 +141,9 @@ export class CatalogController {
         deviceId: device.id,
         action: 'Product created',
         entityId: product.id,
-        details: { ...body, image: body.image ? '[photo added]' : '', plu, barcodes: values },
+        details: { ...body, image: body.image ? '[photo added]' : '', images: `[${body.images?.length ?? 0} photos]`, plu, barcodes: values },
       });
-      return { ...product, plu: plu ?? '', barcodes: values };
+      return { ...product, cost: req.context.user.permissions.includes('costs.read') ? product.cost : null, plu: plu ?? '', barcodes: values };
     });
   }
 
@@ -162,6 +164,9 @@ export class CatalogController {
         .where(and(eq(products.id, id), eq(products.storeId, store.id)))
         .for('update');
       if (!old) throw new NotFoundException('Product not found.');
+      Object.assign(body, normalizeProductGallery(body, old));
+      // A catalog editor without cost access must not clear or overwrite a hidden cost.
+      if (!req.context.user.permissions.includes('costs.read')) body.cost = old.cost;
       if (old.baseProductId)
         throw new BadRequestException('Edit limited-price labels from the parent product.');
       if (old.unit !== body.unit)
@@ -212,18 +217,20 @@ export class CatalogController {
           before: {
             ...old,
             image: old.image ? '[photo present]' : '',
+            images: `[${old.images.length} photos]`,
             barcodes: previousCodes.map((b) => b.value),
           },
           after: {
             ...body,
             image: (body.image ?? old.image) ? '[photo present]' : '',
+            images: `[${body.images?.length ?? old.images.length} photos]`,
             photoChanged: body.image !== undefined && body.image !== old.image,
             plu,
             barcodes: values,
           },
         },
       });
-      return { ...product, plu: plu ?? '', barcodes: values };
+      return { ...product, cost: req.context.user.permissions.includes('costs.read') ? product.cost : null, plu: plu ?? '', barcodes: values };
     });
   }
   @Delete(':id') @Require('catalog.write') async remove(

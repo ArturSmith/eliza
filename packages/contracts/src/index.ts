@@ -79,6 +79,14 @@ export const loginSchema = z.object({
     .transform((s) => s.toLowerCase()),
   password: z.string().min(1).max(128),
 });
+export const maxProductPhotos = 6;
+export const productImageSchema = z
+  .string()
+  .max(60000)
+  .refine(
+    (value) => /^data:image\/jpeg;base64,\/9j\/[A-Za-z0-9+/]*={0,2}$/.test(value),
+    'Choose a valid product photo',
+  );
 export const productSchema = z.object({
   description: z.string().trim().max(2000).optional(),
   source: z
@@ -90,14 +98,8 @@ export const productSchema = z.object({
     })
     .nullable()
     .optional(),
-  image: z
-    .string()
-    .max(60000)
-    .refine(
-      (v) => v === '' || /^data:image\/jpeg;base64,\/9j\/[A-Za-z0-9+/]*={0,2}$/.test(v),
-      'Choose a valid product photo',
-    )
-    .optional(),
+  image: z.union([productImageSchema, z.literal('')]).optional(),
+  images: z.array(productImageSchema).max(maxProductPhotos).optional(),
   name: short,
   sku: short,
   category: short,

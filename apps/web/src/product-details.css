@@ -1,0 +1,316 @@
+.product-details-page {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.product-details-navigation {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.product-details-navigation nav {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.product-details-navigation nav strong {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.product-details-navigation nav svg {
+  flex-shrink: 0;
+}
+.product-details-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.product-details-main,
+.product-details-aside {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.product-details-section {
+  display: grid;
+  gap: 20px;
+  padding: 24px;
+  min-width: 0;
+}
+.product-details-section h1,
+.product-details-section h2 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.4;
+}
+.product-details-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 16px;
+  margin: 0;
+}
+.product-detail-field-wide {
+  grid-column: 1 / -1;
+}
+.product-details-photo {
+  position: relative;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--page);
+  color: var(--muted);
+}
+.product-details-photo img {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  padding: 12px;
+}
+.product-details-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.product-details-actions {
+  gap: 10px;
+}
+.product-details-page a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.product-details-suppliers .panel-heading {
+  border-bottom: 0;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.product-details-suppliers .panel-heading p {
+  flex-basis: 100%;
+  order: 2;
+  font-size: 11px;
+  color: var(--muted);
+}
+.product-supplier-cards {
+  display: grid;
+  gap: 10px;
+  padding: 0 24px 24px;
+}
+.product-supplier-card {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--page);
+}
+.product-supplier-card > svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.product-supplier-name {
+  display: grid;
+  gap: 5px;
+  flex: 1 1 100px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.product-supplier-name strong,
+.product-supplier-price strong {
+  font-size: 13px;
+}
+.product-supplier-name small,
+.product-supplier-price small {
+  color: var(--muted);
+  font-size: 11px;
+}
+.product-supplier-price {
+  display: grid;
+  justify-items: end;
+  gap: 4px;
+}
+.product-supplier-price .badge {
+  font-size: 9px;
+}
+@media (max-width: 1000px) {
+  .product-details-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .product-details-page,
+  .product-details-main,
+  .product-details-aside {
+    gap: 16px;
+  }
+  .product-details-section {
+    padding: 18px;
+  }
+  .product-details-fields {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+  }
+  .product-details-navigation nav {
+    flex-basis: 100%;
+  }
+  .product-supplier-cards {
+    padding: 0 18px 18px;
+  }
+}
+.product-details-fields > .field,
+.product-details-fields > div > .field {
+  margin: 0;
+}
+.product-details-page .field > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.product-details-page .field input,
+.product-details-page .field textarea,
+.product-details-page .field select {
+  width: 100%;
+  min-width: 0;
+  border-radius: 9px;
+  font-size: 14px;
+}
+.product-details-page .field input[readonly],
+.product-details-page .field textarea[readonly],
+.product-details-page .field select:disabled {
+  border-color: transparent;
+  background: var(--page);
+  color: var(--text);
+  opacity: 1;
+}
+.product-detail-value {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 44px;
+  padding: 12px;
+  border-radius: 9px;
+  background: var(--page);
+  font-size: 14px;
+}
+.product-detail-value small {
+  color: var(--muted);
+}
+.product-photo-thumbnails {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.product-photo-thumbnail,
+.product-photo-add {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  aspect-ratio: 1;
+  padding: 3px;
+  border: 2px solid var(--border);
+  border-radius: 9px;
+  background: var(--page);
+  color: var(--accent);
+  cursor: pointer;
+  overflow: hidden;
+}
+.product-photo-thumbnail[aria-pressed='true'] {
+  border-color: var(--accent);
+}
+.product-photo-thumbnail img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  border-radius: 5px;
+}
+.product-photo-add {
+  border-style: dashed;
+}
+.product-photo-add:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.product-photo-thumbnail:focus-visible,
+.product-photo-add:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.product-photo-actions,
+.product-details-barcode-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.product-detail-save-actions {
+  display: grid;
+  gap: 8px;
+}
+.product-details-page .barcode-lookup {
+  margin: 0;
+}
+
+.product-details-page textarea[readonly] {
+  resize: none;
+}
+
+/* Share label, control and hint tracks across each pair, even when a label wraps. */
+.product-details-fields > .field {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 3;
+  row-gap: 8px;
+}
+.product-details-fields > .field > :is(input, select, textarea, output) {
+  align-self: stretch;
+}
+
+.product-stock-tools {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 6px;
+}
+.product-stock-adjust {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.product-stock-adjust h3 {
+  margin: 0 0 12px;
+  font-size: 14px;
+}
+
+.product-stock-field {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 3;
+  row-gap: 8px;
+  min-width: 0;
+}
+.product-stock-field > .field {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 2;
+  row-gap: 8px;
+}
+.product-stock-tools {
+  grid-row: 3;
+}

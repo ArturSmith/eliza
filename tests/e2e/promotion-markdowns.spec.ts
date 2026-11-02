@@ -64,10 +64,11 @@ test('creates and manages unit markdowns in Promotions and keeps checkout costs 
     reason: 'opening_balance',
   });
   await page.goto('/products');
-  await page.getByRole('button', { name: 'Edit Yogurt', exact: true }).click();
-  const edit = page.getByRole('dialog');
+  await page.getByRole('link', { name: 'View Yogurt', exact: true }).click();
+  await page.getByRole('button', { name: 'Edit product', exact: true }).click();
+  const edit = page.locator('.product-details-page');
   await expect(edit.getByRole('region', { name: 'Unit markdown', exact: true })).toHaveCount(0);
-  await edit.getByRole('button', { name: 'Close dialog' }).click();
+  await edit.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.goto('/promotions');
   await page.getByRole('checkbox', { name: /Yogurt/ }).check();
   await page.getByLabel('Discount type').selectOption('FIXED_PRICE');

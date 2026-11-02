@@ -1,3 +1,4 @@
+import { ProductDetailsPage } from './product-details';
 import { ReplenishmentPage } from './replenishment';
 import { ShoppingListsPage } from './shopping-lists';
 import { t, useLanguage } from './i18n';
@@ -168,6 +169,9 @@ const routes = [
   createRoute({ getParentRoute: () => root, path: '/shifts', component: ShiftsPage }),
   createRoute({ getParentRoute: () => root, path: '/', component: Overview }),
   createRoute({ getParentRoute: () => root, path: '/products', component: ProductsPage }),
+  createRoute({ getParentRoute: () => root, path: '/products/new', component: () => <ProductDetailsPage create /> }),
+  createRoute({ getParentRoute: () => root, path: '/products/$id', component: ProductDetailsPage }),
+  createRoute({ getParentRoute: () => root, path: '/products/$id/edit', component: () => <ProductDetailsPage edit /> }),
   createRoute({ getParentRoute: () => root, path: '/promotions', component: PromotionsPage }),
   createRoute({ getParentRoute: () => root, path: '/inventory', component: InventoryPage }),
   createRoute({ getParentRoute: () => root, path: '/audit', component: AuditPage }),

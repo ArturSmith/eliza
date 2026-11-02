@@ -1,3 +1,4 @@
+import { ProductCatalogCard } from './product-catalog-card';
 import { formatQuantity } from './quantity-format';
 import { isFeatureVisible } from './advanced-features';
 import { canOpenPromotions } from './promotions-access';
@@ -37,7 +38,6 @@ import {
   Truck,
   Users,
   X,
-  Pencil,
   Trash2,
   AlertTriangle,
   Menu,
@@ -54,8 +54,7 @@ import {
   useAudit,
   useDevices,
 } from './api';
-import { AuthForm, AddProduct, ProductForm, AdjustmentForm, ErrorMessage, Field } from './forms';
-import { ProductSuppliers } from './supplier-products';
+import { AuthForm, AdjustmentForm, ErrorMessage, Field } from './forms';
 import { TodayOperations } from './owner-dashboard';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
@@ -266,7 +265,7 @@ export function Shell() {
     (item.to === '/promotions'
       ? canOpenPromotions(user.permissions)
       : user.permissions.includes(item.permission));
-  const current = nav.find((n) => n.to === location.pathname);
+  const current = nav.find((n) => n.to === location.pathname || (n.to === '/products' && location.pathname.startsWith('/products/')));
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobile ? 'mobile-open' : ''}`}>
@@ -317,14 +316,14 @@ export function Shell() {
                     <Link
                       key={to}
                       to={to}
-                      activeOptions={{ exact: true }}
+                      activeOptions={{ exact: to !== '/products' }}
                       activeProps={{ className: 'nav-link active' }}
                       className="nav-link"
                       onClick={() => setMobile(false)}
                     >
                       <Icon size={19} />
                       {t(label)}
-                      {to === location.pathname && <span className="nav-dot" />}
+                      {to === current?.to && <span className="nav-dot" />}
                     </Link>
                   ))}
                 </div>
@@ -698,176 +697,162 @@ export function ProductsPage() {
   const canWrite = useCan('catalog.write');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('All categories');
-  const [edit, setEdit] = useState<Product | null>(null);
-  const [offersFor, setOffersFor] = useState<Product | null>(null);
-  const [status, setStatus] = useState<Product | null>(null);
-  const [remove, setRemove] = useState<Product | null>(null);
+  const [stockFilter, setStockFilter] = useState('all');
+  const [activityFilter, setActivityFilter] = useState('all');
+  const [sort, setSort] = useState('newest');
   const [barcodeFor, setBarcodeFor] = useState<Product | null>(null);
-  const removal = useMutation({
-    mutationFn: (product: Product) => api('/products/' + product.id, undefined, 'DELETE'),
-    onSuccess: () => {
-      void refresh();
-      setRemove(null);
-    },
-  });
-
-  const mutation = useMutation({
-    mutationFn: (p: Product) => api(`/products/${p.id}/status`, { active: !p.active }, 'PATCH'),
-    onSuccess: () => {
-      void refresh();
-      setStatus(null);
-    },
-  });
-  const rows = (query.data ?? []).filter(
-    (p) =>
-      (category === 'All categories' || p.category === category) &&
-      [p.name, p.sku, p.plu, ...p.barcodes].some((v) =>
-        v.toLowerCase().includes(search.toLowerCase()),
-      ),
-  );
+  const rows = (query.data ?? [])
+    .filter((p) => {
+      const stock = toScaled(p.stock, 3);
+      return (
+        (category === 'All categories' || p.category === category) &&
+        (activityFilter === 'all' || p.active === (activityFilter === 'active')) &&
+        (stockFilter === 'all' ||
+          (stockFilter === 'in_stock' && stock > 0n) ||
+          (stockFilter === 'low' && stock > 0n && stock <= toScaled(p.minStock, 3)) ||
+          (stockFilter === 'out' && stock <= 0n)) &&
+        [p.name, p.sku, p.plu, ...p.barcodes].some((v) =>
+          v.toLowerCase().includes(search.trim().toLowerCase()),
+        )
+      );
+    })
+    .sort((a, b) => {
+      const byName = a.name.localeCompare(b.name, getLocale(), {
+        numeric: true,
+        sensitivity: 'base',
+      });
+      if (sort === 'name') return byName;
+      if (sort === 'price_asc' || sort === 'price_desc') {
+        // Products without a selling price stay last in either direction.
+        if (a.price == null) return b.price == null ? byName : 1;
+        if (b.price == null) return -1;
+        const difference = toScaled(a.price, 2) - toScaled(b.price, 2);
+        const order = difference < 0n ? -1 : difference > 0n ? 1 : 0;
+        return (sort === 'price_asc' ? order : -order) || byName;
+      }
+      const byDate = Date.parse(b.createdAt) - Date.parse(a.createdAt);
+      return (sort === 'oldest' ? -byDate : byDate) || byName;
+    });
+  const filtersChanged =
+    !!search ||
+    category !== 'All categories' ||
+    stockFilter !== 'all' ||
+    activityFilter !== 'all' ||
+    sort !== 'newest';
+  function clearFilters() {
+    setSearch('');
+    setCategory('All categories');
+    setStockFilter('all');
+    setActivityFilter('all');
+    setSort('newest');
+  }
   return (
     <>
       <PageHeading
         eyebrow={t('YOUR CATALOG')}
         title={t('Products')}
         description={t('Every product has a barcode for scanning and printing.')}
-        action={canWrite && <AddProduct />}
+        action={
+          canWrite && (
+            <Link to="/products/new" className="button button-primary">
+              <Plus size={16} />
+              {t('Add product')}
+            </Link>
+          )
+        }
       />
-      <section className="panel">
-        <div className="table-toolbar">
-          <div className="search-box">
-            <Search size={18} />
-            <input
-              aria-label={t('Search products')}
-              placeholder={t('Search name, barcode, SKU, or PLU…')}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <CameraBarcodeScanner onScan={setSearch} />
+      <section className="catalog-panel">
+        <div className="table-toolbar panel catalog-toolbar">
+          <div className="catalog-filter-controls">
+            <div className="search-box">
+              <Search size={18} />
+              <input
+                aria-label={t('Search products')}
+                placeholder={t('Search name, barcode, SKU, or PLU…')}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <CameraBarcodeScanner onScan={setSearch} />
+            </div>
+            <label className="catalog-filter">
+              <span>{t('Category')}</span>
+              <select
+                aria-label={t('Filter category')}
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                <option value="All categories">{t('All categories')}</option>
+                {[...new Set(query.data?.map((p) => p.category))].sort().map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="catalog-filter">
+              <span>{t('Stock status')}</span>
+              <select
+                aria-label={t('Stock status')}
+                value={stockFilter}
+                onChange={(e) => setStockFilter(e.target.value)}
+              >
+                <option value="all">{t('All stock levels')}</option>
+                <option value="in_stock">{t('In stock')}</option>
+                <option value="low">{t('Low stock')}</option>
+                <option value="out">{t('Out of stock')}</option>
+              </select>
+            </label>
+            <label className="catalog-filter">
+              <span>{t('Product status')}</span>
+              <select
+                aria-label={t('Product status')}
+                value={activityFilter}
+                onChange={(e) => setActivityFilter(e.target.value)}
+              >
+                <option value="all">{t('All statuses')}</option>
+                <option value="active">{t('Active')}</option>
+                <option value="inactive">{t('Inactive')}</option>
+              </select>
+            </label>
+            <label className="catalog-filter catalog-sort">
+              <span>{t('Sort by')}</span>
+              <select
+                aria-label={t('Sort by')}
+                value={sort}
+                onChange={(e) => setSort(e.target.value)}
+              >
+                <option value="newest">{t('Newest first')}</option>
+                <option value="oldest">{t('Oldest first')}</option>
+                <option value="name">{t('Name: A–Z')}</option>
+                <option value="price_asc">{t('Price: low to high')}</option>
+                <option value="price_desc">{t('Price: high to low')}</option>
+              </select>
+            </label>
           </div>
-          <select
-            aria-label={t('Filter category')}
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            <option>{t('All categories')}</option>
-            {[...new Set(query.data?.map((p) => p.category))].sort().map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-          <span className="muted">{countText('products', rows.length)}</span>
+          <div className="catalog-filter-summary">
+            <span className="muted" role="status">
+              {countText('products', rows.length)}
+            </span>
+            {filtersChanged && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                {t('Clear filters')}
+              </Button>
+            )}
+          </div>
         </div>
         <ErrorMessage error={query.error} />
         {query.isPending ? (
           <Loading />
         ) : rows.length ? (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('Product')}</th>
-                  <th>{t('Category')}</th>
-                  <th>{t('Price')}</th>
-                  <th>{t('On hand')}</th>
-                  <th>{t('Barcode / PLU')}</th>
-                  <th>{t('Status')}</th>
-                  {canWrite && <th>{t('Actions')}</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((p) => (
-                  <tr key={p.id}>
-                    <td>
-                      <div className="product-cell">
-                        <ProductIcon category={p.category} image={p.image} />
-                        <div>
-                          <strong>{p.name}</strong>
-                          <small>{p.sku}</small>
-                          {p.source && (
-                            <small>
-                              <a
-                                href={'https://world.openfoodfacts.org/product/' + p.source.barcode}
-                                target="_blank"
-                                rel="noreferrer"
-                              >
-                                {t('Open Food Facts contributors ')}
-                              </a>{' '}
-                              {t('· ODbL')}
-                              {p.source.imageImported && t(' · Photo resized, CC BY-SA 3.0')}
-                            </small>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td>{p.category}</td>
-                    <td className="numeric">
-                      {money(p.price, session.store.currency)}
-                      <small>
-                        {t('per ')}
-                        {t(p.unit ?? '')}
-                      </small>
-                    </td>
-                    <td className="numeric">
-                      {formatQuantity(p.stock)}
-                      <small>{t(p.unit ?? '')}</small>
-                    </td>
-                    <td className="code-cell">
-                      <button className="product-barcode-link" onClick={() => setBarcodeFor(p)}>
-                        {p.barcodes[0] ?? t('View barcode')}
-                      </button>
-                      {p.barcodes.length > 1 && (
-                        <small>
-                          +{p.barcodes.length - 1} {t(' more')}
-                        </small>
-                      )}
-                    </td>
-                    <td>
-                      <Badge tone={p.active ? 'green' : 'gray'}>
-                        {p.active ? t('Active') : t('Inactive')}
-                      </Badge>
-                    </td>
-                    {canWrite && (
-                      <td>
-                        <div className="row-actions">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t('Edit {value0}', { value0: p.name })}
-                            onClick={() => setEdit(p)}
-                          >
-                            <Pencil size={15} />
-                          </Button>
-                          <Button variant="ghost" size="sm" onClick={() => setOffersFor(p)}>
-                            {t('Suppliers')}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              mutation.reset();
-                              setStatus(p);
-                            }}
-                          >
-                            {p.active ? t('Deactivate') : t('Activate')}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            aria-label={t('Delete {value0}', { value0: p.name })}
-                            onClick={() => {
-                              removal.reset();
-                              setRemove(p);
-                            }}
-                          >
-                            <Trash2 size={15} />
-                          </Button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="catalog-grid">
+            {rows.map((p) => (
+              <ProductCatalogCard
+                key={p.id}
+                product={p}
+                currency={session.store.currency}
+                onBarcode={() => setBarcodeFor(p)}
+              />
+            ))}
           </div>
         ) : (
           !query.error && (
@@ -877,88 +862,22 @@ export function ProductsPage() {
               }
               description={
                 query.data?.length
-                  ? t('Try a different name, barcode, or category.')
+                  ? t('Try changing your search or filters.')
                   : t('Add an item with a name, price, and SKU. A barcode will be generated.')
               }
-              action={canWrite && !query.data?.length ? <AddProduct /> : undefined}
+              action={
+                canWrite && !query.data?.length ? (
+                  <Link to="/products/new" className="button button-primary">
+                    <Plus size={16} />
+                    {t('Add product')}
+                  </Link>
+                ) : undefined
+              }
             />
           )
         )}
       </section>
       <ProductBarcode product={barcodeFor} onClose={() => setBarcodeFor(null)} />
-      <Dialog
-        open={!!edit}
-        onOpenChange={(v) => !v && setEdit(null)}
-        title={t('Edit product')}
-        description={t('Price and barcode changes are recorded in your activity log.')}
-      >
-        {edit && (
-          <ProductForm
-            key={edit.id}
-            initial={edit}
-            currency={session.store.currency}
-            onDone={() => setEdit(null)}
-          />
-        )}
-      </Dialog>
-      <Dialog
-        open={!!offersFor}
-        onOpenChange={(v) => !v && setOffersFor(null)}
-        title={t('Suppliers for {value0}', { value0: offersFor?.name ?? '' })}
-        description={t('Compare what each supplier charges for this product.')}
-      >
-        {offersFor && (
-          <ProductSuppliers productId={offersFor.id} unit={offersFor.unit ?? 'piece'} />
-        )}
-      </Dialog>
-      <Dialog
-        open={!!remove}
-        onOpenChange={(open) => {
-          if (!open && !removal.isPending) setRemove(null);
-        }}
-        title={t('Delete product?')}
-        description={t(
-          'Only products with zero stock and no sales, purchase, inventory, count or list history can be deleted. Deactivate products that must remain in your records.',
-        )}
-      >
-        <p className="confirm-name">{remove?.name}</p>
-        <ErrorMessage error={removal.error} />
-        <div className="form-actions">
-          <Button variant="outline" disabled={removal.isPending} onClick={() => setRemove(null)}>
-            {t('Cancel')}
-          </Button>
-          <Button
-            variant="destructive"
-            disabled={removal.isPending}
-            onClick={() => remove && removal.mutate(remove)}
-          >
-            {removal.isPending ? t('Deleting…') : t('Delete product')}
-          </Button>
-        </div>
-      </Dialog>
-      <Dialog
-        open={!!status}
-        onOpenChange={(v) => !v && setStatus(null)}
-        title={status?.active ? t('Deactivate product?') : t('Activate product?')}
-        description={
-          status?.active
-            ? t(
-                'The product remains in your records and stock history. It will be unavailable for new stock adjustments.',
-              )
-            : t('The product will be available for stock adjustments again.')
-        }
-      >
-        <p className="confirm-name">{status?.name}</p>
-        <ErrorMessage error={mutation.error} />
-        <div className="form-actions">
-          <Button variant="outline" onClick={() => setStatus(null)}>
-            {t('Cancel ')}
-          </Button>
-          <Button disabled={mutation.isPending} onClick={() => status && mutation.mutate(status)}>
-            {mutation.isPending ? t('Saving…') : t('Confirm')}
-          </Button>
-        </div>
-      </Dialog>
     </>
   );
 }

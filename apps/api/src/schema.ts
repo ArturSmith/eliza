@@ -91,6 +91,7 @@ export const products = pgTable(
   'products',
   {
     image: text('image').notNull().default(''),
+    images: jsonb('images').$type<string[]>().notNull().default([]),
     description: text('description').notNull().default(''),
     source: jsonb('source').$type<{
       barcode: string;

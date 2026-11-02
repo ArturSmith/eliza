@@ -56,7 +56,7 @@ export function Field({
     <label className="field">
       <span id={`${id}-label`}>{t(label)}</span>
       {Children.map(children, (child) =>
-        isValidElement(child) && ['input', 'select', 'textarea'].includes(String(child.type))
+        isValidElement(child) && ['input', 'select', 'textarea', 'output'].includes(String(child.type))
           ? cloneElement(child as ReactElement<Record<string, unknown>>, {
               'aria-labelledby': `${id}-label`,
               'aria-describedby': hint ? `${id}-hint` : undefined,
@@ -832,11 +832,19 @@ export function SearchSelect({
     </div>
   );
 }
-export function AdjustmentForm({ products, onDone }: { products: Product[]; onDone: () => void }) {
+export function AdjustmentForm({
+  products,
+  onDone,
+  fixedProduct,
+}: {
+  products: Product[];
+  onDone: () => void;
+  fixedProduct?: Product;
+}) {
   useLanguage();
   const [error, setError] = useState<unknown>(null);
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
-  const [productId, setProductId] = useState('');
+  const [productId, setProductId] = useState(fixedProduct?.id ?? '');
   const selected = products.find((p) => p.id === productId);
   function selectScannedProduct(code: string) {
     const matches = products.filter(
@@ -880,40 +888,50 @@ export function AdjustmentForm({ products, onDone }: { products: Product[]; onDo
         mutation.reset();
       }}
     >
-      <div className="adjustment-product-picker">
-        <SearchSelect
-          label={t('Product')}
-          placeholder={t('Select a product')}
-          value={
-            selected && {
-              title: selected.name,
-              subtitle: `${formatQuantity(selected.stock)} ${t(selected.unit)} ${t('on hand')}`,
+      {fixedProduct ? (
+        <p className="confirm-name">{fixedProduct.name}</p>
+      ) : (
+        <div className="adjustment-product-picker">
+          <SearchSelect
+            label={t('Product')}
+            placeholder={t('Select a product')}
+            value={
+              selected && {
+                title: selected.name,
+                subtitle: `${formatQuantity(selected.stock)} ${t(selected.unit)} ${t('on hand')}`,
+              }
             }
-          }
-          options={products
-            .filter((p) => p.active)
-            .map((p) => ({
-              id: p.id,
-              title: p.name,
-              subtitle: `${p.sku} · ${formatQuantity(p.stock)} ${t(p.unit ?? '')} ${t('on hand')}`,
-              keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
-            }))}
-          onSelect={(id) => {
-            setProductId(id);
-            setRequestId(crypto.randomUUID());
-            mutation.reset();
-          }}
-        />
-        <CameraBarcodeScanner onScan={selectScannedProduct} />
-      </div>
+            options={products
+              .filter((p) => p.active)
+              .map((p) => ({
+                id: p.id,
+                title: p.name,
+                subtitle: `${p.sku} · ${formatQuantity(p.stock)} ${t(p.unit ?? '')} ${t('on hand')}`,
+                keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
+              }))}
+            onSelect={(id) => {
+              setProductId(id);
+              setRequestId(crypto.randomUUID());
+              mutation.reset();
+            }}
+          />
+          <CameraBarcodeScanner onScan={selectScannedProduct} />
+        </div>
+      )}
       <Field
         label={t('Quantity change')}
         hint={t('Use a positive quantity to add stock or a negative quantity to remove it.')}
       >
-        <input name="quantity" placeholder={t('e.g. 24 or -2')} inputMode="decimal" required />
+        <input
+          name="quantity"
+          placeholder={t('e.g. 24 or -2')}
+          inputMode="decimal"
+          autoFocus={!!fixedProduct}
+          required
+        />
       </Field>
       <Field label={t('Reason')}>
-        <select name="reason">
+        <select name="reason" defaultValue={fixedProduct ? 'received' : 'opening_balance'}>
           <option value="opening_balance">{t('Opening stock')}</option>
           <option value="received">{t('Goods received (manual)')}</option>
           <option value="count_correction">{t('Count correction')}</option>

@@ -1,5 +1,6 @@
 import { formatQuantity, quantityInputValue } from './quantity-format';
 import { useState } from 'react';
+import { Truck } from 'lucide-react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   type Supplier,
@@ -225,7 +226,15 @@ export function OfferDialog({
 }
 
 /** Supplier comparison for one product, cheapest per selling unit first. */
-export function ProductSuppliers({ productId, unit }: { productId: string; unit: string }) {
+export function ProductSuppliers({
+  productId,
+  unit,
+  layout = 'table',
+}: {
+  productId: string;
+  unit: string;
+  layout?: 'table' | 'cards';
+}) {
   useLanguage();
   const session = useSession().data!;
   const currency = session.store.currency;
@@ -251,71 +260,118 @@ export function ProductSuppliers({ productId, unit }: { productId: string; unit:
       {q.isPending ? (
         <p className="panel-padding muted">{t('Loading…')}</p>
       ) : q.data?.length ? (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>{t('Supplier')}</th>
-                <th>{t('Pack')}</th>
-                <th>{t('Per {value0}', { value0: t(unit) })}</th>
-                <th>{t('Last paid')}</th>
-                <th>{t('Lead time')}</th>
-                {canManage && <th>{t('Actions')}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {q.data.map((offer) => (
-                <tr key={offer.id} className={offer.cheapest ? 'offer-cheapest' : undefined}>
-                  <td>
-                    <strong>{offer.supplierName}</strong>
-                    {offer.supplierSku && <small>{offer.supplierSku}</small>}
-                    {offer.cheapest && q.data.length > 1 && (
-                      <span className="badge badge-green">{t('Cheapest')}</span>
-                    )}
-                  </td>
-                  <td>
-                    {formatMoney(offer.packCost, currency)}
-                    <small>
-                      {formatQuantity(offer.packSize)} × {t(offer.unit)}
-                    </small>
-                  </td>
-                  <td className="numeric">
-                    <Price value={offer.unitCost} currency={currency} />
-                    {offer.premiumPercent !== null && offer.premiumPercent > 0 && (
-                      <small className="delta-bad">
-                        +{offer.premiumPercent.toFixed(1)}% {t('more')}
-                      </small>
-                    )}
-                  </td>
-                  <td className="numeric">
-                    {!offer.lastPaidCost ? (
-                      <span className="muted">{t('Never ordered')}</span>
-                    ) : (
-                      <>
-                        {formatMoney(offer.lastPaidCost, currency)}
-                        {staleQuote(offer) && (
-                          <small className="delta-bad">{t('Differs from quote')}</small>
-                        )}
-                      </>
-                    )}
-                  </td>
-                  <td>
-                    {offer.leadTimeDays === null
-                      ? '—'
-                      : t('{value0} days', { value0: offer.leadTimeDays })}
-                  </td>
-                  {canManage && (
-                    <td>
-                      <Button variant="ghost" size="sm" onClick={() => setEditing(offer)}>
-                        {t('Edit ')}
-                      </Button>
-                    </td>
+        layout === 'cards' ? (
+          <div className="product-supplier-cards">
+            {q.data.map((offer) => (
+              <div key={offer.id} className="product-supplier-card">
+                <Truck size={20} aria-hidden="true" />
+                <div className="product-supplier-name">
+                  <strong>{offer.supplierName}</strong>
+                  <small>
+                    {[
+                      offer.supplierSku,
+                      offer.leadTimeDays === null
+                        ? ''
+                        : t('{value0} days', { value0: offer.leadTimeDays }),
+                    ]
+                      .filter(Boolean)
+                      .join(' · ') || t('Lead time not specified')}
+                  </small>
+                </div>
+                <div className="product-supplier-price">
+                  {offer.cheapest && q.data.length > 1 && (
+                    <span className="badge badge-green">{t('Cheapest')}</span>
                   )}
+                  <strong>
+                    <Price value={offer.unitCost} currency={currency} />
+                  </strong>
+                  <small>
+                    {t('per ')}
+                    {t(unit)}
+                  </small>
+                </div>
+                {canManage && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={t('Edit supplier price for {value0}', {
+                      value0: offer.supplierName,
+                    })}
+                    onClick={() => setEditing(offer)}
+                  >
+                    {t('Edit ')}
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>{t('Supplier')}</th>
+                  <th>{t('Pack')}</th>
+                  <th>{t('Per {value0}', { value0: t(unit) })}</th>
+                  <th>{t('Last paid')}</th>
+                  <th>{t('Lead time')}</th>
+                  {canManage && <th>{t('Actions')}</th>}
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {q.data.map((offer) => (
+                  <tr key={offer.id} className={offer.cheapest ? 'offer-cheapest' : undefined}>
+                    <td>
+                      <strong>{offer.supplierName}</strong>
+                      {offer.supplierSku && <small>{offer.supplierSku}</small>}
+                      {offer.cheapest && q.data.length > 1 && (
+                        <span className="badge badge-green">{t('Cheapest')}</span>
+                      )}
+                    </td>
+                    <td>
+                      {formatMoney(offer.packCost, currency)}
+                      <small>
+                        {formatQuantity(offer.packSize)} × {t(offer.unit)}
+                      </small>
+                    </td>
+                    <td className="numeric">
+                      <Price value={offer.unitCost} currency={currency} />
+                      {offer.premiumPercent !== null && offer.premiumPercent > 0 && (
+                        <small className="delta-bad">
+                          +{offer.premiumPercent.toFixed(1)}% {t('more')}
+                        </small>
+                      )}
+                    </td>
+                    <td className="numeric">
+                      {!offer.lastPaidCost ? (
+                        <span className="muted">{t('Never ordered')}</span>
+                      ) : (
+                        <>
+                          {formatMoney(offer.lastPaidCost, currency)}
+                          {staleQuote(offer) && (
+                            <small className="delta-bad">{t('Differs from quote')}</small>
+                          )}
+                        </>
+                      )}
+                    </td>
+                    <td>
+                      {offer.leadTimeDays === null
+                        ? '—'
+                        : t('{value0} days', { value0: offer.leadTimeDays })}
+                    </td>
+                    {canManage && (
+                      <td>
+                        <Button variant="ghost" size="sm" onClick={() => setEditing(offer)}>
+                          {t('Edit ')}
+                        </Button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       ) : (
         <p className="panel-padding muted">
           {t('No supplier prices recorded for this product yet.')}

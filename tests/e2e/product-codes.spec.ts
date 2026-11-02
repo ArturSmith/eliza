@@ -20,13 +20,13 @@ test('generates product codes without translating names', async ({ page }) => {
   }
 
   await page.goto('/products');
-  await page.getByRole('button', { name: 'Add product', exact: true }).first().click();
-  const dialog = page.getByRole('dialog');
+  await page.getByRole('link', { name: 'Add product', exact: true }).first().click();
+  const dialog = page.locator('.product-details-page');
   await dialog.getByLabel('Product name', { exact: true }).fill('Зелёные яблоки');
-  await expect(dialog.getByLabel('PLU / short code (optional)', { exact: true })).toHaveValue('1');
-  await expect(dialog.getByLabel('SKU', { exact: true })).toHaveValue('Зелёные-яблоки-1');
+  await expect(dialog.getByLabel('PLU / short code (optional)', { exact: true })).toHaveValue('');
+  await expect(dialog.getByLabel('SKU', { exact: true })).toHaveValue('');
   await dialog.getByLabel('PLU / short code (optional)', { exact: true }).fill('42');
-  await expect(dialog.getByLabel('SKU', { exact: true })).toHaveValue('Зелёные-яблоки-42');
+  await expect(dialog.getByLabel('SKU', { exact: true })).toHaveValue('');
   const payload = {
     name: 'Яблоки',
     sku: 'preview',
@@ -54,7 +54,7 @@ test('generates product codes without translating names', async ({ page }) => {
   const updated = await edit.json();
   expect(updated.sku).toBe(original.sku);
   expect(updated.plu).toBe(original.plu);
-  await page.reload();
+  await page.goto('/products');
   await page.getByRole('button', { name: original.barcodes[0] }).click();
   await expect(
     page.getByRole('dialog').getByRole('img', { name: `Barcode ${original.barcodes[0]}` }),
@@ -74,10 +74,11 @@ test('generates product codes without translating names', async ({ page }) => {
   await page.getByRole('dialog').getByRole('button', { name: 'Print barcode' }).click();
   expect(await page.evaluate(() => (window as any).__printed)).toBe(true);
   await page.getByRole('button', { name: 'Close dialog' }).click();
+  await page.getByRole('link', { name: 'View Renamed apples', exact: true }).click();
   await page.getByRole('button', { name: 'Delete Renamed apples' }).click();
   await expect(page.getByRole('heading', { name: 'Delete product?' })).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: 'Delete product' }).click();
-  await expect(page.getByRole('cell', { name: /Renamed apples/ })).toHaveCount(0);
+  await expect(page.getByRole('article', { name: 'Renamed apples', exact: true })).toHaveCount(0);
   await expect
     .poll(async () =>
       (await page.request.get('/api/products').then((r) => r.json())).some(
