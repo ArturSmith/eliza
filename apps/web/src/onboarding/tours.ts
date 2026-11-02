@@ -43,22 +43,22 @@ export const pageTours: Record<OnboardingPage, Tour> = {
     ],
   },
   inventory: {
-    version: 1,
+    version: 2,
     steps: [
       {
-        selector: '.page-heading, .receipt-page-header, h1',
-        title: 'Inventory',
-        body: 'Track stock changes and check how each product’s balance was formed.',
+        selector: '.inventory-actions',
+        title: 'Choose a stock operation',
+        body: 'Add or remove stock, start a stock count, or review movement history. Each operation has its own workflow.',
       },
       {
-        selector: '.page-heading .button',
-        title: 'Adjust stock carefully',
-        body: 'Record an opening balance or a stock correction with a reason. Receive supplier deliveries through Purchases.',
+        selector: '.inventory-action-card[href="/inventory/add"]',
+        title: 'Add stock',
+        body: 'Select a product, enter a positive quantity and choose a reason. Receive supplier deliveries through Purchases.',
       },
       {
-        selector: '.movement-filters',
-        title: 'Find a stock movement',
-        body: 'Filter the history by product, text or dates. Clear filters to return to the full history.',
+        selector: '.inventory-action-card[href="/inventory/history"]',
+        title: 'Movement history',
+        body: 'Every operation keeps its reason, employee and stock balance. Search the history to trace a change.',
       },
     ],
   },

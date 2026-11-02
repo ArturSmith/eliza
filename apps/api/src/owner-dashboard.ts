@@ -809,7 +809,7 @@ SELECT w.phase,m.reason,COALESCE(p.category,'Uncategorised') AS category,
  AND m.created_at>=(w.from_day::timestamp AT TIME ZONE $4)
  AND m.created_at<((w.to_day+1)::timestamp AT TIME ZONE $4)
  JOIN products p ON p.id=m.product_id AND p.store_id=$1
- WHERE m.reason IN ('damaged','expired','internal_use') AND m.quantity<0
+ WHERE m.reason IN ('damaged','expired','lost','internal_use') AND m.quantity<0
  GROUP BY w.phase,m.reason,category`,
         [
           store.id,

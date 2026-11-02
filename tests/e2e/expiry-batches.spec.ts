@@ -79,7 +79,7 @@ test('receives one product with multiple expiry dates and preserves batch quanti
   await page.locator('.delivery-entry summary').first().click();
   await expect(page.locator('.delivery-expiry-history')).toContainText('2035-01-01');
   await expect(page.locator('.delivery-expiry-history')).toContainText('2036-01-01');
-  await page.goto('/inventory');
+  await page.goto('/inventory/history');
   await expect(page.locator('.stock-batch-row')).toHaveCount(2);
   await expect(page.locator('.stock-batch-row').first()).toContainText('Purchase cost');
   await page.screenshot({ path: 'test-results/batch-costs-desktop.png', fullPage: true });

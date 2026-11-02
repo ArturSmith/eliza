@@ -27,8 +27,11 @@ test('stock adjustment keeps product selection usable beside camera scanner', as
   expect(created.ok(), await created.text()).toBe(true);
 
   await page.goto('/inventory');
-  await page.getByRole('button', { name: 'Adjust stock' }).click();
-  const adjustment = page.getByRole('dialog', { name: 'Record a stock adjustment' });
+  await page
+    .locator('.inventory-actions')
+    .getByRole('link', { name: /^Add stock/ })
+    .click();
+  const adjustment = page.locator('.inventory-operation-panel');
   await expect(adjustment.getByRole('button', { name: 'Scan with camera' })).toBeVisible();
   await adjustment.getByRole('button', { name: 'Scan with camera' }).click();
   const scanner = page.getByRole('dialog', { name: 'Scan barcode with camera' });
@@ -37,7 +40,8 @@ test('stock adjustment keeps product selection usable beside camera scanner', as
 
   await adjustment.getByRole('button', { name: 'Select a product' }).click();
   await adjustment.getByRole('option', { name: /Scanner bread/ }).click();
-  await adjustment.getByPlaceholder('e.g. 24 or -2').fill('2');
-  await adjustment.getByRole('button', { name: 'Record adjustment' }).click();
-  await expect(adjustment).not.toBeVisible();
+  await adjustment.getByPlaceholder('e.g. 24').fill('2');
+  await adjustment.getByLabel('Reason', { exact: true }).selectOption('received');
+  await adjustment.getByRole('button', { name: 'Add stock', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Stock operation recorded' })).toBeVisible();
 });

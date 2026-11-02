@@ -1,3 +1,4 @@
+import { InventoryPage, InventoryAdjustmentPage } from './inventory-workspace';
 import { ProductDetailsPage } from './product-details';
 import { ReplenishmentPage } from './replenishment';
 import { ShoppingListsPage } from './shopping-lists';
@@ -14,7 +15,7 @@ import {
   useLocation,
 } from '@tanstack/react-router';
 import { api, queryClient } from './api';
-import { Shell, Overview, ProductsPage, InventoryPage, AuditPage, DevicesPage } from './pages';
+import { Shell, Overview, ProductsPage, InventoryHistoryPage, AuditPage, DevicesPage } from './pages';
 import { applyTheme, initialTheme } from './theme';
 import './theme.css';
 import './styles.css';
@@ -174,6 +175,9 @@ const routes = [
   createRoute({ getParentRoute: () => root, path: '/products/$id/edit', component: () => <ProductDetailsPage edit /> }),
   createRoute({ getParentRoute: () => root, path: '/promotions', component: PromotionsPage }),
   createRoute({ getParentRoute: () => root, path: '/inventory', component: InventoryPage }),
+  createRoute({ getParentRoute: () => root, path: '/inventory/add', component: () => <InventoryAdjustmentPage direction="add" /> }),
+  createRoute({ getParentRoute: () => root, path: '/inventory/remove', component: () => <InventoryAdjustmentPage direction="remove" /> }),
+  createRoute({ getParentRoute: () => root, path: '/inventory/history', component: InventoryHistoryPage }),
   createRoute({ getParentRoute: () => root, path: '/audit', component: AuditPage }),
   createRoute({ getParentRoute: () => root, path: '/team', component: TeamManagementPage }),
   createRoute({ getParentRoute: () => root, path: '/devices', component: DevicesPage }),

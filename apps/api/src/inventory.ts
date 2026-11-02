@@ -149,7 +149,7 @@ export class InventoryController {
       const change = toScaled(body.quantity, 3);
       if (['piece', 'pack', 'box'].includes(product.unit) && change % 1000n !== 0n)
         throw new BadRequestException('This product needs a whole-number quantity.');
-      if (['damaged', 'expired', 'internal_use'].includes(body.reason) && change > 0n)
+      if (['damaged', 'expired', 'lost', 'internal_use'].includes(body.reason) && change > 0n)
         throw new BadRequestException('This reason must decrease stock.');
       if (['opening_balance', 'received'].includes(body.reason) && change < 0n)
         throw new BadRequestException('This reason must increase stock.');

@@ -40,7 +40,7 @@ test('inventory searches and pages past 100 movements without losing filters', a
     });
     expect(response.ok()).toBeTruthy();
   }
-  await page.goto('/inventory');
+  await page.goto('/inventory/history');
   await page.getByLabel('Search movements').fill('HISTORY-MILK');
   await expect(page.getByText('Page 1 of 3', { exact: true })).toBeVisible();
   await expect(page.locator('tbody tr')).toHaveCount(50);

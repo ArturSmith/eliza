@@ -274,5 +274,87 @@ describe('canonical store financial summary', () => {
       inventory.history({ from: '2026-10-01', to: '2026-09-01' }, req),
     ).rejects.toThrow();
     await expect(inventory.history({ page: 0 }, req)).rejects.toThrow();
+
+    // Lost stock uses the consumed batch cost, never today's changed product cost.
+    const headers = {
+      Cookie: cookie,
+      Origin: 'http://localhost:5173',
+      'X-Eliza-Request': '1',
+      'Content-Type': 'application/json',
+    };
+    const post = (path: string, data: unknown) =>
+      fetch(url + '/api' + path, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(data),
+      });
+    const newProduct = await post('/products', {
+      name: 'Lost stock test',
+      sku: 'LOST-STOCK',
+      category: 'Dairy',
+      unit: 'piece',
+      price: '10',
+      cost: '7',
+      minStock: '0',
+      taxRate: '0',
+      barcodes: [],
+    });
+    expect(newProduct.status).toBe(201);
+    const lostProduct = await newProduct.json();
+    expect(
+      (
+        await post('/inventory/adjustments', {
+          productId: lostProduct.id,
+          quantity: '3',
+          reason: 'received',
+          requestId: crypto.randomUUID(),
+        })
+      ).status,
+    ).toBe(201);
+    await db.pool.query('UPDATE products SET cost=99 WHERE id=$1', [lostProduct.id]);
+    const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Oslo' }).format(new Date());
+    const beforeLoss = await metrics.getFinancialSummary(actor.store, {
+      from: day,
+      to: day,
+      timezone: 'Europe/Oslo',
+    });
+    const removal = {
+      productId: lostProduct.id,
+      quantity: '-2',
+      reason: 'lost',
+      requestId: crypto.randomUUID(),
+    };
+    const removed = await post('/inventory/adjustments', removal);
+    expect(removed.status).toBe(201);
+    const recorded = await removed.json();
+    expect(recorded).toMatchObject({ quantity: '-2.000', balance: '1.000', costTotal: '14.00' });
+    const retry = await post('/inventory/adjustments', removal);
+    expect((await retry.json()).id).toBe(recorded.id);
+    expect(
+      (
+        await post('/inventory/adjustments', {
+          ...removal,
+          quantity: '1',
+          requestId: crypto.randomUUID(),
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (await post('/inventory/adjustments', { ...removal, requestId: crypto.randomUUID() })).status,
+    ).toBe(400);
+    const lostSummary = await metrics.getFinancialSummary(actor.store, {
+      from: day,
+      to: day,
+      timezone: 'Europe/Oslo',
+    });
+    expect(Number(lostSummary.inventoryLosses) - Number(beforeLoss.inventoryLosses)).toBe(14);
+    expect(lostSummary.revenue).toBe(beforeLoss.revenue);
+    expect(lostSummary.cogs).toBe(beforeLoss.cogs);
+    if (beforeLoss.storeOperatingProfit !== null)
+      expect(
+        Number(lostSummary.storeOperatingProfit) - Number(beforeLoss.storeOperatingProfit),
+      ).toBe(-14);
+    const waste = await dashboard.waste(store, { from: day, to: day }, null, true);
+    expect(waste.byReason.lost).toBe(14);
   });
 });

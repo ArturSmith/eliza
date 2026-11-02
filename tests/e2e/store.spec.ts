@@ -39,12 +39,16 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
     '7090123456789',
   );
   await page.getByRole('link', { name: 'Inventory', exact: true }).click();
-  await page.getByRole('button', { name: 'Adjust stock' }).click();
-  await dialog.getByRole('button', { name: 'Select a product', exact: true }).click();
+  await page.locator('.inventory-actions').getByRole('link', { name: /^Add stock/ }).click();
+  const stockForm = page.locator('.inventory-operation-panel');
+  await stockForm.getByRole('button', { name: 'Select a product', exact: true }).click();
   await page.getByRole('option', { name: /Sourdough bread/ }).click();
-  await dialog.getByLabel('Quantity change').fill('24');
-  await dialog.getByLabel('Notes').fill('Counted before opening');
-  await dialog.getByRole('button', { name: 'Record adjustment' }).click();
+  await stockForm.getByLabel('Quantity', { exact: true }).fill('24');
+  await stockForm.getByLabel('Reason', { exact: true }).selectOption('opening_balance');
+  await stockForm.getByLabel('Notes').fill('Counted before opening');
+  await stockForm.getByRole('button', { name: 'Add stock', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Stock operation recorded' })).toBeVisible();
+  await page.locator('.inventory-operation-panel').getByRole('link', { name: 'Movement history', exact: true }).click();
   await expect(
     page.getByRole('cell', { name: 'Counted before opening', exact: false }),
   ).toBeVisible();

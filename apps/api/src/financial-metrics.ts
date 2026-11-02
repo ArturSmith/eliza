@@ -111,7 +111,7 @@ ${refundCostColumns}
   WHERE $8::text IS NULL OR h.pricing_source=$8
 ), lost AS (
   SELECT m.cost_total FROM movements m CROSS JOIN bounds b
-  WHERE m.store_id=$1 AND m.reason IN ('expired','damaged') AND m.quantity<0
+  WHERE m.store_id=$1 AND m.reason IN ('expired','damaged','lost') AND m.quantity<0
     AND m.created_at>=b.start_at AND m.created_at<b.end_at
     AND ($5::uuid IS NULL OR m.product_id=$5::uuid)
     AND ($7::int IS NULL OR extract(hour from m.created_at AT TIME ZONE $4)<=$7::int)

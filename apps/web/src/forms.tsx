@@ -1,3 +1,10 @@
+import {
+  stockQuantity,
+  stockReasons,
+  stockReasonLabels,
+  type StockDirection,
+  type StockAdjustmentResult,
+} from './stock-adjustment';
 import { formatQuantity, quantityInputValue } from './quantity-format';
 import { BrandLogo } from './brand';
 import { t, useLanguage, translateError } from './i18n';
@@ -25,6 +32,7 @@ import {
   setupSchema,
   adjustmentSchema,
   type Product,
+  type AdjustmentInput,
   units,
 } from '@eliza/contracts';
 import { api, productCatalogUpdateKey, queryClient, refresh } from './api';
@@ -836,19 +844,26 @@ export function AdjustmentForm({
   products,
   onDone,
   fixedProduct,
+  direction = 'signed',
+  onRecorded,
 }: {
   products: Product[];
   onDone: () => void;
   fixedProduct?: Product;
+  direction?: StockDirection;
+  onRecorded?: (movement: StockAdjustmentResult) => void;
 }) {
   useLanguage();
   const [error, setError] = useState<unknown>(null);
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const [productId, setProductId] = useState(fixedProduct?.id ?? '');
   const selected = products.find((p) => p.id === productId);
+  const eligible = products.filter(
+    (p) => p.active && (direction !== 'remove' || toScaled(p.stock, 3) > 0n),
+  );
   function selectScannedProduct(code: string) {
-    const matches = products.filter(
-      (p) => p.active && (p.barcodes.includes(code) || p.sku === code || p.plu === code),
+    const matches = eligible.filter(
+      (p) => p.barcodes.includes(code) || p.sku === code || p.plu === code,
     );
     if (matches.length !== 1) {
       setError(
@@ -864,16 +879,33 @@ export function AdjustmentForm({
     setError(null);
   }
   const mutation = useMutation({
-    mutationFn: (body: unknown) => api('/inventory/adjustments', body),
-    onSuccess: () => {
+    mutationFn: (body: unknown) => api<StockAdjustmentResult>('/inventory/adjustments', body),
+    onSuccess: (movement) => {
       void refresh();
-      onDone();
+      if (onRecorded) onRecorded(movement);
+      else onDone();
     },
   });
   function submit(e: FormEvent<HTMLFormElement>) {
     setError(null);
     const data = values(e);
-    const result = adjustmentSchema.safeParse({ ...data, productId, requestId });
+    let signedQuantity: string;
+    try {
+      signedQuantity = stockQuantity(String(data.quantity), direction);
+    } catch (cause) {
+      setError(cause);
+      return;
+    }
+    if (!stockReasons(direction).includes(data.reason as AdjustmentInput['reason'])) {
+      setError(t('Choose a reason for this stock operation.'));
+      return;
+    }
+    const result = adjustmentSchema.safeParse({
+      ...data,
+      quantity: signedQuantity,
+      productId,
+      requestId,
+    });
     if (!result.success) {
       setError(result.error.issues.map((i) => i.message).join('. '));
       return;
@@ -884,83 +916,105 @@ export function AdjustmentForm({
     <form
       onSubmit={submit}
       onChange={() => {
+        if (mutation.isPending) return;
         setRequestId(crypto.randomUUID());
         mutation.reset();
       }}
     >
-      {fixedProduct ? (
-        <p className="confirm-name">{fixedProduct.name}</p>
-      ) : (
-        <div className="adjustment-product-picker">
-          <SearchSelect
-            label={t('Product')}
-            placeholder={t('Select a product')}
-            value={
-              selected && {
-                title: selected.name,
-                subtitle: `${formatQuantity(selected.stock)} ${t(selected.unit)} ${t('on hand')}`,
+      <fieldset disabled={mutation.isPending} className="stock-adjustment-fields">
+        {fixedProduct ? (
+          <p className="confirm-name">{fixedProduct.name}</p>
+        ) : (
+          <div className="adjustment-product-picker">
+            <SearchSelect
+              label={t('Product')}
+              placeholder={t('Select a product')}
+              value={
+                selected && {
+                  title: selected.name,
+                  subtitle: `${formatQuantity(selected.stock)} ${t(selected.unit)} ${t('on hand')}`,
+                }
               }
-            }
-            options={products
-              .filter((p) => p.active)
-              .map((p) => ({
+              options={eligible.map((p) => ({
                 id: p.id,
                 title: p.name,
                 subtitle: `${p.sku} · ${formatQuantity(p.stock)} ${t(p.unit ?? '')} ${t('on hand')}`,
                 keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
               }))}
-            onSelect={(id) => {
-              setProductId(id);
-              setRequestId(crypto.randomUUID());
-              mutation.reset();
-            }}
+              onSelect={(id) => {
+                setProductId(id);
+                setRequestId(crypto.randomUUID());
+                mutation.reset();
+              }}
+            />
+            <CameraBarcodeScanner onScan={selectScannedProduct} />
+          </div>
+        )}
+        <Field
+          label={direction === 'signed' ? t('Quantity change') : t('Quantity')}
+          hint={
+            direction === 'signed'
+              ? t('Use a positive quantity to add stock or a negative quantity to remove it.')
+              : t(
+                  'Enter a positive quantity. The operation determines whether stock is added or removed.',
+                )
+          }
+        >
+          <input
+            name="quantity"
+            placeholder={direction === 'signed' ? t('e.g. 24 or -2') : t('e.g. 24')}
+            inputMode="decimal"
+            autoFocus={!!fixedProduct}
+            required
           />
-          <CameraBarcodeScanner onScan={selectScannedProduct} />
+        </Field>
+        <Field label={t('Reason')}>
+          <select
+            name="reason"
+            required
+            defaultValue={
+              direction === 'signed' ? (fixedProduct ? 'received' : 'opening_balance') : ''
+            }
+          >
+            {direction !== 'signed' && (
+              <option value="" disabled>
+                {t('Select a reason')}
+              </option>
+            )}
+            {stockReasons(direction).map((reason) => (
+              <option key={reason} value={reason}>
+                {t(stockReasonLabels[reason])}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label={t('Notes')}>
+          <textarea
+            name="notes"
+            rows={3}
+            maxLength={500}
+            placeholder={t('Add a reference or explain the change')}
+          />
+        </Field>
+        <div className="notice">
+          {t('This creates a permanent stock movement attributed to your account and device. ')}
         </div>
-      )}
-      <Field
-        label={t('Quantity change')}
-        hint={t('Use a positive quantity to add stock or a negative quantity to remove it.')}
-      >
-        <input
-          name="quantity"
-          placeholder={t('e.g. 24 or -2')}
-          inputMode="decimal"
-          autoFocus={!!fixedProduct}
-          required
-        />
-      </Field>
-      <Field label={t('Reason')}>
-        <select name="reason" defaultValue={fixedProduct ? 'received' : 'opening_balance'}>
-          <option value="opening_balance">{t('Opening stock')}</option>
-          <option value="received">{t('Goods received (manual)')}</option>
-          <option value="count_correction">{t('Count correction')}</option>
-          <option value="damaged">{t('Damaged goods')}</option>
-          <option value="expired">{t('Expired goods')}</option>
-          <option value="internal_use">{t('Internal use')}</option>
-          <option value="other">{t('Other')}</option>
-        </select>
-      </Field>
-      <Field label={t('Notes')}>
-        <textarea
-          name="notes"
-          rows={3}
-          maxLength={500}
-          placeholder={t('Add a reference or explain the change')}
-        />
-      </Field>
-      <div className="notice">
-        {t('This creates a permanent stock movement attributed to your account and device. ')}
-      </div>
-      <ErrorMessage error={error ?? mutation.error} />
-      <div className="form-actions">
-        <Button type="button" variant="outline" onClick={onDone}>
-          {t('Cancel ')}
-        </Button>
-        <Button disabled={mutation.isPending || !productId}>
-          {mutation.isPending ? t('Recording…') : t('Record adjustment')}
-        </Button>
-      </div>
+        <ErrorMessage error={error ?? mutation.error} />
+        <div className="form-actions">
+          <Button disabled={mutation.isPending || !productId}>
+            {mutation.isPending
+              ? t('Recording…')
+              : direction === 'add'
+                ? t('Add stock')
+                : direction === 'remove'
+                  ? t('Remove stock')
+                  : t('Record adjustment')}
+          </Button>
+          <Button type="button" variant="outline" onClick={onDone}>
+            {t('Cancel ')}
+          </Button>
+        </div>
+      </fieldset>
     </form>
   );
 }

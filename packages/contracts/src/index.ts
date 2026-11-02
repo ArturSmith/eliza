@@ -139,6 +139,7 @@ export const adjustmentSchema = z.object({
     'received',
     'damaged',
     'expired',
+    'lost',
     'count_correction',
     'internal_use',
     'other',

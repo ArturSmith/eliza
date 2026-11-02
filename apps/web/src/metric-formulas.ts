@@ -12,7 +12,7 @@ const formulas: Record<string, () => string> = {
     t('Gross margin = gross profit ÷ revenue × 100%. Calculated only when revenue is positive.'),
   'Inventory losses': () =>
     t(
-      'Inventory losses = cost of expired and damaged stock written off + cost of returned goods that cannot be resold.',
+      'Inventory losses = cost of expired, damaged and lost stock written off + cost of returned goods that cannot be resold.',
     ),
   'Operating expenses': () =>
     t(

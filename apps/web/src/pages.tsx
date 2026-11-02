@@ -265,7 +265,10 @@ export function Shell() {
     (item.to === '/promotions'
       ? canOpenPromotions(user.permissions)
       : user.permissions.includes(item.permission));
-  const current = nav.find((n) => n.to === location.pathname || (n.to === '/products' && location.pathname.startsWith('/products/')));
+  const current = nav.find(
+    (n) => n.to === location.pathname ||
+      ((n.to === '/products' || n.to === '/inventory') && location.pathname.startsWith(n.to + '/')),
+  );
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobile ? 'mobile-open' : ''}`}>
@@ -316,7 +319,7 @@ export function Shell() {
                     <Link
                       key={to}
                       to={to}
-                      activeOptions={{ exact: to !== '/products' }}
+                      activeOptions={{ exact: to !== '/products' && to !== '/inventory' }}
                       activeProps={{ className: 'nav-link active' }}
                       className="nav-link"
                       onClick={() => setMobile(false)}
@@ -881,7 +884,7 @@ export function ProductsPage() {
     </>
   );
 }
-export function InventoryPage() {
+export function InventoryHistoryPage() {
   useLanguage();
   const products = useProducts();
   const [movementFilters, setMovementFilters] = useState({
@@ -904,7 +907,6 @@ export function InventoryPage() {
     setMovementPage(1);
   };
   const session = useSession();
-  const [open, setOpen] = useState(false);
   const [batchProductId, setBatchProductId] = useState('');
   const selectedBatchProductId = batchProductId || products.data?.[0]?.id || '';
   const batches = useQuery<{
@@ -926,15 +928,12 @@ export function InventoryPage() {
     <>
       <PageHeading
         eyebrow={t('EVERY CHANGE ACCOUNTED FOR')}
-        title={t('Inventory')}
+        title={t('Movement history')}
         description={t('A permanent record of what comes in and what goes out.')}
         action={
-          useCan('inventory.adjust') && (
-            <Button onClick={() => setOpen(true)} disabled={!products.data?.some((p) => p.active)}>
-              <Plus size={17} />
-              {t('Adjust stock')}
-            </Button>
-          )
+          <Link to="/inventory" className="button button-outline">
+            {t('Back to inventory')}
+          </Link>
         }
       />
       <div className="notice inventory-notice">
@@ -974,9 +973,7 @@ export function InventoryPage() {
           <div className="stock-batch-list">
             {batches.data.batches.map((batch) => (
               <div className="stock-batch-row" key={batch.id}>
-                <strong>
-                  {formatQuantity(batch.quantity)}
-                </strong>
+                <strong>{formatQuantity(batch.quantity)}</strong>
                 <span>
                   {'— '}
                   {batch.expiryDate
@@ -1147,17 +1144,10 @@ export function InventoryPage() {
           </div>
         )}
       </section>
-      <Dialog
-        open={open}
-        onOpenChange={setOpen}
-        title={t('Record a stock adjustment')}
-        description={t('A positive quantity adds stock. A negative quantity removes it.')}
-      >
-        <AdjustmentForm products={products.data ?? []} onDone={() => setOpen(false)} />
-      </Dialog>
     </>
   );
 }
+
 export function AuditPage() {
   useLanguage();
   const query = useAudit();
