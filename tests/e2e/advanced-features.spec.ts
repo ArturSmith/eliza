@@ -30,7 +30,7 @@ test('advanced tools are opt-in, persist for the store, preserve data and retain
   const optional = ['Action Center', 'Stock counts', 'Replenishment', 'Digital purchases'];
   for (const name of optional)
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
-  for (const name of ['Sales', 'Products', 'Inventory', 'Purchases'])
+  for (const name of ['Sales', 'Products', 'Inventory', 'Suppliers & purchases'])
     await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: /Manager Action Center/ })).toHaveCount(0);
   for (const path of ['/action-center', '/stock-counts', '/replenishment', '/digital-purchases']) {

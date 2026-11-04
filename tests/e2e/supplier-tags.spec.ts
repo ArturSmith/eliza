@@ -33,29 +33,25 @@ test('edits supplier tags and combines supplier filters', async ({ page }) => {
     active: false,
   });
   await page.goto('/suppliers');
-  await expect(page.locator('tbody tr')).toHaveCount(2);
+  await expect(page.locator('.supplier-directory-card')).toHaveCount(2);
   await page.getByLabel('Search suppliers').fill('local');
-  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await expect(page.locator('.supplier-directory-card')).toHaveCount(1);
   await page.getByRole('button', { name: 'Clear filters' }).click();
   await page.getByLabel('Supplier status').selectOption('inactive');
-  await expect(page.locator('tbody tr')).toHaveCount(1);
+  await expect(page.locator('.supplier-directory-card')).toHaveCount(1);
   await page.getByLabel('Supplier tag').selectOption('Drinks');
-  await expect(page.locator('tbody tr')).toHaveCount(0);
+  await expect(page.locator('.supplier-directory-card')).toHaveCount(0);
   await page.getByRole('button', { name: 'Clear filters' }).click();
-  await page
-    .locator('tbody tr')
-    .filter({ hasText: 'Drink supplier' })
-    .getByRole('button', { name: 'Edit', exact: true })
-    .click();
+  await page.getByRole('link', { name: 'Open supplier Drink supplier', exact: true }).click();
+  await page.getByRole('link', { name: 'Edit supplier', exact: true }).click();
   await page.getByLabel('Tags (optional)').fill('Drinks, Wholesale');
   await page.getByRole('button', { name: 'Save supplier', exact: true }).click();
-  await expect(page.locator('tbody tr').filter({ hasText: 'Drink supplier' })).toContainText(
-    'Wholesale',
-  );
+  await expect(page.locator('.supplier-profile-summary')).toContainText('Wholesale');
+  await page.getByRole('link', { name: 'Back to suppliers', exact: true }).click();
   await page.reload();
   await page.getByLabel('Supplier tag').selectOption('Wholesale');
-  await expect(page.locator('tbody tr')).toHaveCount(1);
-  await page.getByRole('button', { name: 'Add supplier', exact: true }).click();
+  await expect(page.locator('.supplier-directory-card')).toHaveCount(1);
+  await page.getByRole('link', { name: 'Add supplier', exact: true }).click();
   await page.getByRole('button', { name: 'Generate supplier code', exact: true }).click();
   await expect(page.getByLabel('Supplier code', { exact: true })).toHaveValue('SUP-00002');
   expect(errors).toEqual([]);

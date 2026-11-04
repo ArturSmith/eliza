@@ -104,7 +104,6 @@ test('page walkthroughs support navigation, completion, replay, mobile and cross
     await expect(otherPage.locator('[data-onboarding-dialog][open]')).toHaveCount(0);
 
     for (const path of [
-      '/suppliers',
       '/purchases',
       '/shopping-lists',
       '/stock-counts',

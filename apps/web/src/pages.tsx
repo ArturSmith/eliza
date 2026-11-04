@@ -108,14 +108,13 @@ const navGroups = [
         icon: PackagePlus,
         permission: 'purchases.read',
       },
-      { to: '/purchases', label: 'Purchases', icon: Truck, permission: 'purchases.read' },
+      { to: '/purchases', label: 'Suppliers & purchases', icon: Truck, permission: 'purchases.read' },
       {
         to: '/digital-purchases',
         label: 'Digital purchases',
         icon: FileText,
         permission: 'purchases.read',
       },
-      { to: '/suppliers', label: 'Suppliers', icon: Store, permission: 'suppliers.read' },
     ],
   },
   {
@@ -264,10 +263,15 @@ export function Shell() {
     isFeatureVisible(item.to, store.advancedFeaturesEnabled) &&
     (item.to === '/promotions'
       ? canOpenPromotions(user.permissions)
-      : user.permissions.includes(item.permission));
+      : item.to === '/purchases'
+        ? user.permissions.includes('purchases.read') || user.permissions.includes('suppliers.read')
+        : user.permissions.includes(item.permission));
   const current = nav.find(
-    (n) => n.to === location.pathname ||
-      ((n.to === '/products' || n.to === '/inventory') && location.pathname.startsWith(n.to + '/')),
+    (n) =>
+      n.to === location.pathname ||
+      ((n.to === '/products' || n.to === '/inventory' || n.to === '/purchases') &&
+        location.pathname.startsWith(n.to + '/')) ||
+      (n.to === '/purchases' && location.pathname.startsWith('/suppliers')),
   );
   return (
     <div className="app-shell">
@@ -319,9 +323,13 @@ export function Shell() {
                     <Link
                       key={to}
                       to={to}
-                      activeOptions={{ exact: to !== '/products' && to !== '/inventory' }}
+                      activeOptions={{ exact: !['/products', '/inventory', '/purchases'].includes(to) }}
                       activeProps={{ className: 'nav-link active' }}
-                      className="nav-link"
+                      className={
+                        to === '/purchases' && location.pathname.startsWith('/suppliers')
+                          ? 'nav-link active'
+                          : 'nav-link'
+                      }
                       onClick={() => setMobile(false)}
                     >
                       <Icon size={19} />

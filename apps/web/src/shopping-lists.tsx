@@ -779,7 +779,7 @@ function ShoppingEditor({ list, onDeleted }: { list: ShoppingList; onDeleted: ()
                         <li key={line.id} className="shopping-line shopping-line-done">
                           <div className="shopping-line-main">
                             <span className="shopping-line-name">{line.name}</span>
-                            <a className="muted" href={'/purchases?order=' + line.purchaseId}>
+                            <a className="muted" href={'/purchases/' + line.purchaseId}>
                               {line.purchaseNumber}
                             </a>
                           </div>

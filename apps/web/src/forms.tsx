@@ -64,7 +64,8 @@ export function Field({
     <label className="field">
       <span id={`${id}-label`}>{t(label)}</span>
       {Children.map(children, (child) =>
-        isValidElement(child) && ['input', 'select', 'textarea', 'output'].includes(String(child.type))
+        isValidElement(child) &&
+        ['input', 'select', 'textarea', 'output'].includes(String(child.type))
           ? cloneElement(child as ReactElement<Record<string, unknown>>, {
               'aria-labelledby': `${id}-label`,
               'aria-describedby': hint ? `${id}-hint` : undefined,
@@ -252,6 +253,8 @@ export function ProductForm({
   prefill,
   onCreated,
   currency,
+  supplierId,
+  onExisting,
 }: {
   onDone: () => void;
   initial?: Product;
@@ -260,6 +263,8 @@ export function ProductForm({
   >;
   onCreated?: (product: Product) => void;
   currency?: string;
+  supplierId?: string;
+  onExisting?: (product: Product) => void;
 }) {
   useLanguage();
   const formRef = useRef<HTMLFormElement>(null);
@@ -367,7 +372,9 @@ export function ProductForm({
     }
     mutation.mutate({
       ...result.data,
-      ...(!initial ? { autoPlu: !manualPlu, autoSku: !manualSku } : {}),
+      ...(!initial
+        ? { autoPlu: !manualPlu, autoSku: !manualSku, ...(supplierId ? { supplierId } : {}) }
+        : {}),
     });
   }
   if (existingProduct)
@@ -381,7 +388,7 @@ export function ProductForm({
       {!initial && (
         <BarcodeLookup
           onBarcode={(barcode) => fillField('barcodes', barcode, true)}
-          onExisting={setExistingProduct}
+          onExisting={onExisting ?? setExistingProduct}
           onUse={async (suggestion) => {
             fillField('name', suggestion.name);
             fillField('description', suggestion.description ?? '');

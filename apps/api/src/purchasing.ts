@@ -544,9 +544,10 @@ export class PurchasingController {
 
   // Quoted offers joined with what each supplier was actually last paid, so the
   // manager can see whether a quote is still being honoured.
-  private offerQuery(where: string) {
+  private offerQuery(where: string, includeProductDetails = false) {
     return `SELECT sp.id,sp.supplier_id AS "supplierId",s.name AS "supplierName",
       sp.product_id AS "productId",p.name AS "productName",p.sku,p.unit,
+      ${includeProductDetails ? 'p.image AS "productImage",p.description AS "productDescription",p.category AS "productCategory",p.active AS "productActive",' : ''}
       sp.supplier_sku AS "supplierSku",sp.pack_size::text AS "packSize",sp.pack_cost::text AS "packCost",
       sp.lead_time_days AS "leadTimeDays",sp.minimum_order::text AS "minimumOrder",
       sp.notes,sp.active,sp.version,
@@ -569,7 +570,7 @@ export class PurchasingController {
     @Req() req: AuthRequest,
   ) {
     const rows = (
-      await this.database.pool.query(this.offerQuery('sp.supplier_id=$2') + ' ORDER BY p.name', [
+      await this.database.pool.query(this.offerQuery('sp.supplier_id=$2', true) + ' ORDER BY p.name', [
         req.context.store.id,
         id,
       ])
@@ -582,6 +583,61 @@ export class PurchasingController {
       cheapest: false,
       premiumPercent: null,
     }));
+  }
+  @Post('suppliers/:id/products') @Require('suppliers.manage') async linkProduct(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(z.object({ requestId: z.uuid(), productId: z.uuid() }).strict(), input);
+    return this.run(req, b.requestId, 'supplier', { supplierId: id, ...b }, async (c) => {
+      const store = req.context.store.id;
+      const supplier = (
+        await c.query('SELECT id FROM suppliers WHERE id=$1 AND store_id=$2 AND active FOR SHARE', [
+          id,
+          store,
+        ])
+      ).rows[0];
+      if (!supplier) throw new BadRequestException('Choose an active supplier.');
+      const product = (
+        await c.query(
+          'SELECT id FROM products WHERE id=$1 AND store_id=$2 AND active AND base_product_id IS NULL FOR SHARE',
+          [b.productId, store],
+        )
+      ).rows[0];
+      if (!product) throw new BadRequestException('Choose an active product.');
+      const linked = (
+        await c.query(
+          `INSERT INTO supplier_products(store_id,supplier_id,product_id,pack_cost)
+         VALUES($1,$2,$3,NULL)
+         ON CONFLICT(supplier_id,product_id) DO UPDATE SET active=true,
+           version=supplier_products.version+1,updated_at=now()
+         WHERE NOT supplier_products.active RETURNING id`,
+          [store, id, product.id],
+        )
+      ).rows[0];
+      if (linked)
+        await audit(
+          c,
+          {
+            storeId: store,
+            employeeId: req.context.user.id,
+            deviceId: req.context.device.id,
+          },
+          'Supplier product linked',
+          linked.id,
+          { supplierId: id, productId: product.id },
+        );
+      return (
+        linked ??
+        (
+          await c.query(
+            'SELECT id FROM supplier_products WHERE store_id=$1 AND supplier_id=$2 AND product_id=$3',
+            [store, id, product.id],
+          )
+        ).rows[0]
+      );
+    });
   }
   @Get('products/:id/suppliers') @Require('suppliers.read') async productOffers(
     @Param('id', ParseUUIDPipe) id: string,
@@ -714,6 +770,7 @@ export class PurchasingController {
     @Query('page') pageInput?: string,
     @Query('status') statusInput?: string,
     @Query('payment') paymentInput?: string,
+    @Query('supplierId') supplierInput?: string,
   ) {
     const term = parse(z.string().max(200).default(''), search).trim().toLowerCase();
     const page = parse(z.coerce.number().int().min(1).max(1000000).default(1), pageInput);
@@ -727,16 +784,17 @@ export class PurchasingController {
       z.enum(['all', 'unpaid', 'paid', 'overdue', 'unrecorded']).default('all'),
       paymentInput,
     );
+    const supplierId = parse(z.uuid().optional(), supplierInput) ?? null;
     const pageSize = pageInput === undefined ? 200 : 50;
     const result = await this.database.pool.query(
       `WITH searched AS (SELECT p.id,p.number,p.supplier_id,p.supplier_reference,p.document_date::text,p.status,p.version,p.total::text AS total,p.payment_status,p.payment_due_date::text,p.paid_at,
-(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received','closed') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,p.created_at AS "createdAt",s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.store_id=$1 AND ($2='' OR strpos(lower(p.number),$2)>0 OR strpos(lower(s.name),$2)>0 OR strpos(lower(p.supplier_reference),$2)>0)),
+(p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received','closed') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,p.created_at AS "createdAt",s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.store_id=$1 AND ($7::uuid IS NULL OR p.supplier_id=$7::uuid) AND ($2='' OR strpos(lower(p.number),$2)>0 OR strpos(lower(s.name),$2)>0 OR strpos(lower(p.supplier_reference),$2)>0)),
        matching AS (SELECT * FROM searched WHERE ($3='all' OR status=$3)
          AND ($4='all' OR ($4='overdue' AND payment_overdue) OR payment_status=$4)),
        paged AS (SELECT * FROM matching ORDER BY "createdAt" DESC,id DESC LIMIT $5 OFFSET $6)
        SELECT (SELECT count(*)::int FROM matching) AS total,
               COALESCE((SELECT json_agg(paged) FROM paged),'[]'::json) AS rows`,
-      [req.context.store.id, term, status, payment, pageSize, (page - 1) * pageSize],
+      [req.context.store.id, term, status, payment, pageSize, (page - 1) * pageSize, supplierId],
     );
     const { rows, total } = result.rows[0];
     return pageInput === undefined ? rows : { rows, total, page, pageSize };

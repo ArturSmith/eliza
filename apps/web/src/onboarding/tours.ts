@@ -143,22 +143,22 @@ export const pageTours: Record<OnboardingPage, Tour> = {
     ],
   },
   purchases: {
-    version: 1,
+    version: 2,
     steps: [
       {
-        selector: '.page-heading, .receipt-page-header, h1',
-        title: 'Purchases',
-        body: 'Create supplier orders and record the goods actually received. An order alone does not add stock.',
+        selector: '.page-heading',
+        title: 'Suppliers & purchases',
+        body: 'Start with a supplier. Their page brings together contacts, available products and purchase history.',
       },
       {
-        selector: '.page-heading .button',
-        title: 'Prepare an order',
-        body: 'Choose a supplier, add products and review quantities and purchase costs before placing the order.',
+        selector: '.supplier-directory-filters',
+        title: 'Find a supplier',
+        body: 'Search by name, code or contact details, and filter by status or tags.',
       },
       {
-        selector: '.panel, .purchase-document',
-        title: 'Receive the delivery',
-        body: 'Open an order to record received quantities, actual costs and expiry batches. Partial deliveries are supported.',
+        selector: '.supplier-card-grid, .purchasing-empty',
+        title: 'Products and orders',
+        body: 'Open a supplier to create an order. Drafts, deliveries and payment updates each have a dedicated page.',
       },
     ],
   },

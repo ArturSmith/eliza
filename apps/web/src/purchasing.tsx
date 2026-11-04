@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router';
 import { formatQuantity, quantityInputValue } from './quantity-format';
 import { HistoryPagination, type HistoryPage } from './history-pagination';
 import type { DocumentDraftLine } from './purchase-document';
@@ -5,7 +6,7 @@ import { readDocumentHandoff } from './document-purchase';
 import { countText, t, useLanguage, getLocale } from './i18n';
 import { useState, useEffect, useId, type ReactNode } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { Search, X, WandSparkles } from 'lucide-react';
+import { Barcode, Search, WandSparkles } from 'lucide-react';
 import {
   supplierSchema,
   purchaseDraftSchema,
@@ -20,11 +21,10 @@ import { api, ApiError, refresh, useProducts, useSession } from './api';
 import { Field, ErrorMessage, ProductForm, SearchSelect } from './forms';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
-import { SupplierCatalog } from './supplier-products';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
 import { formatMoney } from './receipts';
 import { formatWhatsAppOrder, whatsappOrderUrl } from './purchase-whatsapp';
-type Order = {
+export type Order = {
   close_reason: string;
   closed_at: string | null;
   closed_by_name: string | null;
@@ -32,6 +32,7 @@ type Order = {
   payment_due_date: string | null;
   paid_at: string | null;
   payment_overdue: boolean;
+  createdAt?: string;
   supplier_id: string;
   supplier_reference: string;
   document_date: string | null;
@@ -197,7 +198,13 @@ function CostComparison({
     </div>
   );
 }
-function SupplierSummary({ supplier }: { supplier: Supplier }) {
+export function SupplierSummary({
+  supplier,
+  compact = false,
+}: {
+  supplier: Supplier;
+  compact?: boolean;
+}) {
   useLanguage();
   const details: [string, string][] = [
     ['Code', supplier.code],
@@ -210,7 +217,11 @@ function SupplierSummary({ supplier }: { supplier: Supplier }) {
     ['Company number', supplier.companyNumber],
     ['Payment terms', supplier.paymentTerms],
   ];
-  const shown = details.filter(([, value]) => value);
+  const shown = details.filter(
+    ([label, value]) =>
+      value &&
+      (!compact || ['Code', 'Sales representative', 'Representative phone'].includes(label)),
+  );
   return (
     <div className="supplier-summary">
       <div className="supplier-summary-head">
@@ -233,7 +244,7 @@ function SupplierSummary({ supplier }: { supplier: Supplier }) {
     </div>
   );
 }
-function Heading({
+export function Heading({
   title,
   description,
   className = '',
@@ -256,221 +267,17 @@ function Heading({
     </div>
   );
 }
-export function SuppliersPage() {
-  useLanguage();
-  const q = useQuery({ queryKey: ['suppliers'], queryFn: () => api<Supplier[]>('/suppliers') });
-  const [editing, setEditing] = useState<Supplier | null | undefined>();
-  const [catalogFor, setCatalogFor] = useState<Supplier | undefined>();
-  const [deletingSupplier, setDeletingSupplier] = useState<Supplier | undefined>();
-  const deleteSupplier = useMutation({
-    mutationFn: (id: string) => api<{ deleted: true }>(`/suppliers/${id}`, undefined, 'DELETE'),
-    onSuccess: () => {
-      setDeletingSupplier(undefined);
-      void refresh();
-    },
-  });
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState('all');
-  const [tag, setTag] = useState('');
-  const tags = [...new Set((q.data ?? []).flatMap((s) => s.tags ?? []))].sort((a, b) =>
-    a.localeCompare(b),
-  );
-  const rows = (q.data ?? []).filter(
-    (s) =>
-      (status === 'all' || s.active === (status === 'active')) &&
-      (!tag || (s.tags ?? []).some((value) => value.toLowerCase() === tag.toLowerCase())) &&
-      [
-        s.name,
-        s.code,
-        s.contactName,
-        s.contactPhone,
-        s.email,
-        s.phone,
-        s.whatsappPhone,
-        ...(s.tags ?? []),
-      ].some((value) => (value ?? '').toLowerCase().includes(search.trim().toLowerCase())),
-  );
-  return (
-    <>
-      <Heading
-        title={t('Suppliers')}
-        description={t('Supplier contacts and ordering details.')}
-        action={<Button onClick={() => setEditing(null)}>Add supplier</Button>}
-      />
-      <section className="panel">
-        <div className="table-toolbar">
-          <div className="search-box">
-            <Search size={18} />
-            <input
-              aria-label={t('Search suppliers')}
-              placeholder={t('Search name, code, tag, contact, email, or phone…')}
-              value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-              }}
-            />
-          </div>
-          <select
-            aria-label={t('Supplier status')}
-            value={status}
-            onChange={(event) => setStatus(event.target.value)}
-          >
-            <option value="all">{t('All statuses')}</option>
-            <option value="active">{t('Active')}</option>
-            <option value="inactive">{t('Inactive')}</option>
-          </select>
-          <select
-            aria-label={t('Supplier tag')}
-            value={tag}
-            onChange={(event) => setTag(event.target.value)}
-          >
-            <option value="">{t('All tags')}</option>
-            {tags.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-          {(search || tag || status !== 'all') && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSearch('');
-                setTag('');
-                setStatus('all');
-              }}
-            >
-              {t('Clear filters')}
-            </Button>
-          )}
-          <span className="muted">{countText('suppliers', rows.length)}</span>
-        </div>
-        <ErrorMessage error={q.error} />
-        {q.isPending ? (
-          <p className="panel-padding">{t('Loading suppliers…')}</p>
-        ) : rows.length ? (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('Supplier')}</th>
-                  <th>{t('Contact')}</th>
-                  <th>{t('Terms')}</th>
-                  <th>{t('Status')}</th>
-                  <th className="table-actions-column">{t('Actions')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((s) => (
-                  <tr key={s.id}>
-                    <td>
-                      <strong>{s.name}</strong>
-                      <small>{s.code}</small>
-                      {!!s.tags?.length && (
-                        <div className="supplier-tags">
-                          {s.tags.map((tag) => (
-                            <span className="badge badge-gray" key={tag}>
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      {s.contactName || '—'}
-                      {(s.contactPhone || s.email || s.phone) && (
-                        <small>
-                          {[s.contactPhone, s.email, s.phone].filter(Boolean).join(' · ')}
-                        </small>
-                      )}
-                    </td>
-                    <td>{s.paymentTerms || '—'}</td>
-                    <td>
-                      <span className={`badge badge-${s.active ? 'green' : 'gray'}`}>
-                        {s.active ? t('Active') : t('Inactive')}
-                      </span>
-                    </td>
-                    <td className="table-actions-column">
-                      <Button variant="ghost" onClick={() => setCatalogFor(s)}>
-                        {t('Products')}
-                      </Button>
-                      <Button variant="ghost" onClick={() => setEditing(s)}>
-                        {t('Edit ')}
-                      </Button>
-                      <Button variant="ghost" onClick={() => setDeletingSupplier(s)}>
-                        {t('Delete')}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p className="panel-padding">
-            {q.data?.length
-              ? t('No suppliers match “{value0}”.', { value0: search.trim() })
-              : t('Add your first supplier to start purchasing.')}
-          </p>
-        )}
-      </section>
-      <Dialog
-        open={deletingSupplier !== undefined}
-        onOpenChange={(open) => !open && setDeletingSupplier(undefined)}
-        title={t('Delete supplier')}
-        description={t(
-          'Delete {value0}? This is permanent. Suppliers used by purchases, offers or shopping lists cannot be deleted.',
-          { value0: deletingSupplier?.name ?? '' },
-        )}
-      >
-        <ErrorMessage error={deleteSupplier.error} />
-        <div className="form-actions">
-          <Button variant="outline" onClick={() => setDeletingSupplier(undefined)}>
-            {t('Cancel')}
-          </Button>
-          <Button
-            disabled={deleteSupplier.isPending}
-            onClick={() => deletingSupplier && deleteSupplier.mutate(deletingSupplier.id)}
-          >
-            {deleteSupplier.isPending ? t('Deleting…') : t('Delete supplier')}
-          </Button>
-        </div>
-      </Dialog>
-      <Dialog
-        open={editing !== undefined}
-        onOpenChange={(v) => !v && setEditing(undefined)}
-        title={editing ? t('Edit supplier') : t('Add supplier')}
-        description={t('Keep supplier details available for your team.')}
-      >
-        {editing !== undefined && (
-          <SupplierForm
-            key={editing?.id ?? 'new'}
-            supplier={editing}
-            done={() => setEditing(undefined)}
-          />
-        )}
-      </Dialog>
-      <Dialog
-        open={catalogFor !== undefined}
-        onOpenChange={(v) => !v && setCatalogFor(undefined)}
-        title={t('Products from {value0}', { value0: catalogFor?.name ?? '' })}
-        description={t('What you can order, and what it costs per selling unit.')}
-      >
-        {catalogFor && <SupplierCatalog supplierId={catalogFor.id} />}
-      </Dialog>
-    </>
-  );
-}
 export function SupplierForm({
   supplier,
   done,
   onCreated,
   prefill,
+  onCancel,
 }: {
   supplier: Supplier | null;
   done: () => void;
   onCreated?: (supplier: Supplier) => void;
+  onCancel?: () => void;
   prefill?: Partial<
     Pick<
       Supplier,
@@ -516,131 +323,158 @@ export function SupplierForm({
           .filter(Boolean),
         requestId,
       }),
-    onSuccess: (saved) => {
+    onSuccess: async (saved) => {
+      await refresh();
       onCreated?.(saved);
-      void refresh();
       done();
     },
   });
+  const labels = {
+    code: 'Supplier code',
+    name: 'Supplier name',
+    contactName: 'Sales representative',
+    contactPhone: 'Representative phone',
+    companyNumber: 'Company number',
+    paymentTerms: 'Payment terms',
+    email: 'Email',
+    phone: 'Supplier phone',
+    whatsappPhone: 'WhatsApp number',
+    address: 'Address',
+    notes: 'Notes',
+  } as const;
+  function field(key: keyof typeof labels) {
+    if (key === 'code')
+      return (
+        <div className="field" key={key}>
+          <span id={`${codeInputId}-label`}>{t('Supplier code')}</span>
+          <div className="supplier-code-control">
+            <input
+              id={codeInputId}
+              aria-labelledby={`${codeInputId}-label`}
+              required
+              maxLength={30}
+              value={value.code}
+              onChange={(event) =>
+                setValue((current) => ({ ...current, code: event.target.value }))
+              }
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              aria-label={t('Generate supplier code')}
+              title={t(
+                supplier && value.code.trim()
+                  ? 'Clear the current code to generate a replacement'
+                  : 'Generate supplier code',
+              )}
+              disabled={
+                generateCode.isPending || mutation.isPending || (!!supplier && !!value.code.trim())
+              }
+              onClick={() => generateCode.mutate()}
+            >
+              <WandSparkles size={16} aria-hidden="true" />
+            </Button>
+          </div>
+        </div>
+      );
+    return (
+      <Field
+        key={key}
+        label={t(labels[key])}
+        hint={
+          key === 'whatsappPhone'
+            ? t('Use a full international number starting with +.')
+            : undefined
+        }
+      >
+        {key === 'notes' || key === 'address' ? (
+          <textarea
+            rows={key === 'notes' ? 4 : 2}
+            value={value[key]}
+            maxLength={key === 'notes' ? 1000 : 400}
+            onChange={(e) => setValue({ ...value, [key]: e.target.value })}
+          />
+        ) : (
+          <input
+            required={key === 'name'}
+            type={
+              key === 'email'
+                ? 'email'
+                : ['phone', 'contactPhone', 'whatsappPhone'].includes(key)
+                  ? 'tel'
+                  : 'text'
+            }
+            placeholder={key === 'whatsappPhone' ? '+4791234567' : undefined}
+            value={value[key]}
+            onChange={(e) => setValue({ ...value, [key]: e.target.value })}
+          />
+        )}
+      </Field>
+    );
+  }
   return (
     <form
+      className="supplier-profile-form"
       onSubmit={(e) => {
         e.preventDefault();
         mutation.mutate();
       }}
     >
-      <div className="form-grid">
-        {(
-          [
-            'code',
-            'name',
-            'contactName',
-            'contactPhone',
-            'email',
-            'phone',
-            'whatsappPhone',
-            'address',
-            'companyNumber',
-            'paymentTerms',
-            'notes',
-          ] as const
-        ).map((key) =>
-          key === 'code' ? (
-            <div className="field" key={key}>
-              <span id={`${codeInputId}-label`}>{t('Supplier code')}</span>
-              <div className="supplier-code-control">
-                <input
-                  id={codeInputId}
-                  aria-labelledby={`${codeInputId}-label`}
-                  required
-                  value={value.code}
-                  onChange={(event) =>
-                    setValue((current) => ({ ...current, code: event.target.value }))
-                  }
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="icon"
-                  aria-label={t('Generate supplier code')}
-                  title={t(
-                    supplier && value.code.trim()
-                      ? 'Clear the current code to generate a replacement'
-                      : 'Generate supplier code',
-                  )}
-                  disabled={
-                    generateCode.isPending ||
-                    mutation.isPending ||
-                    (!!supplier && !!value.code.trim())
-                  }
-                  onClick={() => generateCode.mutate()}
-                >
-                  <WandSparkles size={16} aria-hidden="true" />
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <Field
-              key={key}
-              hint={
-                key === 'whatsappPhone'
-                  ? t('Use a full international number starting with +.')
-                  : undefined
-              }
-              label={t(
-                {
-                  code: 'Supplier code',
-                  name: 'Supplier name',
-                  contactName: 'Sales representative',
-                  contactPhone: 'Representative phone',
-                  companyNumber: 'Company number',
-                  paymentTerms: 'Payment terms',
-                  email: 'Email',
-                  phone: 'Supplier phone',
-                  whatsappPhone: 'WhatsApp number',
-                  address: 'Address',
-                  notes: 'Notes',
-                }[key],
-              )}
-            >
-              <input
-                required={key === 'name'}
-                type={key === 'email' ? 'email' : key === 'whatsappPhone' ? 'tel' : 'text'}
-                placeholder={key === 'whatsappPhone' ? '+4791234567' : undefined}
-                value={value[key]}
-                onChange={(e) => setValue({ ...value, [key]: e.target.value })}
-              />
-            </Field>
-          ),
-        )}
-      </div>
-      <Field
-        label={t('Tags (optional)')}
-        hint={t('Separate tags with commas, for example: drinks, local, wholesale.')}
+      <fieldset
+        disabled={mutation.isPending}
+        className="purchasing-fields-reset supplier-form-sections"
       >
-        <input
-          value={tagsText}
-          onChange={(event) => setTagsText(event.target.value)}
-          placeholder={t('drinks, local, wholesale')}
-        />
-      </Field>
-      <label className="checkbox-field">
-        <input
-          type="checkbox"
-          checked={value.active}
-          onChange={(e) => setValue({ ...value, active: e.target.checked })}
-        />
-        {t('Active supplier ')}
-      </label>
+        <section className="panel purchasing-form-panel">
+          <h2>{t('Supplier information')}</h2>
+          {(['name', 'code', 'companyNumber'] as const).map(field)}
+          <label className="checkbox-field">
+            <input
+              type="checkbox"
+              checked={value.active}
+              onChange={(e) => setValue({ ...value, active: e.target.checked })}
+            />
+            {t('Active supplier ')}
+          </label>
+        </section>
+        <section className="panel purchasing-form-panel">
+          <h2>{t('Contact details')}</h2>
+          <div className="form-grid">
+            {(['contactName', 'contactPhone', 'phone', 'email'] as const).map(field)}
+          </div>
+          {field('address')}
+        </section>
+        <section className="panel purchasing-form-panel supplier-ordering-fields">
+          <h2>{t('Ordering details')}</h2>
+          <div className="form-grid">{(['paymentTerms', 'whatsappPhone'] as const).map(field)}</div>
+          <Field
+            label={t('Tags (optional)')}
+            hint={t('Separate tags with commas, for example: drinks, local, wholesale.')}
+          >
+            <input
+              value={tagsText}
+              onChange={(event) => setTagsText(event.target.value)}
+              placeholder={t('drinks, local, wholesale')}
+            />
+          </Field>
+          {field('notes')}
+        </section>
+      </fieldset>
       <ErrorMessage error={generateCode.error ?? mutation.error} />
-      <div className="form-actions">
+      <div className="purchasing-form-actions">
         <Button disabled={mutation.isPending}>
           {mutation.isPending ? t('Saving…') : t('Save supplier')}
         </Button>
+        {onCancel && (
+          <Button type="button" variant="outline" disabled={mutation.isPending} onClick={onCancel}>
+            {t('Cancel')}
+          </Button>
+        )}
       </div>
     </form>
   );
 }
+
 const statusTone: Record<string, string> = {
   draft: 'gray',
   ordered: 'amber',
@@ -649,14 +483,20 @@ const statusTone: Record<string, string> = {
   cancelled: 'gray',
   closed: 'gray',
 };
-export function PurchasesPage() {
+export function PurchaseHistory({
+  supplierId,
+  embedded = false,
+}: {
+  supplierId?: string;
+  embedded?: boolean;
+}) {
   useLanguage();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const q = useQuery({
-    queryKey: ['purchases', search.trim(), filter, paymentFilter, page],
+    queryKey: ['purchases', supplierId, search.trim(), filter, paymentFilter, page],
     queryFn: () =>
       api<HistoryPage<Order>>(
         '/purchases?' +
@@ -665,33 +505,18 @@ export function PurchasesPage() {
             status: filter,
             payment: paymentFilter,
             page: String(page),
+            ...(supplierId ? { supplierId } : {}),
           }),
       ),
   });
-  const currency = useSession().data?.store.currency ?? 'NOK';
-  const [selected, setSelected] = useState<string | undefined>(
-    () => new URLSearchParams(window.location.search).get('order') ?? undefined,
-  );
-  const [create, setCreate] = useState(() =>
-    new URLSearchParams(window.location.search).has('document'),
-  );
-  const [viewRequest, setViewRequest] = useState(0);
-  useEffect(() => {
-    if (!viewRequest || !selected) return;
-    const frame = requestAnimationFrame(() => {
-      document.getElementById('selected-purchase-detail')?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      });
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [viewRequest, selected]);
+  const store = useSession().data!.store;
+  const currency = store.currency;
+  const canWrite = useSession().data!.user.permissions.includes('purchases.write');
   const [deletingPurchase, setDeletingPurchase] = useState<Order | undefined>();
   const deletePurchase = useMutation({
     mutationFn: (id: string) => api<{ deleted: true }>(`/purchases/${id}`, undefined, 'DELETE'),
     onSuccess: () => {
       setDeletingPurchase(undefined);
-      setSelected(undefined);
       void refresh();
     },
   });
@@ -702,21 +527,32 @@ export function PurchasesPage() {
   const rows = q.data?.rows ?? [];
   return (
     <>
-      <Heading
-        title={t('Purchase orders')}
-        className="purchases-heading"
-        description={t(
-          'Order stock, then record each delivery when it arrives. Costs exclude tax.',
-        )}
-        action={
-          <div className="purchase-heading-actions">
-            <a className="button button-outline" href="/ai">
-              {t('Document assistant')}
-            </a>
-            <Button onClick={() => setCreate(true)}>{t('New purchase order')}</Button>
-          </div>
-        }
-      />
+      {!embedded && (
+        <Heading
+          title={t('Purchase history')}
+          className="purchases-heading"
+          description={t(
+            'Order stock, then record each delivery when it arrives. Costs exclude tax.',
+          )}
+          action={
+            <div className="purchase-heading-actions">
+              <a className="button button-outline" href="/ai">
+                {t('Document assistant')}
+              </a>
+              {canWrite && (
+                <Link className="button button-primary" to="/purchases/new">
+                  {t('New purchase order')}
+                </Link>
+              )}
+            </div>
+          }
+        />
+      )}
+      {embedded && (
+        <div className="supplier-section-heading">
+          <h2>{t('Purchase history')}</h2>
+        </div>
+      )}
       <section className="panel">
         <div className="table-toolbar">
           <div className="search-box">
@@ -778,6 +614,7 @@ export function PurchasesPage() {
               <thead>
                 <tr>
                   <th>{t('Order')}</th>
+                  <th>{t('Date')}</th>
                   <th>{t('Supplier')}</th>
                   <th>{t('Status')}</th>
                   <th>{t('Payment status')}</th>
@@ -791,6 +628,13 @@ export function PurchasesPage() {
                     <td>
                       <strong>{p.number}</strong>
                       {p.supplier_reference && <small>{p.supplier_reference}</small>}
+                    </td>
+                    <td>
+                      {p.createdAt
+                        ? new Date(p.createdAt).toLocaleDateString(getLocale(), {
+                            timeZone: store.timezone,
+                          })
+                        : '—'}
                     </td>
                     <td>{p.supplierName}</td>
                     <td>
@@ -808,16 +652,14 @@ export function PurchasesPage() {
                     </td>
                     <td className="table-number-column">{formatMoney(p.total, currency)}</td>
                     <td className="table-actions-column">
-                      <Button
-                        variant="ghost"
-                        onClick={() => {
-                          setSelected(p.id);
-                          setViewRequest((current) => current + 1);
-                        }}
+                      <Link
+                        className="button button-ghost"
+                        to="/purchases/$id"
+                        params={{ id: p.id }}
                       >
                         {t('View ')}
-                      </Button>
-                      {p.status === 'draft' && (
+                      </Link>
+                      {canWrite && p.status === 'draft' && (
                         <Button variant="ghost" onClick={() => setDeletingPurchase(p)}>
                           {t('Delete')}
                         </Button>
@@ -865,38 +707,37 @@ export function PurchasesPage() {
           </Button>
         </div>
       </Dialog>
-      {selected && <OrderDetail id={selected} close={() => setSelected(undefined)} />}
-      <Dialog
-        wide
-        open={create}
-        onOpenChange={setCreate}
-        title={t('New purchase order')}
-        description={t(
-          'Save a draft before placing your order. Stock changes only when you receive a delivery.',
-        )}
-      >
-        {create && (
-          <DraftForm
-            done={(id) => {
-              setCreate(false);
-              setSelected(id);
-            }}
-          />
-        )}
-      </Dialog>
     </>
   );
 }
-function DraftForm({ done, order }: { done: (id: string) => void; order?: Order }) {
+export function DraftForm({
+  done,
+  order,
+  fixedSupplierId,
+  fromDocument = false,
+  onCancel,
+}: {
+  done: (id: string) => void;
+  order?: Order;
+  fixedSupplierId?: string;
+  fromDocument?: boolean;
+  onCancel?: () => void;
+}) {
   useLanguage();
   const suppliers = useQuery({
     queryKey: ['suppliers'],
     queryFn: () => api<Supplier[]>('/suppliers'),
   });
   const products = useProducts();
-  const currency = useSession().data?.store.currency ?? 'NOK';
-  const [handoff] = useState(() => (order ? null : readDocumentHandoff()));
-  const [supplierId, setSupplier] = useState(order?.supplier_id ?? handoff?.supplierId ?? '');
+  const session = useSession().data!;
+  const currency = session.store.currency;
+  const canCreateSupplier = session.user.permissions.includes('suppliers.manage');
+  const canCreateProduct = session.user.permissions.includes('catalog.write');
+  const [editingVersion] = useState(order?.version);
+  const [handoff] = useState(() => (!order && fromDocument ? readDocumentHandoff() : null));
+  const [supplierId, setSupplier] = useState(
+    order?.supplier_id ?? fixedSupplierId ?? handoff?.supplierId ?? '',
+  );
   const supplierOffers = useQuery({
     queryKey: ['supplier-products'],
     queryFn: () => api<SupplierOffer[]>('/supplier-products'),
@@ -958,7 +799,15 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
           l.proposed_selling_price ??
           products.data?.find((p) => p.id === l.product_id)?.price ??
           '',
-      })) ?? [{ productId: '', quantity: '1', unitCost: '0', taxRate: '0', sellingPrice: '' }],
+      })) ?? [
+        {
+          productId: '',
+          quantity: '1',
+          unitCost: '0',
+          taxRate: '0',
+          sellingPrice: '',
+        },
+      ],
   );
   useEffect(() => {
     if (handoff)
@@ -973,7 +822,16 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
           ? {
               ...line,
               productId: product.id,
-              unitCost: line.source ? line.unitCost : (product.cost ?? ''),
+              unitCost: line.source
+                ? line.unitCost
+                : (() => {
+                    const quote = supplierOffers.data?.find(
+                      (offer) => offer.productId === product.id && offer.supplierId === supplierId,
+                    )?.unitCost;
+                    return quote
+                      ? fromScaled((toScaled(quote, 4) + 50n) / 100n, 2)
+                      : (product.cost ?? '');
+                  })(),
               sellingPrice: product.price ?? '',
             }
           : line,
@@ -995,7 +853,13 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
     setLineError('');
     setLines((current) => [
       ...current,
-      { productId: '', quantity: '1', unitCost: '0', taxRate: '0', sellingPrice: '' },
+      {
+        productId: '',
+        quantity: '1',
+        unitCost: '0',
+        taxRate: '0',
+        sellingPrice: '',
+      },
     ]);
   }
   function removeLine(index: number) {
@@ -1043,7 +907,7 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
       api<Order>('/purchases', {
         requestId,
         id: order?.id,
-        version: order?.version,
+        version: editingVersion,
         supplierId,
         supplierReference: reference,
         documentDate,
@@ -1055,379 +919,47 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
           sellingPrice: line.sellingPrice || undefined,
         })),
       }),
-    onSuccess: (p) => {
-      void refresh();
+    onSuccess: async (p) => {
+      await refresh();
       done(p.id);
     },
   });
-  return (
-    <>
-      <form
-        className="purchase-draft-form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const parsed = purchaseDraftSchema.safeParse({
-            supplierId,
-            supplierReference: reference,
-            documentDate,
-            ...documentDetails,
-            expectedDate,
-            notes,
-            lines: lines.map((line) => ({ ...line, sellingPrice: line.sellingPrice || undefined })),
-          });
-          const whole = lines.every((line) => {
-            const product = availableProducts.find((p) => p.id === line.productId && p.active);
-            return (
-              product &&
-              (!['piece', 'pack', 'box'].includes(product.unit) ||
-                Number.isInteger(Number(line.quantity)))
-            );
-          });
-          if (!parsed.success || !whole) {
-            setLineError(
-              'Check every row: choose a product, enter valid quantities, costs and tax, and combine duplicate products. Piece, pack and box quantities must be whole numbers.',
-            );
-            return;
-          }
-          if (hasScan && !reviewed) {
-            setLineError('Review the scanned rows and confirm the document check before saving.');
-            return;
-          }
-          setLineError('');
-          mutation.mutate();
-        }}
-      >
-        <SearchSelect
-          label={t('Supplier')}
-          placeholder={t('Select a supplier')}
-          value={
-            selectedSupplier && { title: selectedSupplier.name, subtitle: selectedSupplier.code }
-          }
-          options={(availableSuppliers ?? [])
-            .filter((s) => s.active)
-            .map((s) => ({
-              id: s.id,
-              title: s.name,
-              subtitle: [s.code, s.contactName, s.phone].filter(Boolean).join(' · '),
-              keywords: [s.name, s.code, s.contactName, s.email, s.phone, s.companyNumber],
-            }))}
-          createLabel={t('Add new supplier')}
-          onCreate={() => {
-            setSupplierPrefill(undefined);
-            setAddingSupplier(true);
-          }}
-          onSelect={setSupplier}
+  if (addingSupplier)
+    return (
+      <div className="purchasing-subpage">
+        <Button variant="ghost" onClick={() => setAddingSupplier(false)}>
+          {t('Back to order')}
+        </Button>
+        <Heading
+          title={t('Add supplier')}
+          description={t('Keep supplier details available for your team.')}
         />
-        {selectedSupplier && <SupplierSummary supplier={selectedSupplier} />}
-        <div className="purchase-reference-row">
-          <div>
-            <Field label={t('Supplier reference')}>
-              <input
-                maxLength={60}
-                value={reference}
-                onChange={(e) => setReference(e.target.value)}
-              />
-            </Field>
-          </div>
-          <Button
-            className="purchase-reference-generate"
-            type="button"
-            variant="outline"
-            onClick={() =>
-              setReference(
-                'REF-' + crypto.randomUUID().replaceAll('-', '').slice(0, 16).toUpperCase(),
-              )
-            }
-          >
-            {t('Generate reference')}
-          </Button>
-        </div>
-        <Field label={t('Document date (optional)')}>
-          <input
-            type="date"
-            value={documentDate}
-            onChange={(e) => setDocumentDate(e.target.value)}
-          />
-        </Field>
-        <fieldset className="purchase-document-details">
-          <legend>{t('Driver details (optional)')}</legend>
-          <div className="form-grid">
-            {(
-              [
-                ['driverName', 'Driver'],
-                ['driverPhone', 'Driver phone'],
-              ] as const
-            ).map(([key, label]) => (
-              <Field key={key} label={t(label)}>
-                <input
-                  value={documentDetails[key]}
-                  onChange={(event) =>
-                    setDocumentDetails((current) => ({ ...current, [key]: event.target.value }))
-                  }
-                />
-              </Field>
-            ))}
-          </div>
-        </fieldset>
-        <Field label={t('Expected delivery')}>
-          <input type="date" value={expectedDate} onChange={(e) => setDate(e.target.value)} />
-        </Field>
-        {hasScan && (
-          <p className="notice">
-            {t(
-              'Check every line against the image. Quantities must use the product’s stock unit; convert cartons yourself. Costs are per stock unit, excluding tax. Enter the tax shown on the document.',
-            )}
-          </p>
-        )}
-        <ErrorMessage error={supplierOffers.error} />
-        <div
-          className="purchase-draft-scroll"
-          tabIndex={0}
-          role="region"
-          aria-label={t('Purchase items')}
-        >
-          <table className="purchase-draft-table">
-            <caption className="sr-only">{t('Purchase items')}</caption>
-            <thead>
-              <tr>
-                <th scope="col">#</th>
-                <th scope="col">{t('Product')}</th>
-                <th scope="col">{t('Stock unit')}</th>
-                <th scope="col">{t('Quantity')}</th>
-                <th scope="col">{t('Unit cost excl. tax')}</th>
-                <th scope="col">{t('Selling price incl. tax')}</th>
-                <th scope="col">{t('Purchase tax %')}</th>
-                <th scope="col">{t('Total incl. tax')}</th>
-                <th scope="col">{t('Actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((line, index) => {
-                const product = availableProducts.find((p) => p.id === line.productId);
-                const productOffers = product ? (offersByProduct.get(product.id) ?? []) : [];
-                return (
-                  <tr
-                    key={index}
-                    id={'purchase-review-row-' + index}
-                    className={handoff?.focusLine === index ? 'purchase-review-focus' : undefined}
-                    aria-label={t('Purchase row {number}', { number: index + 1 })}
-                  >
-                    <td>{index + 1}</td>
-                    <td className="purchase-draft-product">
-                      {line.source && (
-                        <div className="purchase-draft-source">
-                          <strong>{line.source.description || t('Unreadable description')}</strong>
-                          <small>
-                            {[line.source.supplierSku, line.source.barcode]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          </small>
-                          <small>
-                            {t('Read quantity: {quantity}; unit cost: {cost}', {
-                              quantity: formatQuantity(line.source.quantity),
-                              cost: line.source.unitCost || '—',
-                            })}
-                          </small>
-                        </div>
-                      )}
-                      <SearchSelect
-                        label={t('Product')}
-                        placeholder={t('Select a product')}
-                        value={product && { title: product.name, subtitle: product.sku }}
-                        options={availableProducts
-                          .filter((p) => p.active)
-                          .map((p) => ({
-                            id: p.id,
-                            title: p.name,
-                            subtitle: p.sku,
-                            keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
-                          }))}
-                        createLabel={t('Create new product')}
-                        onCreate={() => setAddingProduct(index)}
-                        onSelect={(id) => {
-                          const p = availableProducts.find((p) => p.id === id);
-                          if (p) selectProduct(index, p);
-                        }}
-                      />
-                      {!line.productId && line.source && (
-                        <div className="error purchase-unmatched">
-                          <p>
-                            {t('No reliable product match. Choose the correct catalogue product.')}
-                          </p>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setAddingProduct(index)}
-                          >
-                            {t('Create new product')}
-                          </Button>
-                        </div>
-                      )}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={() => {
-                          setBarcode('');
-                          setScanError('');
-                          setScanLine(index);
-                        }}
-                      >
-                        {t('Scan barcode')}
-                      </Button>
-                      {product && (
-                        <SupplierOfferHint
-                          supplierId={supplierId}
-                          offers={productOffers}
-                          currency={currency}
-                        />
-                      )}
-                    </td>
-                    <td>{product ? t(product.unit) : '—'}</td>
-                    <td>
-                      <input
-                        aria-label={t('Quantity')}
-                        required
-                        inputMode="decimal"
-                        value={line.quantity}
-                        onChange={(e) => updateLine(index, 'quantity', e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        aria-label={t('Unit cost excl. tax')}
-                        required
-                        inputMode="decimal"
-                        value={line.unitCost}
-                        onChange={(e) => updateLine(index, 'unitCost', e.target.value)}
-                      />
-                      {product && (
-                        <CostComparison
-                          cost={line.unitCost}
-                          previous={product.cost}
-                          price={product.price}
-                        />
-                      )}
-                    </td>
-                    <td>
-                      <input
-                        aria-label={t('Proposed selling price incl. tax (optional)')}
-                        inputMode="decimal"
-                        value={line.sellingPrice}
-                        onChange={(e) => updateLine(index, 'sellingPrice', e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        aria-label={t('Purchase tax %')}
-                        required
-                        inputMode="decimal"
-                        value={line.taxRate}
-                        onChange={(e) => updateLine(index, 'taxRate', e.target.value)}
-                      />
-                    </td>
-                    <td className="purchase-draft-amount">
-                      {lineAmounts[index] ? formatMoney(lineAmounts[index]!.total, currency) : '—'}
-                    </td>
-                    <td>
-                      <Button type="button" variant="ghost" onClick={() => removeLine(index)}>
-                        {t('Remove line')}
-                      </Button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        <div className="purchase-draft-footer">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={lines.length >= 100}
-            onClick={nextProduct}
-          >
-            {t('Add product')}
-          </Button>
-          <dl className="purchase-draft-totals">
-            <div>
-              <dt>{t('Subtotal excl. tax')}</dt>
-              <dd>{totals ? formatMoney(totals.subtotal, currency) : '—'}</dd>
-            </div>
-            <div>
-              <dt>{t('Tax')}</dt>
-              <dd>{totals ? formatMoney(totals.tax, currency) : '—'}</dd>
-            </div>
-            <div>
-              <dt>{t('Total incl. tax')}</dt>
-              <dd>{totals ? formatMoney(totals.total, currency) : '—'}</dd>
-            </div>
-          </dl>
-        </div>
-        <p className="muted">
-          {t(
-            'Leave blank to keep the current selling price. Confirm any proposed price when receiving the delivery. Saving this order does not change checkout prices.',
-          )}
-        </p>
-        <ErrorMessage error={lineError} />
-        {hasScan && (
-          <label className="purchase-document-confirm">
-            <input
-              type="checkbox"
-              checked={reviewed}
-              onChange={(e) => {
-                setReviewed(e.target.checked);
-                setLineError('');
-              }}
-            />
-            <span>
-              {t(
-                'I checked the products, stock units, quantities, costs and tax against the document.',
-              )}
-            </span>
-          </label>
-        )}
-        <Field label={t('Order notes')}>
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
-        </Field>
-        <ErrorMessage error={mutation.error} />
-        <div className="form-actions">
-          <Button disabled={mutation.isPending}>
-            {mutation.isPending ? t('Saving…') : t('Save draft')}
-          </Button>
-        </div>
-      </form>
-      <Dialog
-        elevated
-        open={addingSupplier}
-        onOpenChange={setAddingSupplier}
-        title={t('Add supplier')}
-        description={t('Keep supplier details available for your team.')}
-      >
-        {addingSupplier && (
-          <SupplierForm
-            key={supplierPrefill?.code ?? 'blank'}
-            supplier={null}
-            prefill={supplierPrefill}
-            done={() => {
-              setAddingSupplier(false);
-            }}
-            onCreated={(supplier) => {
-              setCreatedSuppliers((current) => [...current, supplier]);
-              setSupplier(supplier.id);
-            }}
-          />
-        )}
-      </Dialog>
-      <Dialog
-        elevated
-        open={addingProduct !== null}
-        onOpenChange={(open) => {
-          if (!open) setAddingProduct(null);
-        }}
-        title={t('Add a product')}
-        description={t('Start with the basics. Receive stock through this purchase order.')}
-      >
-        {addingProduct !== null && (
+        <SupplierForm
+          key={supplierPrefill?.code ?? 'blank'}
+          supplier={null}
+          prefill={supplierPrefill}
+          onCancel={() => setAddingSupplier(false)}
+          done={() => {
+            setAddingSupplier(false);
+          }}
+          onCreated={(supplier) => {
+            setCreatedSuppliers((current) => [...current, supplier]);
+            setSupplier(supplier.id);
+          }}
+        />
+      </div>
+    );
+  if (addingProduct !== null)
+    return (
+      <div className="purchasing-subpage">
+        <Button variant="ghost" onClick={() => setAddingProduct(null)}>
+          {t('Back to order')}
+        </Button>
+        <Heading
+          title={t('Add a product')}
+          description={t('Start with the basics. Receive stock through this purchase order.')}
+        />
+        <section className="panel purchasing-form-panel">
           <ProductForm
             key={addingProduct}
             prefill={
@@ -1462,8 +994,426 @@ function DraftForm({ done, order }: { done: (id: string) => void; order?: Order 
               selectProduct(addingProduct, product);
             }}
           />
-        )}
-      </Dialog>
+        </section>
+      </div>
+    );
+  return (
+    <>
+      <form
+        className="purchase-draft-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const parsed = purchaseDraftSchema.safeParse({
+            supplierId,
+            supplierReference: reference,
+            documentDate,
+            ...documentDetails,
+            expectedDate,
+            notes,
+            lines: lines.map((line) => ({
+              ...line,
+              sellingPrice: line.sellingPrice || undefined,
+            })),
+          });
+          const whole = lines.every((line) => {
+            const product = availableProducts.find((p) => p.id === line.productId && p.active);
+            return (
+              product &&
+              (!['piece', 'pack', 'box'].includes(product.unit) ||
+                Number.isInteger(Number(line.quantity)))
+            );
+          });
+          if (!parsed.success || !whole) {
+            setLineError(
+              'Check every row: choose a product, enter valid quantities, costs and tax, and combine duplicate products. Piece, pack and box quantities must be whole numbers.',
+            );
+            return;
+          }
+          if (hasScan && !reviewed) {
+            setLineError('Review the scanned rows and confirm the document check before saving.');
+            return;
+          }
+          setLineError('');
+          mutation.mutate();
+        }}
+      >
+        <fieldset
+          disabled={mutation.isPending}
+          className="purchasing-fields-reset purchase-draft-fields"
+        >
+          <section className="panel purchasing-form-panel purchasing-order-basics">
+            <h2>{t('Order details')}</h2>
+            {!fixedSupplierId && (
+              <>
+                <SearchSelect
+                  label={t('Supplier')}
+                  placeholder={t('Select a supplier')}
+                  value={
+                    selectedSupplier && {
+                      title: selectedSupplier.name,
+                      subtitle: selectedSupplier.code,
+                    }
+                  }
+                  options={(availableSuppliers ?? [])
+                    .filter((s) => s.active)
+                    .map((s) => ({
+                      id: s.id,
+                      title: s.name,
+                      subtitle: [s.code, s.contactName, s.phone].filter(Boolean).join(' · '),
+                      keywords: [s.name, s.code, s.contactName, s.email, s.phone, s.companyNumber],
+                    }))}
+                  createLabel={canCreateSupplier ? t('Add new supplier') : undefined}
+                  onCreate={() => {
+                    setSupplierPrefill(undefined);
+                    setAddingSupplier(true);
+                  }}
+                  onSelect={setSupplier}
+                />
+              </>
+            )}
+            {selectedSupplier && <SupplierSummary supplier={selectedSupplier} compact />}
+            <div className="purchase-reference-row">
+              <div>
+                <Field label={t('Supplier reference')}>
+                  <input
+                    maxLength={60}
+                    value={reference}
+                    onChange={(e) => setReference(e.target.value)}
+                  />
+                </Field>
+              </div>
+              <Button
+                className="purchase-reference-generate"
+                type="button"
+                variant="outline"
+                size="icon"
+                aria-label={t('Generate reference')}
+                title={t('Generate reference')}
+                onClick={() =>
+                  setReference(
+                    'REF-' + crypto.randomUUID().replaceAll('-', '').slice(0, 16).toUpperCase(),
+                  )
+                }
+              >
+                <WandSparkles size={18} aria-hidden="true" />
+              </Button>
+            </div>
+            <Field label={t('Document date (optional)')}>
+              <input
+                type="date"
+                value={documentDate}
+                onChange={(e) => setDocumentDate(e.target.value)}
+              />
+            </Field>
+            <details
+              className="purchase-driver-details"
+              open={
+                !!(
+                  order?.driver_name ||
+                  order?.driver_phone ||
+                  handoff?.driverName ||
+                  handoff?.driverPhone
+                ) || undefined
+              }
+            >
+              <summary>{t('Driver details (optional)')}</summary>
+              <div className="form-grid">
+                {(
+                  [
+                    ['driverName', 'Driver'],
+                    ['driverPhone', 'Driver phone'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <Field key={key} label={t(label)}>
+                    <input
+                      value={documentDetails[key]}
+                      onChange={(event) =>
+                        setDocumentDetails((current) => ({
+                          ...current,
+                          [key]: event.target.value,
+                        }))
+                      }
+                    />
+                  </Field>
+                ))}
+              </div>
+            </details>
+            <Field label={t('Expected delivery')}>
+              <input type="date" value={expectedDate} onChange={(e) => setDate(e.target.value)} />
+            </Field>
+          </section>
+          <section className="panel purchasing-form-panel purchasing-order-items">
+            <h2>{t('Purchase items')}</h2>
+            {hasScan && (
+              <p className="notice">
+                {t(
+                  'Check every line against the image. Quantities must use the product’s stock unit; convert cartons yourself. Costs are per stock unit, excluding tax. Enter the tax shown on the document.',
+                )}
+              </p>
+            )}
+            <ErrorMessage error={supplierOffers.error} />
+            <div
+              className="purchase-draft-scroll"
+              tabIndex={0}
+              role="region"
+              aria-label={t('Purchase items')}
+            >
+              <table className="purchase-draft-table">
+                <caption className="sr-only">{t('Purchase items')}</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">#</th>
+                    <th scope="col">{t('Product')}</th>
+                    <th scope="col">{t('Stock unit')}</th>
+                    <th scope="col">{t('Quantity')}</th>
+                    <th scope="col">{t('Unit cost excl. tax')}</th>
+                    <th scope="col">{t('Selling price incl. tax')}</th>
+                    <th scope="col">{t('Purchase tax %')}</th>
+                    <th scope="col">{t('Total incl. tax')}</th>
+                    <th scope="col">{t('Actions')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((line, index) => {
+                    const product = availableProducts.find((p) => p.id === line.productId);
+                    const productOffers = product ? (offersByProduct.get(product.id) ?? []) : [];
+                    return (
+                      <tr
+                        key={index}
+                        id={'purchase-review-row-' + index}
+                        className={
+                          handoff?.focusLine === index ? 'purchase-review-focus' : undefined
+                        }
+                        aria-label={t('Purchase row {number}', { number: index + 1 })}
+                      >
+                        <td>{index + 1}</td>
+                        <td className="purchase-draft-product">
+                          {line.source && (
+                            <div className="purchase-draft-source">
+                              <strong>
+                                {line.source.description || t('Unreadable description')}
+                              </strong>
+                              <small>
+                                {[line.source.supplierSku, line.source.barcode]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </small>
+                              <small>
+                                {t('Read quantity: {quantity}; unit cost: {cost}', {
+                                  quantity: formatQuantity(line.source.quantity),
+                                  cost: line.source.unitCost || '—',
+                                })}
+                              </small>
+                            </div>
+                          )}
+                          <SearchSelect
+                            label={t('Product')}
+                            placeholder={t('Select a product')}
+                            value={product && { title: product.name, subtitle: product.sku }}
+                            options={availableProducts
+                              .filter((p) => p.active)
+                              .sort(
+                                (a, b) =>
+                                  Number(
+                                    supplierOffers.data?.some(
+                                      (o) => o.productId === b.id && o.supplierId === supplierId,
+                                    ),
+                                  ) -
+                                  Number(
+                                    supplierOffers.data?.some(
+                                      (o) => o.productId === a.id && o.supplierId === supplierId,
+                                    ),
+                                  ),
+                              )
+                              .map((p) => ({
+                                id: p.id,
+                                title: p.name,
+                                subtitle: p.sku,
+                                keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
+                              }))}
+                            createLabel={canCreateProduct ? t('Create new product') : undefined}
+                            onCreate={() => setAddingProduct(index)}
+                            onSelect={(id) => {
+                              const p = availableProducts.find((p) => p.id === id);
+                              if (p) selectProduct(index, p);
+                            }}
+                          />
+                          {canCreateProduct && !line.productId && line.source && (
+                            <div className="error purchase-unmatched">
+                              <p>
+                                {t(
+                                  'No reliable product match. Choose the correct catalogue product.',
+                                )}
+                              </p>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => setAddingProduct(index)}
+                              >
+                                {t('Create new product')}
+                              </Button>
+                            </div>
+                          )}
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="purchase-barcode-scan"
+                            aria-label={t('Scan barcode')}
+                            title={t('Scan barcode')}
+                            onClick={() => {
+                              setBarcode('');
+                              setScanError('');
+                              setScanLine(index);
+                            }}
+                          >
+                            <Barcode size={20} aria-hidden="true" />
+                          </Button>
+                          {product && (
+                            <SupplierOfferHint
+                              supplierId={supplierId}
+                              offers={productOffers}
+                              currency={currency}
+                            />
+                          )}
+                        </td>
+                        <td className="purchase-line-field" data-label={t('Stock unit')}>
+                          <span className="purchase-stock-unit">
+                            {product ? t(product.unit) : '—'}
+                          </span>
+                        </td>
+                        <td className="purchase-line-field" data-label={t('Quantity')}>
+                          <input
+                            aria-label={t('Quantity')}
+                            required
+                            inputMode="decimal"
+                            value={line.quantity}
+                            onChange={(e) => updateLine(index, 'quantity', e.target.value)}
+                          />
+                        </td>
+                        <td className="purchase-line-field" data-label={t('Unit cost excl. tax')}>
+                          <input
+                            aria-label={t('Unit cost excl. tax')}
+                            required
+                            inputMode="decimal"
+                            value={line.unitCost}
+                            onChange={(e) => updateLine(index, 'unitCost', e.target.value)}
+                          />
+                          {product && (
+                            <CostComparison
+                              cost={line.unitCost}
+                              previous={product.cost}
+                              price={product.price}
+                            />
+                          )}
+                        </td>
+                        <td
+                          className="purchase-line-field"
+                          data-label={t('Selling price incl. tax')}
+                        >
+                          <input
+                            aria-label={t('Proposed selling price incl. tax (optional)')}
+                            inputMode="decimal"
+                            value={line.sellingPrice}
+                            onChange={(e) => updateLine(index, 'sellingPrice', e.target.value)}
+                          />
+                        </td>
+                        <td className="purchase-line-field" data-label={t('Purchase tax %')}>
+                          <input
+                            aria-label={t('Purchase tax %')}
+                            required
+                            inputMode="decimal"
+                            value={line.taxRate}
+                            onChange={(e) => updateLine(index, 'taxRate', e.target.value)}
+                          />
+                        </td>
+                        <td className="purchase-draft-amount" data-label={t('Total incl. tax')}>
+                          {lineAmounts[index]
+                            ? formatMoney(lineAmounts[index]!.total, currency)
+                            : '—'}
+                        </td>
+                        <td>
+                          <Button type="button" variant="ghost" onClick={() => removeLine(index)}>
+                            {t('Remove line')}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="purchase-draft-footer">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={lines.length >= 100}
+                onClick={nextProduct}
+              >
+                {t('Add product')}
+              </Button>
+              <dl className="purchase-draft-totals">
+                <div>
+                  <dt>{t('Subtotal excl. tax')}</dt>
+                  <dd>{totals ? formatMoney(totals.subtotal, currency) : '—'}</dd>
+                </div>
+                <div>
+                  <dt>{t('Tax')}</dt>
+                  <dd>{totals ? formatMoney(totals.tax, currency) : '—'}</dd>
+                </div>
+                <div>
+                  <dt>{t('Total incl. tax')}</dt>
+                  <dd>{totals ? formatMoney(totals.total, currency) : '—'}</dd>
+                </div>
+              </dl>
+            </div>
+            <p className="muted">
+              {t(
+                'Leave blank to keep the current selling price. Confirm any proposed price when receiving the delivery. Saving this order does not change checkout prices.',
+              )}
+            </p>
+            <ErrorMessage error={lineError} />
+            {hasScan && (
+              <label className="purchase-document-confirm">
+                <input
+                  type="checkbox"
+                  checked={reviewed}
+                  onChange={(e) => {
+                    setReviewed(e.target.checked);
+                    setLineError('');
+                  }}
+                />
+                <span>
+                  {t(
+                    'I checked the products, stock units, quantities, costs and tax against the document.',
+                  )}
+                </span>
+              </label>
+            )}
+          </section>
+          <section className="panel purchasing-form-panel">
+            <Field label={t('Order notes')}>
+              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </Field>
+            <ErrorMessage error={mutation.error} />
+            <div className="purchasing-form-actions">
+              <Button disabled={mutation.isPending}>
+                {mutation.isPending ? t('Saving…') : t('Save draft')}
+              </Button>
+              {onCancel && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={mutation.isPending}
+                  onClick={onCancel}
+                >
+                  {t('Cancel')}
+                </Button>
+              )}
+            </div>
+          </section>
+        </fieldset>
+      </form>
       <Dialog
         open={scanLine !== null}
         onOpenChange={(open) => {
@@ -1540,12 +1490,19 @@ function PaymentBadge({ order }: { order: Order }) {
     </span>
   );
 }
-function PurchasePayment({ order }: { order: Order }) {
+function PurchasePayment({
+  order,
+  formOnly = false,
+  done,
+}: {
+  order: Order;
+  formOnly?: boolean;
+  done?: () => void;
+}) {
   useLanguage();
   const session = useSession().data;
   const canWrite = session?.user.permissions.includes('purchases.write');
   const editable = canWrite && order.status !== 'cancelled';
-  const [open, setOpen] = useState(false);
   const [status, setStatus] = useState<'paid' | 'unpaid'>(
     order.payment_status === 'paid' ? 'paid' : 'unpaid',
   );
@@ -1561,7 +1518,7 @@ function PurchasePayment({ order }: { order: Order }) {
       api('/purchases/' + order.id + '/payment', body),
     onSuccess: () => {
       setPending(undefined);
-      setOpen(false);
+      done?.();
       void refresh();
     },
     onError: (error) => {
@@ -1569,6 +1526,54 @@ function PurchasePayment({ order }: { order: Order }) {
         setPending(undefined);
     },
   });
+  if (formOnly)
+    return editable ? (
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const body = pending ?? {
+            requestId: crypto.randomUUID(),
+            version: order.version,
+            status,
+            dueDate,
+          };
+          setPending(body);
+          mutation.mutate(body);
+        }}
+      >
+        <fieldset disabled={mutation.isPending || !!pending}>
+          <Field label={t('Payment status')}>
+            <select value={status} onChange={(e) => setStatus(e.target.value as 'paid' | 'unpaid')}>
+              <option value="unpaid">{t('Unpaid')}</option>
+              <option value="paid">{t('Paid')}</option>
+            </select>
+          </Field>
+          <Field
+            label={t('Payment due date')}
+            hint={t(
+              'Optional. Unpaid orders become overdue after this date in the store timezone.',
+            )}
+          >
+            <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+          </Field>
+        </fieldset>
+        <ErrorMessage error={mutation.error} />
+        <div className="form-actions">
+          <Button disabled={mutation.isPending}>
+            {mutation.isPending
+              ? t('Saving…')
+              : pending
+                ? t('Retry same change')
+                : t('Save payment status')}
+          </Button>
+          <Button type="button" variant="outline" onClick={done}>
+            {t('Cancel')}
+          </Button>
+        </div>
+      </form>
+    ) : (
+      <p className="notice">{t('Access restricted')}</p>
+    );
   return (
     <div className="order-detail-section order-payment">
       <div className="order-payment-head">
@@ -1577,9 +1582,13 @@ function PurchasePayment({ order }: { order: Order }) {
           <PaymentBadge order={order} />
         </div>
         {editable && (
-          <Button variant="outline" onClick={() => setOpen(true)}>
+          <Link
+            className="button button-outline"
+            to="/purchases/$id/payment"
+            params={{ id: order.id }}
+          >
             {t('Update payment')}
-          </Button>
+          </Link>
         )}
       </div>
       <dl className="order-payment-facts">
@@ -1603,76 +1612,27 @@ function PurchasePayment({ order }: { order: Order }) {
           'Payment is tracked separately from delivery. Mark paid only after the supplier has been paid in full.',
         )}
       </p>
-      <Dialog
-        open={open}
-        onOpenChange={(v) => {
-          if (!v) setOpen(false);
-        }}
-        title={t('Update payment')}
-        description={t(
-          'Payment is tracked separately from delivery. Mark paid only after the supplier has been paid in full.',
-        )}
-      >
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            const body = pending ?? {
-              requestId: crypto.randomUUID(),
-              version: order.version,
-              status,
-              dueDate,
-            };
-            setPending(body);
-            mutation.mutate(body);
-          }}
-        >
-          <fieldset disabled={mutation.isPending || !!pending}>
-            <Field label={t('Payment status')}>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as 'paid' | 'unpaid')}
-              >
-                <option value="unpaid">{t('Unpaid')}</option>
-                <option value="paid">{t('Paid')}</option>
-              </select>
-            </Field>
-            <Field
-              label={t('Payment due date')}
-              hint={t(
-                'Optional. Unpaid orders become overdue after this date in the store timezone.',
-              )}
-            >
-              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-            </Field>
-          </fieldset>
-          <ErrorMessage error={mutation.error} />
-          <div className="form-actions">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              {t('Cancel')}
-            </Button>
-            <Button disabled={mutation.isPending}>
-              {mutation.isPending
-                ? t('Saving…')
-                : pending
-                  ? t('Retry same change')
-                  : t('Save payment status')}
-            </Button>
-          </div>
-        </form>
-      </Dialog>
     </div>
   );
 }
 
-function OrderDetail({ id, close }: { id: string; close: () => void }) {
+export type PurchaseAction = 'edit' | 'receive' | 'payment' | 'close' | 'cancel' | 'whatsapp';
+export function OrderDetail({
+  id,
+  close,
+  action,
+}: {
+  id: string;
+  close: () => void;
+  action?: PurchaseAction;
+}) {
   useLanguage();
   const q = useQuery({ queryKey: ['purchase', id], queryFn: () => api<Order>('/purchases/' + id) });
-  const [receiving, setReceiving] = useState(false);
-  const [editing, setEditing] = useState(false);
   const [reason, setReason] = useState('');
-  const [cancel, setCancel] = useState(false);
-  const [sharing, setSharing] = useState(false);
-  const currency = useSession().data!.store.currency;
+  const session = useSession().data!;
+  const currency = session.store.currency;
+  const canWrite = session.user.permissions.includes('purchases.write');
+  const canReceive = session.user.permissions.includes('purchases.receive');
   const status = useMutation({
     mutationFn: (next: string) =>
       api('/purchases/' + id + '/status', {
@@ -1682,17 +1642,81 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
         reason,
       }),
     onSuccess: () => {
-      setCancel(false);
+      if (action === 'cancel') close();
       void refresh();
     },
   });
   const p = q.data;
+  if (q.isPending) return <p role="status">{t('Loading orders…')}</p>;
+  if (q.error) return <ErrorMessage error={q.error} />;
+  if (p && action) {
+    const valid =
+      action === 'receive'
+        ? canReceive && ['ordered', 'partially_received'].includes(p.status)
+        : action === 'whatsapp'
+          ? ['ordered', 'partially_received'].includes(p.status)
+          : canWrite &&
+            (action === 'edit'
+              ? p.status === 'draft'
+              : action === 'close'
+                ? p.status === 'partially_received'
+                : action === 'cancel'
+                  ? ['draft', 'ordered'].includes(p.status)
+                  : p.status !== 'cancelled');
+    if (!valid)
+      return <p className="notice">{t('This action is not available for this order.')}</p>;
+    if (action === 'edit')
+      return <DraftForm order={p} fixedSupplierId={p.supplier_id} done={close} onCancel={close} />;
+    return (
+      <section className="panel purchasing-form-panel purchase-action-panel">
+        <div className="purchase-action-context">
+          <strong>{p.number}</strong>
+          <span>{p.supplierName}</span>
+        </div>
+        {action === 'receive' && <ReceiveForm order={p} done={close} />}
+        {action === 'payment' && (
+          <PurchasePayment key={p.id + ':' + p.version} order={p} formOnly done={close} />
+        )}
+        {action === 'close' && (
+          <CloseRemainder key={p.id + ':' + p.version} order={p} formOnly done={close} />
+        )}
+        {action === 'whatsapp' && <WhatsAppOrderShare order={p} close={close} />}
+        {action === 'cancel' && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              status.mutate('cancelled');
+            }}
+          >
+            <Field label={t('Cancellation reason')}>
+              <input
+                autoFocus
+                required
+                maxLength={300}
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+              />
+            </Field>
+            <ErrorMessage error={status.error} />
+            <div className="form-actions">
+              <Button type="button" variant="outline" onClick={close}>
+                {t('Keep order ')}
+              </Button>
+              <Button disabled={status.isPending}>
+                {status.isPending ? t('Cancelling…') : t('Confirm cancellation')}
+              </Button>
+            </div>
+          </form>
+        )}
+      </section>
+    );
+  }
   return (
     <section id="selected-purchase-detail" className="panel order-detail">
       <div className="order-detail-head">
         <div className="order-detail-title">
           <div className="order-detail-number">
-            <h2>{p ? p.number : t('Order')}</h2>
+            <h1>{p ? p.number : t('Order')}</h1>
             {p && (
               <span className={`badge badge-${statusTone[p.status] ?? 'gray'}`}>{t(p.status)}</span>
             )}
@@ -1706,16 +1730,7 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
             </p>
           )}
         </div>
-        <Button variant="ghost" onClick={close}>
-          <X size={16} />
-          {t('Close ')}
-        </Button>
       </div>
-      {q.error && (
-        <div className="panel-padding">
-          <ErrorMessage error={q.error} />
-        </div>
-      )}
       {p && (
         <>
           <div className="order-detail-document">
@@ -1844,31 +1859,33 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
             </table>
           </div>
           <div className="order-detail-actions">
-            {p.status === 'draft' && (
+            {canWrite && p.status === 'draft' && (
               <Button disabled={status.isPending} onClick={() => status.mutate('ordered')}>
                 {status.isPending ? t('Placing…') : t('Place order')}
               </Button>
             )}
             {['ordered', 'partially_received'].includes(p.status) && (
-              <Button variant="outline" onClick={() => setSharing(true)}>
+              <Link className="button button-outline" to="/purchases/$id/whatsapp" params={{ id }}>
                 {t('Send via WhatsApp')}
-              </Button>
+              </Link>
             )}
-            {['ordered', 'partially_received'].includes(p.status) && (
-              <Button onClick={() => setReceiving(true)}>{t('Receive delivery')}</Button>
+            {canReceive && ['ordered', 'partially_received'].includes(p.status) && (
+              <Link className="button button-primary" to="/purchases/$id/receive" params={{ id }}>
+                {t('Receive delivery')}
+              </Link>
             )}
             {p.status === 'partially_received' && (
               <CloseRemainder key={p.id + ':' + p.version} order={p} />
             )}
-            {p.status === 'draft' && (
-              <Button variant="outline" onClick={() => setEditing(true)}>
+            {canWrite && p.status === 'draft' && (
+              <Link className="button button-outline" to="/purchases/$id/edit" params={{ id }}>
                 {t('Edit draft ')}
-              </Button>
+              </Link>
             )}
-            {['draft', 'ordered'].includes(p.status) && (
-              <Button variant="ghost" onClick={() => setCancel(true)}>
+            {canWrite && ['draft', 'ordered'].includes(p.status) && (
+              <Link className="button button-ghost" to="/purchases/$id/cancel" params={{ id }}>
                 {t('Cancel order ')}
-              </Button>
+              </Link>
             )}
           </div>
           {status.error && (
@@ -1929,65 +1946,6 @@ function OrderDetail({ id, close }: { id: string; close: () => void }) {
               <p className="muted">{t('No deliveries recorded yet.')}</p>
             )}
           </div>
-          <Dialog
-            open={sharing}
-            onOpenChange={setSharing}
-            title={t('Send purchase order via WhatsApp')}
-            description={t('Review the recipient and message before opening WhatsApp.')}
-          >
-            {sharing && <WhatsAppOrderShare order={p} close={() => setSharing(false)} />}
-          </Dialog>
-          <Dialog
-            open={cancel}
-            onOpenChange={setCancel}
-            title={t('Cancel this order')}
-            description={t(
-              'Cancelling is permanent and does not change stock. Partly received orders cannot be cancelled.',
-            )}
-          >
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                status.mutate('cancelled');
-              }}
-            >
-              <Field label={t('Cancellation reason')}>
-                <input
-                  autoFocus
-                  required
-                  maxLength={300}
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                />
-              </Field>
-              <ErrorMessage error={status.error} />
-              <div className="form-actions">
-                <Button type="button" variant="outline" onClick={() => setCancel(false)}>
-                  {t('Keep order ')}
-                </Button>
-                <Button disabled={status.isPending}>
-                  {status.isPending ? t('Cancelling…') : t('Confirm cancellation')}
-                </Button>
-              </div>
-            </form>
-          </Dialog>
-          <Dialog
-            wide
-            open={editing}
-            onOpenChange={setEditing}
-            title={t('Edit purchase draft')}
-            description={t('Only drafts can be edited.')}
-          >
-            {editing && <DraftForm order={p} done={() => setEditing(false)} />}
-          </Dialog>
-          <Dialog
-            open={receiving}
-            onOpenChange={setReceiving}
-            title={t('Receive delivery')}
-            description={t('Enter only quantities delivered now. Leave other lines at zero.')}
-          >
-            {receiving && <ReceiveForm order={p} done={() => setReceiving(false)} />}
-          </Dialog>
         </>
       )}
     </section>
@@ -2188,10 +2146,12 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
               <header className="delivery-product-header">
                 <h3>{l.product_name}</h3>
                 <span className="muted">
-                  {formatQuantity(fromScaled(
-                    toScaled(l.ordered_quantity, 3) - toScaled(l.received_quantity, 3),
-                    3,
-                  ))}{' '}
+                  {formatQuantity(
+                    fromScaled(
+                      toScaled(l.ordered_quantity, 3) - toScaled(l.received_quantity, 3),
+                      3,
+                    ),
+                  )}{' '}
                   {t(l.unit ?? '')} {t('remaining')}
                 </span>
               </header>
@@ -2246,7 +2206,8 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
                 </Button>
                 {batchRows(l.id).length > 1 && (
                   <p className="muted">
-                    {t('Total received')}: {formatQuantity(receivedQuantity(l.id))} {t(l.unit ?? '')}
+                    {t('Total received')}: {formatQuantity(receivedQuantity(l.id))}{' '}
+                    {t(l.unit ?? '')}
                   </p>
                 )}
               </div>
@@ -2311,17 +2272,24 @@ function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
   );
 }
 
-function CloseRemainder({ order }: { order: Order }) {
+function CloseRemainder({
+  order,
+  formOnly = false,
+  done,
+}: {
+  order: Order;
+  formOnly?: boolean;
+  done?: () => void;
+}) {
   useLanguage();
   const allowed = useSession().data!.user.permissions.includes('purchases.write');
-  const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [command, setCommand] = useState<{ requestId: string; version: number; reason: string }>();
   const mutation = useMutation({
     mutationFn: (body: { requestId: string; version: number; reason: string }) =>
       api('/purchases/' + order.id + '/close-remainder', body),
     onSuccess: () => {
-      setOpen(false);
+      done?.();
       void refresh();
     },
     onError: (error) => {
@@ -2330,76 +2298,63 @@ function CloseRemainder({ order }: { order: Order }) {
     },
   });
   if (!allowed) return null;
+  if (!formOnly)
+    return (
+      <Link className="button button-outline" to="/purchases/$id/close" params={{ id: order.id }}>
+        {t('Close remaining quantities')}
+      </Link>
+    );
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)}>
-        {t('Close remaining quantities')}
-      </Button>
-      <Dialog
-        open={open}
-        onOpenChange={(value) => {
-          if (!mutation.isPending) setOpen(value);
+      <ul>
+        {order.lines
+          .filter(
+            (line) => toScaled(line.ordered_quantity, 3) > toScaled(line.received_quantity, 3),
+          )
+          .map((line) => (
+            <li key={line.id}>
+              {line.product_name}:{' '}
+              {formatQuantity(
+                fromScaled(
+                  toScaled(line.ordered_quantity, 3) - toScaled(line.received_quantity, 3),
+                  3,
+                ),
+              )}{' '}
+              {t(line.unit ?? '')}
+            </li>
+          ))}
+      </ul>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          const body = command ?? {
+            requestId: crypto.randomUUID(),
+            version: order.version,
+            reason: reason.trim(),
+          };
+          setCommand(body);
+          mutation.mutate(body);
         }}
-        title={t('Close remaining quantities')}
-        description={t(
-          'Close all undelivered quantities permanently. Recorded deliveries, stock and payment status will not change.',
-        )}
       >
-        <ul>
-          {order.lines
-            .filter(
-              (line) => toScaled(line.ordered_quantity, 3) > toScaled(line.received_quantity, 3),
-            )
-            .map((line) => (
-              <li key={line.id}>
-                {line.product_name}:{' '}
-                {formatQuantity(
-                  fromScaled(
-                    toScaled(line.ordered_quantity, 3) - toScaled(line.received_quantity, 3),
-                    3,
-                  ),
-                )}{' '}
-                {t(line.unit ?? '')}
-              </li>
-            ))}
-        </ul>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            const body = command ?? {
-              requestId: crypto.randomUUID(),
-              version: order.version,
-              reason: reason.trim(),
-            };
-            setCommand(body);
-            mutation.mutate(body);
-          }}
-        >
-          <Field label={t('Closure reason')}>
-            <textarea
-              required
-              maxLength={500}
-              value={reason}
-              disabled={!!command}
-              onChange={(event) => setReason(event.target.value)}
-            />
-          </Field>
-          <ErrorMessage error={mutation.error} />
-          <div className="form-actions">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={mutation.isPending}
-              onClick={() => setOpen(false)}
-            >
-              {t('Keep order ')}
-            </Button>
-            <Button disabled={mutation.isPending || !reason.trim()}>
-              {command && !mutation.isPending ? t('Retry same change') : t('Confirm closure')}
-            </Button>
-          </div>
-        </form>
-      </Dialog>
+        <Field label={t('Closure reason')}>
+          <textarea
+            required
+            maxLength={500}
+            value={reason}
+            disabled={!!command}
+            onChange={(event) => setReason(event.target.value)}
+          />
+        </Field>
+        <ErrorMessage error={mutation.error} />
+        <div className="form-actions">
+          <Button disabled={mutation.isPending || !reason.trim()}>
+            {command && !mutation.isPending ? t('Retry same change') : t('Confirm closure')}
+          </Button>
+          <Button type="button" variant="outline" disabled={mutation.isPending} onClick={done}>
+            {t('Keep order ')}
+          </Button>
+        </div>
+      </form>
     </>
   );
 }

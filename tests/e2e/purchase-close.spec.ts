@@ -70,14 +70,14 @@ test('closes a partial purchase without changing delivered quantities', async ({
   await expect(page.getByText('89381127025')).toBeVisible();
   await expect(page.getByText('89292088095')).toBeVisible();
   await expect(page.getByText('+7 (969) 722-22-22')).toBeVisible();
-  await page.getByRole('button', { name: 'Close remaining quantities', exact: true }).click();
-  const dialog = page.getByRole('dialog');
+  await page.getByRole('link', { name: 'Close remaining quantities', exact: true }).click();
+  const dialog = page.locator('.purchase-action-panel');
   await expect(dialog.getByText('Milk: 7 piece')).toBeVisible();
   await dialog.getByLabel('Closure reason').fill('Supplier cannot deliver the rest');
   await dialog.getByRole('button', { name: 'Confirm closure', exact: true }).click();
   await expect(dialog).not.toBeVisible();
   await expect(page.getByText('Remaining quantities closed', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Receive delivery', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Receive delivery', exact: true })).toHaveCount(0);
   await expect(
     page.getByRole('columnheader', { name: 'Closed quantity', exact: true }),
   ).toBeVisible();

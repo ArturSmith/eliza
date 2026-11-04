@@ -2,7 +2,7 @@
 
 Delivery and payment statuses are independent. Receiving stock never marks an order paid.
 
-Open Purchases, choose View on an order, then use Purchase payment to select Paid or Unpaid and optionally set a payment due date. Save payment status records the change in the activity log. This records the shop’s confirmation; it does not transfer money.
+Open Suppliers & purchases, choose a supplier and open Purchase history (or All purchase orders for the full list). Open an order, then use Update payment to open its dedicated page, select Paid or Unpaid and optionally set a payment due date. Save payment status records the change in the activity log. This records the shop’s confirmation; it does not transfer money.
 
 Unpaid placed, partially received, and received orders become overdue after their due date in the store timezone. The list has a separate payment filter, including Overdue. An order due today is not overdue. Draft and cancelled orders are not flagged overdue.
 

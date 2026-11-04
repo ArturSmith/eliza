@@ -8,7 +8,9 @@ test('receives one product with multiple expiry dates and preserves batch quanti
   await page.getByLabel('Email address').fill('payments@example.test');
   await page.getByLabel('Password', { exact: true }).fill('local-test-password-123');
   await page.getByRole('button', { name: 'Create my store' }).click();
-  await expect(page.getByRole('link', { name: 'Purchases', exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Suppliers & purchases', exact: true }),
+  ).toBeVisible();
   async function post(path: string, data: unknown) {
     const r = await page.request.post('/api' + path, {
       headers: { Origin: 'http://localhost:5174', 'X-Eliza-Request': '1' },
@@ -43,10 +45,10 @@ test('receives one product with multiple expiry dates and preserves batch quanti
     version: order.version,
     status: 'ordered',
   });
-  await page.goto('/purchases');
-  await page.getByRole('button', { name: 'View', exact: true }).click();
-  await page.getByRole('button', { name: 'Receive delivery', exact: true }).click();
-  const dialog = page.getByRole('dialog', { name: 'Receive delivery', exact: true });
+  await page.goto('/purchases/history');
+  await page.getByRole('link', { name: 'View', exact: true }).click();
+  await page.getByRole('link', { name: 'Receive delivery', exact: true }).click();
+  const dialog = page.locator('.purchase-action-panel');
   const batches = dialog.locator('.delivery-expiry-batch');
   await batches.nth(0).getByLabel('Quantity', { exact: true }).fill('5');
   await batches.nth(0).getByLabel('Expiry date (optional)').fill('2035-01-01');
@@ -65,7 +67,7 @@ test('receives one product with multiple expiry dates and preserves batch quanti
   expect(await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   await page.screenshot({ path: 'test-results/expiry-batches-mobile.png', fullPage: true });
   await dialog.getByRole('button', { name: 'Record delivery', exact: true }).click();
-  await expect(dialog).not.toBeVisible();
+  await expect(page).not.toHaveURL(/\/receive$/);
   const inventory = await (
     await page.request.get('/api/inventory/products/' + product.id + '/batches')
   ).json();
@@ -75,7 +77,6 @@ test('receives one product with multiple expiry dates and preserves batch quanti
     { quantity: '5.000', expiryDate: '2036-01-01', unitCost: '5.00' },
   ]);
   await page.reload();
-  await page.getByRole('button', { name: 'View', exact: true }).click();
   await page.locator('.delivery-entry summary').first().click();
   await expect(page.locator('.delivery-expiry-history')).toContainText('2035-01-01');
   await expect(page.locator('.delivery-expiry-history')).toContainText('2036-01-01');

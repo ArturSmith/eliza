@@ -660,8 +660,8 @@ export type SupplierProduct = {
   unit: string;
   supplierSku: string;
   packSize: string;
-  packCost: string;
-  unitCost: string;
+  packCost: string | null;
+  unitCost: string | null;
   leadTimeDays: number | null;
   minimumOrder: string | null;
   notes: string;
@@ -679,7 +679,8 @@ export type SupplierProduct = {
  * pack sizes differ: a 250.00 case of 12 is cheaper per jar than a 22.00 single,
  * even though 250 > 22. Every supplier comparison must rank on this value.
  */
-export function unitCost(packCost: string, packSize: string): string | null {
+export function unitCost(packCost: string | null, packSize: string): string | null {
+  if (packCost === null) return null;
   const cost = toScaled(packCost, 2);
   const size = toScaled(packSize, 3);
   if (size <= 0n) return null;
@@ -695,7 +696,9 @@ export function unitCost(packCost: string, packSize: string): string | null {
  * Offers whose unit cost cannot be determined are returned last and flagged
  * rather than treated as free, so an incomplete row can never win a comparison.
  */
-export function compareOffers<T extends { packCost: string; packSize: string; active: boolean }>(
+export function compareOffers<
+  T extends { packCost: string | null; packSize: string; active: boolean },
+>(
   offers: T[],
 ): (T & { unitCost: string | null; cheapest: boolean; premiumPercent: number | null })[] {
   const priced = offers.map((offer) => ({

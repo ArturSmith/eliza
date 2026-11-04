@@ -15,7 +15,14 @@ import {
   useLocation,
 } from '@tanstack/react-router';
 import { api, queryClient } from './api';
-import { Shell, Overview, ProductsPage, InventoryHistoryPage, AuditPage, DevicesPage } from './pages';
+import {
+  Shell,
+  Overview,
+  ProductsPage,
+  InventoryHistoryPage,
+  AuditPage,
+  DevicesPage,
+} from './pages';
 import { applyTheme, initialTheme } from './theme';
 import './theme.css';
 import './styles.css';
@@ -45,7 +52,16 @@ function CheckoutRoute() {
 import { ExpensesPage } from './expenses';
 import { StoreSettingsPage } from './store-settings';
 import { StockCountsPage } from './stock-counts';
-import { SuppliersPage, PurchasesPage } from './purchasing';
+import {
+  PurchasingEntry,
+  SuppliersRedirect,
+  SupplierDetailsPage,
+  SupplierEditorPage,
+  SupplierOfferPage,
+  NewPurchasePage,
+  PurchaseHistoryPage,
+  PurchaseDetailsPage,
+} from './purchasing-workspace';
 import { AiAgentPage } from './ai-agent';
 import { DigitalPurchasesPage } from './digital-purchases';
 import { TeamManagementPage } from './team';
@@ -128,8 +144,64 @@ const routes = [
     component: ShoppingListsPage,
   }),
   createRoute({ getParentRoute: () => root, path: '/stock-counts', component: StockCountsPage }),
-  createRoute({ getParentRoute: () => root, path: '/suppliers', component: SuppliersPage }),
-  createRoute({ getParentRoute: () => root, path: '/purchases', component: PurchasesPage }),
+  createRoute({ getParentRoute: () => root, path: '/suppliers', component: SuppliersRedirect }),
+  createRoute({ getParentRoute: () => root, path: '/purchases', component: PurchasingEntry }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/purchases/history',
+    component: PurchaseHistoryPage,
+  }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/purchases/new',
+    component: NewPurchasePage,
+    validateSearch: (search: Record<string, unknown>): { document?: boolean } =>
+      search.document ? { document: true } : {},
+  }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/purchases/$id',
+    component: PurchaseDetailsPage,
+  }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/suppliers/new',
+    component: () => <SupplierEditorPage create />,
+  }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/suppliers/$id',
+    component: SupplierDetailsPage,
+    validateSearch: (search: Record<string, unknown>): { tab?: 'history' } =>
+      search.tab === 'history' ? { tab: 'history' } : {},
+  }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/suppliers/$id/edit',
+    component: SupplierEditorPage,
+  }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/suppliers/$id/order',
+    component: NewPurchasePage,
+  }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/suppliers/$id/products/new',
+    component: () => <SupplierOfferPage />,
+  }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/suppliers/$id/products/$offerId/edit',
+    component: () => <SupplierOfferPage edit />,
+  }),
+  ...(['edit', 'receive', 'payment', 'close', 'cancel', 'whatsapp'] as const).map((action) =>
+    createRoute({
+      getParentRoute: () => root,
+      path: `/purchases/$id/${action}`,
+      component: () => <PurchaseDetailsPage action={action} />,
+    }),
+  ),
   createRoute({
     getParentRoute: () => root,
     path: '/documents',
@@ -170,14 +242,34 @@ const routes = [
   createRoute({ getParentRoute: () => root, path: '/shifts', component: ShiftsPage }),
   createRoute({ getParentRoute: () => root, path: '/', component: Overview }),
   createRoute({ getParentRoute: () => root, path: '/products', component: ProductsPage }),
-  createRoute({ getParentRoute: () => root, path: '/products/new', component: () => <ProductDetailsPage create /> }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/products/new',
+    component: () => <ProductDetailsPage create />,
+  }),
   createRoute({ getParentRoute: () => root, path: '/products/$id', component: ProductDetailsPage }),
-  createRoute({ getParentRoute: () => root, path: '/products/$id/edit', component: () => <ProductDetailsPage edit /> }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/products/$id/edit',
+    component: () => <ProductDetailsPage edit />,
+  }),
   createRoute({ getParentRoute: () => root, path: '/promotions', component: PromotionsPage }),
   createRoute({ getParentRoute: () => root, path: '/inventory', component: InventoryPage }),
-  createRoute({ getParentRoute: () => root, path: '/inventory/add', component: () => <InventoryAdjustmentPage direction="add" /> }),
-  createRoute({ getParentRoute: () => root, path: '/inventory/remove', component: () => <InventoryAdjustmentPage direction="remove" /> }),
-  createRoute({ getParentRoute: () => root, path: '/inventory/history', component: InventoryHistoryPage }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/inventory/add',
+    component: () => <InventoryAdjustmentPage direction="add" />,
+  }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/inventory/remove',
+    component: () => <InventoryAdjustmentPage direction="remove" />,
+  }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/inventory/history',
+    component: InventoryHistoryPage,
+  }),
   createRoute({ getParentRoute: () => root, path: '/audit', component: AuditPage }),
   createRoute({ getParentRoute: () => root, path: '/team', component: TeamManagementPage }),
   createRoute({ getParentRoute: () => root, path: '/devices', component: DevicesPage }),

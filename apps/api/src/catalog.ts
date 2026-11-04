@@ -14,6 +14,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { and, eq, asc, isNull, sql } from 'drizzle-orm';
 import { productSchema, productSku } from '@eliza/contracts';
@@ -87,11 +88,13 @@ export class CatalogController {
       plu: enteredPlu,
       autoPlu,
       autoSku,
+      supplierId,
       ...body
     } = parse(
       productSchema.extend({
         autoPlu: z.boolean().default(false),
         autoSku: z.boolean().default(false),
+        supplierId: z.uuid().optional(),
       }),
       typeof input === 'object' && input !== null
         ? { taxRate: defaults.default_tax_rate, ...input }
@@ -99,7 +102,14 @@ export class CatalogController {
     );
     Object.assign(body, normalizeProductGallery(body));
     const { store, user, device } = req.context;
+    if (supplierId && !user.permissions.includes('suppliers.manage'))
+      throw new ForbiddenException('You cannot add products to suppliers.');
     return this.database.db.transaction(async (tx) => {
+      if (supplierId) {
+        const supplier = await tx.execute(sql`SELECT id FROM suppliers WHERE id=${supplierId}
+          AND store_id=${store.id} AND active FOR SHARE`);
+        if (!supplier.rows.length) throw new BadRequestException('Choose an active supplier.');
+      }
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtextextended(${store.id} || ':product-codes',0))`,
       );
@@ -135,18 +145,41 @@ export class CatalogController {
         await tx
           .insert(barcodes)
           .values(values.map((value) => ({ value, productId: product.id, storeId: store.id })));
+      if (supplierId) {
+        const linked =
+          await tx.execute(sql`INSERT INTO supplier_products(store_id,supplier_id,product_id,pack_cost)
+          VALUES(${store.id},${supplierId},${product.id},NULL) RETURNING id`);
+        await tx.insert(audits).values({
+          storeId: store.id,
+          employeeId: user.id,
+          deviceId: device.id,
+          action: 'Supplier product linked',
+          entityId: String(linked.rows[0].id),
+          details: { supplierId, productId: product.id },
+        });
+      }
       await tx.insert(audits).values({
         storeId: store.id,
         employeeId: user.id,
         deviceId: device.id,
         action: 'Product created',
         entityId: product.id,
-        details: { ...body, image: body.image ? '[photo added]' : '', images: `[${body.images?.length ?? 0} photos]`, plu, barcodes: values },
+        details: {
+          ...body,
+          image: body.image ? '[photo added]' : '',
+          images: `[${body.images?.length ?? 0} photos]`,
+          plu,
+          barcodes: values,
+        },
       });
-      return { ...product, cost: req.context.user.permissions.includes('costs.read') ? product.cost : null, plu: plu ?? '', barcodes: values };
+      return {
+        ...product,
+        cost: req.context.user.permissions.includes('costs.read') ? product.cost : null,
+        plu: plu ?? '',
+        barcodes: values,
+      };
     });
   }
-
   @Patch(':id') @Require('catalog.write') async edit(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() input: unknown,

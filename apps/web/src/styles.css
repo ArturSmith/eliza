@@ -1226,9 +1226,6 @@ tr:last-child td {
   flex: 1 1 220px;
   min-width: 0;
 }
-.purchase-reference-generate {
-  margin-bottom: 16px;
-}
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

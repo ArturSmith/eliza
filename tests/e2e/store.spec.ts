@@ -266,48 +266,45 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await summary.getByRole('button', { name: 'Apply filters' }).click();
   await expect(summary).toContainText('No completed sales in this date range.');
   await page.screenshot({ path: 'test-results/sales-summary.png', fullPage: true });
-  await page.getByRole('link', { name: 'Suppliers', exact: true }).click();
-  await page.getByRole('button', { name: 'Add supplier', exact: true }).click();
-  await dialog.getByRole('textbox', { name: 'Supplier code' }).fill('BAKERY');
-  await dialog.getByLabel('Supplier name').fill('Local Bakery');
-  await dialog.getByRole('button', { name: 'Save supplier' }).click();
-  await expect(page.getByRole('cell', { name: 'Local Bakery BAKERY' })).toBeVisible();
-  await page.getByRole('link', { name: 'Purchases', exact: true }).click();
-  await page.getByRole('button', { name: 'New purchase order' }).click();
-  await dialog.getByRole('button', { name: 'Select a supplier', exact: true }).click();
-  await page.getByRole('option', { name: /Local Bakery/ }).click();
-  await dialog.getByRole('button', { name: 'Select a product', exact: true }).click();
+  await page.getByRole('link', { name: 'Suppliers & purchases', exact: true }).click();
+  await page.getByRole('link', { name: 'Add supplier', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Supplier code' }).fill('BAKERY');
+  await page.getByLabel('Supplier name').fill('Local Bakery');
+  await page.getByRole('button', { name: 'Save supplier' }).click();
+  await expect(page.getByRole('heading', { name: 'Local Bakery', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Create order', exact: true }).click();
+  await page.getByRole('button', { name: 'Select a product', exact: true }).click();
   await page.getByRole('option', { name: /Sourdough bread/ }).click();
-  await dialog.getByLabel('Quantity', { exact: true }).fill('24');
-  await dialog.getByLabel('Purchase tax %').fill('15');
-  await dialog.getByLabel('Unit cost excl. tax', { exact: true }).fill('21');
-  await expect(dialog.getByText('Unit cost increased:', { exact: true })).toBeVisible();
-  await dialog.getByLabel('Proposed selling price incl. tax (optional)').fill('54.90');
-  await dialog.getByRole('button', { name: 'Save draft' }).click();
-  await page.getByRole('button', { name: 'Edit draft' }).click();
-  await expect(dialog.getByLabel('Proposed selling price incl. tax (optional)')).toHaveValue(
+  await page.getByLabel('Quantity', { exact: true }).fill('24');
+  await page.getByLabel('Purchase tax %').fill('15');
+  await page.getByLabel('Unit cost excl. tax', { exact: true }).fill('21');
+  await expect(page.getByText('Unit cost increased:', { exact: true })).toBeVisible();
+  await page.getByLabel('Proposed selling price incl. tax (optional)').fill('54.90');
+  await page.getByRole('button', { name: 'Save draft' }).click();
+  await page.getByRole('link', { name: 'Edit draft' }).click();
+  await expect(page.getByLabel('Proposed selling price incl. tax (optional)')).toHaveValue(
     '54.90',
   );
-  await dialog.getByLabel('Order notes').fill('Two deliveries expected');
-  await dialog.getByRole('button', { name: 'Save draft' }).click();
+  await page.getByLabel('Order notes').fill('Two deliveries expected');
+  await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Two deliveries expected', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Place order' }).click();
-  await page.getByRole('button', { name: 'Receive delivery' }).click();
-  await dialog.getByLabel('Delivery reference').fill('DEL-1');
-  await dialog.getByLabel('Quantity', { exact: true }).fill('18');
-  await expect(dialog.getByLabel('New selling price incl. tax (optional)')).toHaveValue('54.90');
-  await expect(dialog.getByText('Current selling price: NOK 49.90 including tax.')).toBeVisible();
-  await dialog.getByRole('button', { name: 'Record delivery' }).click();
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole('checkbox').check();
-  await dialog.getByRole('button', { name: 'Record delivery' }).click();
-  await expect(page.getByRole('cell', { name: 'partially_received', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Receive delivery' }).click();
-  await dialog.getByLabel('Quantity', { exact: true }).fill('6');
-  await expect(dialog.getByText('Current selling price: NOK 54.90 including tax.')).toBeVisible();
-  await dialog.getByLabel('New selling price incl. tax (optional)').fill('');
-  await dialog.getByRole('button', { name: 'Record delivery' }).click();
-  await expect(page.getByRole('cell', { name: 'received', exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Receive delivery' }).click();
+  await page.getByLabel('Delivery reference').fill('DEL-1');
+  await page.getByLabel('Quantity', { exact: true }).fill('18');
+  await expect(page.getByLabel('New selling price incl. tax (optional)')).toHaveValue('54.90');
+  await expect(page.getByText('Current selling price: NOK 49.90 including tax.')).toBeVisible();
+  await page.getByRole('button', { name: 'Record delivery' }).click();
+  await expect(page).toHaveURL(/\/receive$/);
+  await page.getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Record delivery' }).click();
+  await expect(page.locator('.order-detail-number').getByText('partially_received', { exact: true })).toBeVisible();
+  await page.getByRole('link', { name: 'Receive delivery' }).click();
+  await page.getByLabel('Quantity', { exact: true }).fill('6');
+  await expect(page.getByText('Current selling price: NOK 54.90 including tax.')).toBeVisible();
+  await page.getByLabel('New selling price incl. tax (optional)').fill('');
+  await page.getByRole('button', { name: 'Record delivery' }).click();
+  await expect(page.locator('.order-detail-number').getByText('received', { exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/purchasing-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -354,7 +351,7 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.getByRole('link', { name: 'Back to products', exact: true }).click();
 });
 
-test('purchase dialog creates suppliers and products and finds barcodes without losing the draft', async ({
+test('purchase pages create suppliers and products and finds barcodes without losing the draft', async ({
   page,
 }) => {
   await page.goto('/');
@@ -370,13 +367,13 @@ test('purchase dialog creates suppliers and products and finds barcodes without 
     await page.getByLabel('Password', { exact: true }).fill('local-test-password-123');
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   }
-  await page.getByRole('link', { name: 'Purchases', exact: true }).click();
-  await page.getByRole('button', { name: 'New purchase order' }).click();
-  const draft = page.getByRole('dialog', { name: 'New purchase order', exact: true });
+  await page.getByRole('link', { name: 'Suppliers & purchases', exact: true }).click();
+  await page.goto('/purchases/new');
+  const draft = page.locator('.purchase-draft-form');
   await draft.getByLabel('Supplier reference').fill('Keep my draft');
   await draft.getByRole('button', { name: 'Select a supplier', exact: true }).click();
   await page.getByRole('button', { name: 'Add new supplier', exact: true }).click();
-  const supplier = page.getByRole('dialog', { name: 'Add supplier', exact: true });
+  const supplier = page.locator('.supplier-profile-form');
   await supplier.getByRole('textbox', { name: 'Supplier code' }).fill('FRESH');
   await supplier.getByLabel('Supplier name').fill('Fresh deliveries');
   await supplier.getByRole('button', { name: 'Save supplier' }).click();
@@ -391,7 +388,7 @@ test('purchase dialog creates suppliers and products and finds barcodes without 
     .first()
     .click();
   await page.getByRole('button', { name: 'Create new product', exact: true }).click();
-  const product = page.getByRole('dialog', { name: 'Add a product', exact: true });
+  const product = page.locator('.purchasing-subpage');
   await product.getByLabel('Product name').fill('Orange juice');
   await product.getByLabel('SKU', { exact: true }).fill('JUICE-01');
   await product.getByLabel('Category', { exact: true }).fill('Drinks');
@@ -408,10 +405,8 @@ test('purchase dialog creates suppliers and products and finds barcodes without 
   );
   await expect(draft.getByLabel('Unit cost excl. tax', { exact: true })).toHaveValue('20.00');
   await draft.getByLabel('Unit cost excl. tax', { exact: true }).fill('22');
-  await expect(draft.locator('.purchase-cost-change')).toHaveCSS('color', 'rgb(180, 35, 24)');
-  await expect(
-    draft.getByRole('columnheader', { name: 'Selling price incl. tax', exact: true }),
-  ).toContainText('Selling price');
+  await expect(draft.locator('.purchase-cost-change')).toBeVisible();
+  await expect(draft.getByLabel('Proposed selling price incl. tax (optional)')).toBeVisible();
 
   await draft.getByLabel('Proposed selling price incl. tax (optional)').fill('99');
   await draft.getByRole('button', { name: 'Scan barcode', exact: true }).click();

@@ -29,6 +29,19 @@ describe('unitCost', () => {
   it('handles a zero cost without dividing by zero', () => {
     expect(unitCost('0.00', '5')).toBe('0.0000');
   });
+  it('keeps an unknown quote distinct from a genuine zero price', () => {
+    expect(unitCost(null, '1')).toBeNull();
+    const result = compareOffers([
+      { packCost: null, packSize: '1', active: true },
+      offer('9.00', '1'),
+    ]);
+    expect(result[0].packCost).toBe('9.00');
+    expect(result[0].cheapest).toBe(true);
+    expect(result[1]).toMatchObject({ unitCost: null, cheapest: false, premiumPercent: null });
+    expect(compareOffers([{ packCost: null, packSize: '1', active: true }])[0].cheapest).toBe(
+      false,
+    );
+  });
   it('refuses a zero pack size instead of returning Infinity', () => {
     expect(unitCost('10.00', '0')).toBeNull();
   });

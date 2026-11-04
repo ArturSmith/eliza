@@ -120,7 +120,7 @@ export function DocumentPurchasePreparation({ data, documentId }: { data: Docume
   function openOrder(index: number) {
     try {
       sessionStorage.setItem(handoffKey, JSON.stringify({ supplierId, reference: preview.reference, date: preview.date, buyerName: preview.buyerName, buyerDetails: preview.buyerDetails, driverName: preview.driverName, driverPhone: preview.driverPhone, goodsNumber: preview.goodsNumber, buyerTaxNumber: preview.buyerTaxNumber, grossWeight: preview.grossWeight, documentVat: preview.documentVat, returnAmount: preview.returnAmount, documentComment: preview.documentComment, lines, focusLine: index } satisfies PurchaseHandoff));
-      window.location.assign('/purchases?document=1');
+      window.location.assign('/purchases/new?document=1');
     } catch (cause) { setError(cause); }
   }
   if (!preview.rows.length) return null;

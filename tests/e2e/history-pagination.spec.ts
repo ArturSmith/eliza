@@ -62,7 +62,7 @@ test('Sales and Purchases request separate pages and reset purchase filters to p
       },
     });
   });
-  await page.goto('/purchases');
+  await page.goto('/purchases/history');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(page.getByText('Page 2 of 2', { exact: true })).toBeVisible();
   await page.getByLabel('Filter order status').selectOption('draft');
