@@ -21,5 +21,5 @@ test('a manager can return an assigned checkout device to Management', async ({ 
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: 'Switch to Management' }).click();
   await expect(page).toHaveURL('/');
-  await expect(page.getByRole('heading', { name: 'Good to see you, Manager.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Store overview' })).toBeVisible();
 });

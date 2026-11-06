@@ -1,0 +1,216 @@
+.store-overview {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+}
+.overview-header.page-heading {
+  margin-bottom: 0;
+  gap: 20px;
+  align-items: center;
+}
+.overview-header h1 {
+  margin-bottom: 10px;
+}
+.overview-header p {
+  margin: 0;
+  color: var(--muted);
+}
+.overview-date-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: end;
+}
+.overview-period-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--muted);
+}
+.overview-period-control select {
+  border: 0;
+  background: transparent;
+  min-height: 44px;
+  padding-left: 0;
+  color: var(--text);
+  width: auto;
+}
+.overview-date-controls > input {
+  width: auto;
+  min-width: 150px;
+}
+.overview-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.overview-metric {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 3;
+  row-gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  min-width: 0;
+}
+.overview-metric-label {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.overview-metric-value {
+  font-size: clamp(26px, 2.5vw, 36px);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.overview-metric-unavailable {
+  font-size: 22px;
+}
+.overview-metric-note {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 0;
+}
+.overview-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 24px 12px;
+}
+.overview-section-heading h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.overview-section-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.overview-shifts-table {
+  padding: 0 24px 16px;
+  overflow-x: auto;
+}
+.overview-shifts table {
+  width: 100%;
+}
+.overview-shifts th,
+.overview-shifts td {
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
+}
+.overview-shifts th {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+  text-align: left;
+  background: transparent;
+}
+.overview-shifts td {
+  font-size: 14px;
+}
+.overview-shifts tr:last-child td {
+  border-bottom: 0;
+}
+.overview-shifts td:first-child {
+  width: 48%;
+  padding-right: 16px;
+  overflow-wrap: anywhere;
+}
+.overview-shifts td:nth-child(2) {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding-right: 16px;
+  white-space: nowrap;
+}
+.overview-shifts td small {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.overview-empty {
+  margin: 0;
+  padding: 16px 24px 24px;
+  color: var(--muted);
+}
+.overview-sales-chart {
+  min-width: 0;
+}
+.overview-sales-chart .panel-heading {
+  align-items: start;
+  flex-direction: column;
+  gap: 8px;
+  border: 0;
+  padding-bottom: 0;
+}
+.overview-sales-chart .panel-heading h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.overview-sales-chart .panel-heading p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.overview-sales-chart .hour-line-legend {
+  flex-wrap: wrap;
+  gap: 10px 24px;
+}
+.overview-sales-chart .hour-line-chart svg {
+  min-height: 0;
+}
+.overview-sales-chart .hour-line-tooltip {
+  max-width: calc(100% - 24px);
+  white-space: normal;
+}
+@media (max-width: 700px) {
+  .store-overview {
+    gap: 16px;
+  }
+  .overview-header.page-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .overview-date-controls {
+    justify-content: start;
+  }
+  .overview-section-heading {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 18px 18px 8px;
+  }
+  .overview-shifts-table {
+    padding: 0 18px 12px;
+  }
+  .overview-metric {
+    padding: 18px;
+  }
+  .overview-sales-chart .panel-heading {
+    padding: 18px 18px 0;
+  }
+}
+@media (max-width: 480px) {
+  .overview-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .overview-shifts td,
+  .overview-shifts th {
+    font-size: 12px;
+  }
+  .overview-shifts .badge {
+    padding: 4px 6px;
+    font-size: 11px;
+  }
+  .overview-shifts td small {
+    font-size: 11px;
+  }
+}

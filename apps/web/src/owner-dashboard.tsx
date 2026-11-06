@@ -1,7 +1,6 @@
 import { formatQuantity } from './quantity-format';
-import { metricFormula } from './metric-formulas';
 import { dashboardSeverity, dashboardText, dashboardSummary } from './i18n/dashboard';
-import { useState, useId, type ReactNode } from 'react';
+import { useState, useId, useRef, useEffect, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from '@tanstack/react-router';
 import { api, useSession } from './api';
@@ -13,7 +12,7 @@ import { t, useLanguage, getLocale } from './i18n';
 import { tone, type Period } from '@eliza/contracts';
 
 type Dashboard = any;
-type OverviewFinancialSummary = {
+export type OverviewFinancialSummary = {
   revenue: string;
   cogs: string | null;
   grossProfit: string | null;
@@ -54,95 +53,44 @@ function Delta({ change, metric, unit }: { change: number | null; metric: string
   );
 }
 
-function FinancialCard({
-  label,
-  value,
-  currency,
-  percent = false,
-  estimated = false,
-  restricted = false,
-}: {
-  label: string;
-  value: string | null;
-  currency: string;
-  percent?: boolean;
-  estimated?: boolean;
-  restricted?: boolean;
-}) {
-  return (
-    <article className="kpi" title={metricFormula(label)}>
-      <span className="kpi-label">{t(label)}</span>
-      <strong className={'kpi-value' + (value === null ? ' kpi-unavailable' : '')}>
-        {restricted
-          ? t('Restricted')
-          : value === null
-            ? t('Unavailable')
-            : percent
-              ? (estimated ? '≈' : '') + Number(value).toFixed(1) + '%'
-              : (estimated ? '≈' : '') + formatMoney(value, currency)}
-      </strong>
-      {estimated && !restricted && <small className="muted">{t('Estimated')}</small>}
-    </article>
-  );
-}
-
-function Insights({ insights }: { insights: any[] }) {
-  useLanguage();
-  const active = insights.filter(
-    (i) =>
-      !['RESOLVED', 'DISMISSED'].includes(i.status) &&
-      !(
-        i.status === 'SNOOZED' &&
-        i.snoozedUntil &&
-        new Date(i.snoozedUntil).getTime() > Date.now()
-      ),
-  );
-  const ranked = [...active].sort(
-    (a, b) =>
-      (({ 'Action now': 0, Today: 1, Review: 2, Opportunities: 3, Setup: 4 })[a.group as string] ??
-        5) -
-      ({ 'Action now': 0, Today: 1, Review: 2, Opportunities: 3, Setup: 4 }[b.group as string] ??
-        5),
-  );
-  const shown = ranked.slice(0, 3);
-  return (
-    <section className="panel overview-actions">
-      <div className="panel-heading">
-        <h2>
-          {t('Manager Action Center')}{' '}
-          <span className="overview-actions-count">{active.length}</span>
-        </h2>
-        <Link to="/action-center">{t('View all actions')} →</Link>
-      </div>
-      {!active.length ? (
-        <p className="panel-padding muted">{t('Nothing needs your attention right now.')}</p>
-      ) : (
-        <ul className="insight-list">
-          {shown.map((insight) => (
-            <li key={insight.id} className={'insight insight-' + insight.severity}>
-              <div className="insight-head">
-                <span className={'badge badge-' + insight.severity}>
-                  {dashboardSeverity(insight.severity)}
-                </span>
-                <strong>{dashboardText(insight.title)}</strong>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
 /** Store-local hourly sales, with an optional comparable-weekday line. */
-function HourlySales({ rows, currency }: { rows: any[]; currency: string }) {
+export function HourlySales({
+  rows,
+  currency,
+  title = 'Sales by hour',
+  description = 'Hover over the line to see hourly sales.',
+  comparisonLabel,
+  responsive = false,
+}: {
+  rows: any[];
+  currency: string;
+  title?: string;
+  description?: string;
+  comparisonLabel?: string;
+  responsive?: boolean;
+}) {
   useLanguage();
   const [selected, setSelected] = useState<number | null>(null);
   const tooltipId = useId();
+  const chartRef = useRef<HTMLDivElement>(null);
+  const [chartWidth, setChartWidth] = useState(1000);
+  useEffect(() => {
+    if (!responsive || !chartRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      setChartWidth(Math.max(260, Math.min(1000, entries[0].contentRect.width)));
+    });
+    observer.observe(chartRef.current);
+    return () => observer.disconnect();
+  }, [responsive]);
+  const width = responsive ? chartWidth : 1000;
+  const left = responsive ? 72 : 80;
+  const right = width - 20;
+  const typical = comparisonLabel ?? t('Typical');
+
   const values = rows.flatMap((row) => [Number(row.total) || 0, Number(row.comparison) || 0]);
   const min = Math.min(0, ...values);
   const max = Math.max(1, ...values);
-  const x = (index: number) => 80 + (index * 900) / Math.max(1, rows.length - 1);
+  const x = (index: number) => left + (index * (right - left)) / Math.max(1, rows.length - 1);
   const y = (value: number) => 210 - ((value - min) * 180) / (max - min);
   const path = (key: 'total' | 'comparison') =>
     rows
@@ -164,26 +112,37 @@ function HourlySales({ rows, currency }: { rows: any[]; currency: string }) {
   return (
     <section className="panel">
       <div className="panel-heading">
-        <h2>{t('Sales by hour')}</h2>
-        <p>{t('Hover over the line to see hourly sales.')}</p>
+        <h2>{t(title)}</h2>
+        <p>{t(description)}</p>
       </div>
-      <div className="hour-line-chart panel-padding" onPointerLeave={() => setSelected(null)}>
+      <div
+        ref={chartRef}
+        className="hour-line-chart panel-padding"
+        onPointerLeave={() => setSelected(null)}
+      >
         <div className="hour-line-legend">
           <span>{t('Sales')}</span>
-          {hasComparison && <span className="hour-line-typical">{t('Typical')}</span>}
+          {hasComparison && <span className="hour-line-typical">{typical}</span>}
         </div>
-        <svg viewBox="0 0 1000 245" role="group" aria-label={t('Sales by hour')}>
+        <svg viewBox={`0 0 ${width} 245`} role="group" aria-label={t('Sales by hour')}>
           {[min, (min + max) / 2, max].map((value) => (
             <g key={value}>
               <line
-                x1="80"
-                x2="980"
+                x1={left}
+                x2={right}
                 y1={y(value)}
                 y2={y(value)}
                 stroke="var(--color-border-e4e9df)"
               />
-              <text x="70" y={y(value) + 4} textAnchor="end" className="hour-line-label">
-                {formatMoney(String(value), currency)}
+              <text x={left - 10} y={y(value) + 4} textAnchor="end" className="hour-line-label">
+                {responsive
+                  ? new Intl.NumberFormat(getLocale(), {
+                      style: 'currency',
+                      currency,
+                      notation: 'compact',
+                      maximumFractionDigits: 1,
+                    }).format(value)
+                  : formatMoney(String(value), currency)}
               </text>
             </g>
           ))}
@@ -229,24 +188,24 @@ function HourlySales({ rows, currency }: { rows: any[]; currency: string }) {
           )}
           {rows.map((row, index) => (
             <g key={row.hour}>
-              {(index % 4 === 0 || index === rows.length - 1) && (
+              {(index % (responsive && width < 450 ? 6 : 4) === 0 || index === rows.length - 1) && (
                 <text x={x(index)} y="234" textAnchor="middle" className="hour-line-label">
                   {row.hour}:00
                 </text>
               )}
               <rect
                 className="hour-line-hit"
-                x={Math.max(80, x(index) - 450 / Math.max(1, rows.length - 1))}
+                x={Math.max(left, x(index) - (right - left) / 2 / Math.max(1, rows.length - 1))}
                 y="20"
                 width={
-                  Math.min(980, x(index) + 450 / Math.max(1, rows.length - 1)) -
-                  Math.max(80, x(index) - 450 / Math.max(1, rows.length - 1))
+                  Math.min(right, x(index) + (right - left) / 2 / Math.max(1, rows.length - 1)) -
+                  Math.max(left, x(index) - (right - left) / 2 / Math.max(1, rows.length - 1))
                 }
                 height="195"
                 fill="transparent"
                 tabIndex={0}
                 role="button"
-                aria-label={`${row.hour}:00 · ${formatMoney(String(row.total), currency)}`}
+                aria-label={`${row.hour}:00 · ${responsive && !row.elapsed ? t('Not yet') : formatMoney(String(row.total), currency)}`}
                 aria-describedby={selected === index ? tooltipId : undefined}
                 onPointerEnter={() => setSelected(index)}
                 onPointerDown={() => setSelected(index)}
@@ -261,17 +220,20 @@ function HourlySales({ rows, currency }: { rows: any[]; currency: string }) {
             id={tooltipId}
             role="tooltip"
             className="hour-line-tooltip"
-            style={{ left: Math.max(20, Math.min(80, x(selected!) / 10)) + '%' }}
+            style={{ left: Math.max(20, Math.min(80, (x(selected!) / width) * 100)) + '%' }}
           >
             <strong>
               {current.hour}:00–{current.hour}:59
             </strong>
             <span>
-              {t('Sales')}: {formatMoney(String(current.total), currency)}
+              {t('Sales')}:{' '}
+              {responsive && !current.elapsed
+                ? t('Not yet')
+                : formatMoney(String(current.total), currency)}
             </span>
             {current.comparison != null && (
               <span>
-                {t('Typical')}: {formatMoney(String(current.comparison), currency)}
+                {typical}: {formatMoney(String(current.comparison), currency)}
               </span>
             )}
           </div>
@@ -326,103 +288,6 @@ function Table({
         <p className="panel-padding muted">{t(empty)}</p>
       )}
     </section>
-  );
-}
-
-export function TodayOperations() {
-  useLanguage();
-  const session = useSession().data!;
-  const canView = session.user.permissions.includes('analytics.view');
-  const q = useQuery({
-    queryKey: ['owner-dashboard', 'today'],
-    queryFn: () => api<Dashboard>('/reports/owner-dashboard?period=today'),
-    enabled: canView,
-    refetchInterval: 60_000,
-  });
-  if (!canView) return null;
-  if (q.isPending) return <p className="muted">{t('Loading dashboard…')}</p>;
-  if (q.error) return <ErrorMessage error={q.error} />;
-  const today = q.data;
-  if (!today) return null;
-  const currency = session.store.currency;
-  const financial = today.financialSummary as OverviewFinancialSummary;
-  const costEstimate = financial.estimated;
-  return (
-    <div className="dashboard-today">
-      <section className="today-overview" aria-label={t('Today at a glance')}>
-        <h2>{t('Today at a glance')}</h2>
-        <div className="today-metrics">
-          <article className="kpi">
-            <span className="kpi-label">{t('Open shifts')}</span>
-            <strong className="kpi-value">{today.shifts.open}</strong>
-          </article>
-          <article className="kpi">
-            <span className="kpi-label">{t('Transactions today')}</span>
-            <strong className="kpi-value">{today.kpis.transactions.value ?? 0}</strong>
-          </article>
-          <article className="kpi" title={metricFormula('Average basket')}>
-            <span className="kpi-label">{t('Average basket')}</span>
-            <strong className="kpi-value">
-              {formatMoney(String(today.kpis.averageBasket.value ?? 0), currency)}
-            </strong>
-          </article>
-        </div>
-        <h3 className="today-financial-heading">{t('Store profitability')}</h3>
-        <div
-          className="today-metrics today-financial-metrics"
-          aria-label={t('Store profitability')}
-        >
-          <FinancialCard label="Revenue" value={financial.revenue} currency={currency} />
-          <FinancialCard
-            label="Cost of goods sold"
-            value={financial.cogs ?? costEstimate?.cogs ?? null}
-            currency={currency}
-            estimated={financial.cogs === null && costEstimate !== null}
-            restricted={!financial.permissions.margin}
-          />
-          <FinancialCard
-            label="Gross profit"
-            value={financial.grossProfit ?? costEstimate?.grossProfit ?? null}
-            currency={currency}
-            estimated={financial.grossProfit === null && costEstimate !== null}
-            restricted={!financial.permissions.margin}
-          />
-          <FinancialCard
-            label="Gross margin"
-            value={financial.grossMarginPercent ?? costEstimate?.grossMarginPercent ?? null}
-            currency={currency}
-            percent
-            estimated={
-              financial.grossMarginPercent === null && costEstimate?.grossMarginPercent != null
-            }
-            restricted={!financial.permissions.margin}
-          />
-          <FinancialCard
-            label="Inventory losses"
-            value={financial.inventoryLosses}
-            currency={currency}
-            restricted={!financial.permissions.margin}
-          />
-          <FinancialCard
-            label="Operating expenses"
-            value={financial.operatingExpenses}
-            currency={currency}
-            restricted={!financial.permissions.expenses}
-          />
-          <FinancialCard
-            label="Store operating profit"
-            value={financial.storeOperatingProfit ?? costEstimate?.storeOperatingProfit ?? null}
-            currency={currency}
-            estimated={
-              financial.storeOperatingProfit === null && costEstimate?.storeOperatingProfit != null
-            }
-            restricted={!financial.permissions.margin || !financial.permissions.expenses}
-          />
-        </div>
-        <HourlySales rows={today.hourly} currency={currency} />
-      </section>
-      {session.store.advancedFeaturesEnabled && <Insights insights={today.insights ?? []} />}
-    </div>
   );
 }
 

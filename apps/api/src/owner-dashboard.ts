@@ -103,6 +103,65 @@ export class OwnerDashboardController {
     private readonly financialMetrics: FinancialMetricsService,
   ) {}
 
+  /** Read-only Overview projection; all money uses the canonical financial summary. */
+  @Get('store-overview') @Require('analytics.view') async overview(
+    @Query('date') dayInput: string | undefined,
+    @Req() req: AuthRequest,
+  ) {
+    const store = req.context.store as Store;
+    const today = storeToday(new Date(), store.timezone);
+    const day = dayInput === undefined ? today : parse(date, dayInput);
+    if (day > today) throw new BadRequestException('Choose today or an earlier date.');
+    const range = { from: day, to: day };
+    const cutoff = day === today ? storeHour(new Date(), store.timezone) : null;
+    const margin = req.context.user.permissions.includes('analytics.margin');
+    const finances = {
+      expenses: req.context.user.permissions.includes('expenses.read'),
+      purchases: req.context.user.permissions.includes('purchases.read'),
+    };
+    const [totals, hourly, shifts, comparison] = await Promise.all([
+      this.totals(store, range, cutoff, margin, finances),
+      this.hourly(store, range, [], cutoff),
+      this.database.pool.query(
+        `SELECT h.id,h.status,h.opened_at AS "openedAt",h.closed_at AS "closedAt",
+          e.name AS cashier,d.name AS register,
+          COALESCE((SELECT sum(s.total) FROM sales s WHERE s.shift_id=h.id AND s.store_id=$1
+            AND s.created_at>=($2::date::timestamp AT TIME ZONE $3)
+            AND s.created_at<(($2::date+1)::timestamp AT TIME ZONE $3)),0)::text AS sales,
+          count(*) OVER()::int AS "totalShifts",
+          (count(*) FILTER(WHERE h.status='closed') OVER())::int AS "closedShifts",
+          (count(*) FILTER(WHERE h.status='open') OVER())::int AS "openShifts"
+         FROM shifts h
+         JOIN employees e ON e.id=h.employee_id AND e.store_id=h.store_id
+         JOIN device_records d ON d.id=h.device_id AND d.store_id=h.store_id
+         WHERE h.store_id=$1 AND h.opened_at<(($2::date+1)::timestamp AT TIME ZONE $3)
+           AND (h.closed_at IS NULL OR h.closed_at>($2::date::timestamp AT TIME ZONE $3))
+         ORDER BY h.opened_at,h.id LIMIT 200`, [store.id,day,store.timezone]),
+      this.database.pool.query(
+        `SELECT (s.created_at AT TIME ZONE $3)::date::text AS day FROM sales s
+         WHERE s.store_id=$1 AND s.created_at<($2::date::timestamp AT TIME ZONE $3)
+           AND s.created_at>=(($2::date-56)::timestamp AT TIME ZONE $3)
+           AND extract(isodow FROM s.created_at AT TIME ZONE $3)=extract(isodow FROM $2::date)
+         ORDER BY s.created_at DESC LIMIT 1`, [store.id,day,store.timezone]),
+    ]);
+    const comparisonDate: string | null = comparison.rows[0]?.day ?? null;
+    const previous = comparisonDate
+      ? await this.hourly(store, {from:comparisonDate,to:comparisonDate}, [], null)
+      : null;
+    const counts = shifts.rows[0];
+    return {
+      day,today,timezone:store.timezone,currency:store.currency,
+      totalSales:totals.grossSales,refunds:fromScaled(toScaled(String(totals.refunds),2),2),
+      financialSummary:totals.financialSummary,
+      comparisonDate,
+      hourly:hourly.map((row,index)=>({...row,comparison:previous?.[index].total ?? null})),
+      shifts:{
+        total:counts?.totalShifts ?? 0,open:counts?.openShifts ?? 0,closed:counts?.closedShifts ?? 0,
+        rows:shifts.rows.map(({totalShifts,closedShifts,openShifts,...row})=>row),
+      },
+    };
+  }
+
   /**
    * One request serves the whole dashboard. Every block is derived from the same
    * period and baselines so the screen can never show two different versions of a

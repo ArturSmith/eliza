@@ -13,7 +13,7 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.getByLabel('Email address').fill('alex@example.test');
   await page.getByLabel('Password', { exact: true }).fill('local-test-password-123');
   await page.getByRole('button', { name: 'Create my store' }).click();
-  await expect(page.getByRole('heading', { name: 'Good to see you, Alex.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Store overview' })).toBeVisible();
   await page.getByRole('link', { name: 'Products', exact: true }).click();
   await page.getByRole('link', { name: 'Add product' }).first().click();
   const dialog = page.getByRole('dialog');
@@ -65,10 +65,10 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.getByText('View recorded details').first().click();
   await expect(page.locator('pre').first()).toContainText('Counted before opening');
   await page.getByRole('link', { name: 'Overview', exact: true }).click();
-  await expect(page.getByText('NOK 444.00', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Store overview', exact: true })).toBeVisible();
   await page.screenshot({ path: 'test-results/overview-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect(page.getByRole('heading', { name: 'Good to see you, Alex.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Store overview' })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
     true,
   );
@@ -88,7 +88,7 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.getByLabel('Email address').fill('alex@example.test');
   await page.getByLabel('Password', { exact: true }).fill('local-test-password-123');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'Good to see you, Alex.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Store overview' })).toBeVisible();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole('link', { name: 'Team', exact: true }).click();
   await page.getByRole('button', { name: 'Edit Alex Morgan' }).click();

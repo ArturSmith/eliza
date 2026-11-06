@@ -19,7 +19,7 @@ test('shows hourly sales in an interactive line chart', async ({ page }) => {
     return response.json();
   }
 
-  await page.route('**/api/reports/owner-dashboard?*', async (route) => {
+  await page.route('**/api/reports/store-overview?*', async (route) => {
     const response = await route.fetch();
     const body = await response.json();
     body.hourly = Array.from({ length: 24 }, (_, i) => ({

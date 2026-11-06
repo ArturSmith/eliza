@@ -17,10 +17,8 @@ import {
   ArrowRight,
   ArrowUpRight,
   Boxes,
-  Check,
   ChevronRight,
   ClipboardCheck,
-  CircleHelp,
   LayoutDashboard,
   ListChecks,
   LogOut,
@@ -43,7 +41,7 @@ import {
   Menu,
 } from 'lucide-react';
 import type { Product, Permission, Device, Session, Movement } from '@eliza/contracts';
-import { toScaled, fromScaled } from '@eliza/contracts';
+import { toScaled } from '@eliza/contracts';
 import {
   api,
   ApiError,
@@ -55,7 +53,7 @@ import {
   useDevices,
 } from './api';
 import { AuthForm, AdjustmentForm, ErrorMessage, Field } from './forms';
-import { TodayOperations } from './owner-dashboard';
+import { StoreOverview } from './store-overview';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
@@ -442,273 +440,7 @@ export function Shell() {
   );
 }
 export function Overview() {
-  useLanguage();
-  const session = useSession().data!;
-  const products = useProducts();
-  const canAdjust = useCan('inventory.adjust');
-  const canAudit = useCan('audit.read');
-  const [adjust, setAdjust] = useState(false);
-  if (products.isPending) return <Loading />;
-  if (products.error) return <ErrorMessage error={products.error} />;
-  const list = products.data ?? [];
-  const active = list.filter((p) => p.active);
-  const low = active.filter((p) => toScaled(p.stock, 3) <= toScaled(p.minStock, 3));
-  const total = active.reduce((sum, p) => sum + toScaled(p.stockValue ?? '0', 2), 0n);
-  const inventoryValue = active.some((p) => Number(p.stock) > 0 && p.stockValue === null)
-    ? null
-    : fromScaled(total, 2);
-  return (
-    <>
-      <PageHeading
-        eyebrow={t('YOUR STORE AT A GLANCE')}
-        title={t('Good to see you, {value0}.', { value0: session.user.name.split(' ')[0] })}
-        description={t('A clear picture of what’s in store today.')}
-        action={
-          <span className="date-pill">
-            {new Intl.DateTimeFormat(getLocale(), {
-              weekday: 'short',
-              day: 'numeric',
-              month: 'long',
-              timeZone: session.store.timezone,
-            }).format(new Date())}
-          </span>
-        }
-      />
-      <TodayOperations />
-      <div className="metrics">
-        <Metric
-          label={t('Active products')}
-          value={String(active.length)}
-          sub="In your store catalog"
-          icon={<Package />}
-        />
-        <Metric
-          label={t('Inventory value')}
-          value={
-            session.user.permissions.includes('costs.read')
-              ? money(inventoryValue, session.store.currency)
-              : 'Restricted'
-          }
-          sub="Purchase costs of remaining batches"
-          icon={<Boxes />}
-        />
-        <Metric
-          label={t('Low-stock products')}
-          value={String(low.length)}
-          sub="At or below their threshold"
-          icon={<AlertTriangle />}
-          amber={low.length > 0}
-        />
-        <Metric
-          label={t('Categories')}
-          value={String(new Set(active.map((p) => p.category)).size)}
-          sub="Keeping your shelves organized"
-          icon={<Tags />}
-        />
-      </div>
-      <div className="overview-grid">
-        <section className="panel">
-          <div className="panel-heading">
-            <div>
-              <h2>{t('Needs a little attention')}</h2>
-              <p className="muted">{t('Keep your essentials on the shelf.')}</p>
-            </div>
-            <Link to="/inventory" className="text-link">
-              {t('View inventory ')}
-              <ArrowRight size={15} />
-            </Link>
-          </div>
-          {low.length ? (
-            <div className="attention-list">
-              {low.slice(0, 5).map((p) => (
-                <div className="attention-row" key={p.id}>
-                  <ProductIcon category={p.category} image={p.image} />
-                  <div>
-                    <strong>{p.name}</strong>
-                    <small>
-                      {p.sku} · {p.category}
-                    </small>
-                  </div>
-                  <Badge tone={Number(p.stock) === 0 ? 'gray' : 'amber'}>
-                    {Number(p.stock) === 0
-                      ? t('Out of stock')
-                      : t('{value0} left', { value0: formatQuantity(p.stock) })}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <Empty
-              title={list.length ? t('Your stock looks good') : t('A fresh start for your shelves')}
-              description={
-                list.length
-                  ? t('No products are at or below their low-stock threshold.')
-                  : t(
-                      'Add your first products and their opening stock to see what needs attention.',
-                    )
-              }
-            />
-          )}
-        </section>
-        <section className="panel getting-started">
-          <div className="panel-heading">
-            <div>
-              <h2>{t('Your store checklist')}</h2>
-              <p className="muted">{t('A few small steps. A solid foundation.')}</p>
-            </div>
-            <span className="progress-count">
-              {1 + (list.length ? 1 : 0) + (list.some((p) => Number(p.stock) > 0) ? 1 : 0)}/3
-            </span>
-          </div>
-          <Checklist
-            done
-            title={t('Create your store')}
-            description={t('Your workspace is ready.')}
-          />
-          <Checklist
-            done={list.length > 0}
-            title={t('Build your product catalog')}
-            description={t('Names, prices, barcodes, and PLUs.')}
-            to="/products"
-          />
-          <Checklist
-            done={list.some((p) => Number(p.stock) > 0)}
-            title={t('Record opening stock')}
-            description={t('Start with an accurate count.')}
-            to="/inventory"
-          />
-          {canAdjust && (
-            <Button
-              variant="outline"
-              className="full"
-              onClick={() => setAdjust(true)}
-              disabled={!active.length}
-            >
-              <Plus size={16} />
-              {t('Record stock ')}
-            </Button>
-          )}
-          <div className="next-note">
-            <CircleHelp size={17} />
-            <p>
-              {t(
-                'Set employee PINs in Team, then assign a device to Checkout in Devices and start a shift. ',
-              )}
-            </p>
-          </div>
-        </section>
-      </div>
-      {canAudit && <RecentActivity />}
-      <Dialog
-        open={adjust}
-        onOpenChange={setAdjust}
-        title={t('Record a stock adjustment')}
-        description={t('Keep stock accurate with a traceable change.')}
-      >
-        <AdjustmentForm products={list} onDone={() => setAdjust(false)} />
-      </Dialog>
-    </>
-  );
-}
-function Metric({
-  label,
-  value,
-  sub,
-  icon,
-  amber = false,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  icon: ReactNode;
-  amber?: boolean;
-}) {
-  useLanguage();
-  return (
-    <section className="metric">
-      <div>
-        <span>{t(label)}</span>
-        <span className={`metric-icon ${amber ? 'amber' : ''}`}>{icon}</span>
-      </div>
-      <strong>{value}</strong>
-      <small>{t(sub)}</small>
-    </section>
-  );
-}
-function Checklist({
-  done,
-  title,
-  description,
-  to,
-}: {
-  done: boolean;
-  title: string;
-  description: string;
-  to?: '/products' | '/inventory';
-}) {
-  useLanguage();
-  return (
-    <div className="checklist-row">
-      <span className={`check-circle ${done ? 'done' : ''}`}>
-        {done ? <Check size={14} /> : null}
-      </span>
-      <div>
-        <strong>{title}</strong>
-        <small>{description}</small>
-      </div>
-      {to && (
-        <Link to={to} aria-label={title}>
-          <ChevronRight size={17} />
-        </Link>
-      )}
-    </div>
-  );
-}
-function ProductIcon({ category, image }: { category: string; image?: string }) {
-  useLanguage();
-  return (
-    <span className={`product-icon color-${category.length % 4}`}>
-      {image ? <img src={image} alt={t('')} loading="lazy" /> : <Package size={20} />}
-    </span>
-  );
-}
-function RecentActivity() {
-  useLanguage();
-  const query = useAudit();
-  return (
-    <section className="panel recent-panel">
-      <div className="panel-heading">
-        <div>
-          <h2>{t('Recent activity')}</h2>
-          <p className="muted">{t('The story behind every change.')}</p>
-        </div>
-        <Link to="/audit" className="text-link">
-          {t('View activity ')}
-          <ArrowRight size={15} />
-        </Link>
-      </div>
-      <ErrorMessage error={query.error} />
-      {query.data?.slice(0, 4).map((a) => (
-        <div className="activity-row" key={a.id}>
-          <span className="activity-icon">
-            <Activity size={17} />
-          </span>
-          <div>
-            <strong>{t(a.action)}</strong>
-            <small>
-              {a.actor} · {a.device}
-            </small>
-          </div>
-          <time>{date(a.createdAt)}</time>
-        </div>
-      ))}
-      {query.data?.length === 0 && (
-        <p className="muted panel-padding">
-          {t('Your store’s activity will appear here as you work.')}
-        </p>
-      )}
-    </section>
-  );
+  return <StoreOverview />;
 }
 export function ProductsPage() {
   useLanguage();
