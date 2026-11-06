@@ -1,425 +1,86 @@
 import { SupplierProductCard, type SupplierCatalogOffer } from './supplier-product-card';
 import { Link } from '@tanstack/react-router';
-import { formatQuantity, quantityInputValue } from './quantity-format';
 import { useState } from 'react';
 import { Truck } from 'lucide-react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import {
-  type Supplier,
-  type SupplierProduct,
-  type Product,
-  supplierProductSchema,
-} from '@eliza/contracts';
-import { api, queryClient, useSession } from './api';
-import { Field, ErrorMessage, SearchSelect } from './forms';
-import { Dialog } from './components/ui/dialog';
-import { Button } from './components/ui/button';
+import { useQuery } from '@tanstack/react-query';
+import type { SupplierProduct } from '@eliza/contracts';
+import { api, useSession } from './api';
+import { ErrorMessage } from './forms';
 import { formatMoney } from './receipts';
 import { t, useLanguage } from './i18n';
 
 export type Offer = SupplierProduct & { cheapest: boolean; premiumPercent: number | null };
 
-const invalidate = () => {
-  void queryClient.invalidateQueries({ queryKey: ['supplier-products'] });
-  void queryClient.invalidateQueries({ queryKey: ['product-suppliers'] });
-  void queryClient.invalidateQueries({ queryKey: ['supplier-catalog'] });
-};
-
-/** Quoted unit price, or a clear gap rather than a zero that looks like free. */
-function Price({ value, currency }: { value: string | null | undefined; currency: string }) {
+/** Supplier associations are managed from supplier pages and purchases. */
+export function ProductSuppliers({ productId, unit }: { productId: string; unit: string }) {
   useLanguage();
-  // Guards undefined as well as null: a missing field should read as "no price",
-  // never crash the page.
-  if (value === null || value === undefined) return <span className="muted">{t('No price')}</span>;
-  return <>{formatMoney(value, currency)}</>;
-}
-
-/**
- * A quote that the last delivery contradicts is worth surfacing: it usually means
- * the supplier raised the price without the catalogue being updated.
- */
-function staleQuote(offer: Offer) {
-  if (!offer.unitCost || !offer.lastPaidCost) return false;
-  const quoted = Number(offer.unitCost);
-  const paid = Number(offer.lastPaidCost);
-  if (!quoted) return false;
-  return Math.abs(paid - quoted) / quoted > 0.03;
-}
-
-export function SupplierOfferForm({
-  onClose,
-  offer,
-  fixedProductId,
-  fixedSupplierId,
-}: {
-  onClose: () => void;
-  offer?: Offer;
-  fixedProductId?: string;
-  fixedSupplierId?: string;
-}) {
-  useLanguage();
-  const session = useSession().data!;
-  const suppliers = useQuery({
-    queryKey: ['suppliers'],
-    queryFn: () => api<Supplier[]>('/suppliers'),
-  });
-  const products = useQuery({
-    queryKey: ['products'],
-    queryFn: () => api<Product[]>('/products'),
-  });
-  const [supplierId, setSupplierId] = useState(offer?.supplierId ?? fixedSupplierId ?? '');
-  const [productId, setProductId] = useState(offer?.productId ?? fixedProductId ?? '');
-  const [supplierSku, setSupplierSku] = useState(offer?.supplierSku ?? '');
-  const [packSize, setPackSize] = useState(() => quantityInputValue(offer?.packSize ?? '1'));
-  const [packCost, setPackCost] = useState(offer?.packCost ?? '');
-  const [leadTime, setLeadTime] = useState(offer?.leadTimeDays?.toString() ?? '');
-  const [error, setError] = useState<unknown>(null);
-  const mutation = useMutation({
-    mutationFn: (body: unknown) => api('/supplier-products', body),
-    onSuccess: () => {
-      invalidate();
-      onClose();
-    },
-    onError: setError,
-  });
-  const preview =
-    packCost && Number(packSize) > 0
-      ? formatMoney(
-          (Math.round((Number(packCost) / Number(packSize)) * 10000) / 10000).toFixed(4),
-          session.store.currency,
-        )
-      : null;
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        setError(null);
-        const parsed = supplierProductSchema.safeParse({
-          supplierId,
-          productId,
-          supplierSku,
-          packSize,
-          packCost,
-          leadTimeDays: leadTime === '' ? null : Number(leadTime),
-          minimumOrder: offer?.minimumOrder ?? null,
-          notes: offer?.notes ?? '',
-          active: offer?.active ?? true,
-        });
-        if (!parsed.success) {
-          setError(parsed.error.issues.map((i) => i.message).join('; '));
-          return;
-        }
-        mutation.mutate({
-          ...parsed.data,
-          requestId: crypto.randomUUID(),
-          ...(offer ? { id: offer.id, version: offer.version } : {}),
-        });
-      }}
-    >
-      {!fixedSupplierId && (
-        <SearchSelect
-          label={t('Supplier')}
-          placeholder={t('Choose supplier…')}
-          value={
-            suppliers.data?.find((s) => s.id === supplierId)
-              ? {
-                  title: suppliers.data.find((s) => s.id === supplierId)!.name,
-                  subtitle: suppliers.data.find((s) => s.id === supplierId)!.code,
-                }
-              : undefined
-          }
-          onSelect={setSupplierId}
-          options={(suppliers.data ?? [])
-            .filter((s) => s.active)
-            .map((s) => ({
-              id: s.id,
-              title: s.name,
-              subtitle: s.code,
-              keywords: [s.name, s.code],
-            }))}
-        />
-      )}
-      {!fixedProductId && (
-        <SearchSelect
-          label={t('Product')}
-          placeholder={t('Choose product…')}
-          value={
-            products.data?.find((p) => p.id === productId)
-              ? {
-                  title: products.data.find((p) => p.id === productId)!.name,
-                  subtitle: products.data.find((p) => p.id === productId)!.sku,
-                }
-              : undefined
-          }
-          onSelect={setProductId}
-          options={(products.data ?? [])
-            .filter((p) => p.active)
-            .map((p) => ({
-              id: p.id,
-              title: p.name,
-              subtitle: p.sku,
-              keywords: [p.name, p.sku],
-            }))}
-        />
-      )}
-      <Field
-        label={t('Supplier item code')}
-        hint={t('Optional. The code you quote when ordering.')}
-      >
-        <input
-          value={supplierSku}
-          onChange={(e) => setSupplierSku(e.target.value)}
-          maxLength={60}
-        />
-      </Field>
-      <div className="field-row">
-        <Field
-          label={t('Units per pack')}
-          hint={t('Use 1 if the price is already per selling unit.')}
-        >
-          <input
-            inputMode="decimal"
-            required
-            value={packSize}
-            onChange={(e) => setPackSize(e.target.value)}
-          />
-        </Field>
-        <Field label={t('Price per pack')} hint={t('Excluding tax.')}>
-          <input
-            inputMode="decimal"
-            required
-            value={packCost}
-            onChange={(e) => setPackCost(e.target.value)}
-          />
-        </Field>
-      </div>
-      {preview && (
-        <p className="notice">
-          {t('Works out to')} <strong>{preview}</strong> {t('per selling unit.')}
-        </p>
-      )}
-      <Field label={t('Lead time in days')} hint={t('Optional.')}>
-        <input inputMode="numeric" value={leadTime} onChange={(e) => setLeadTime(e.target.value)} />
-      </Field>
-      <ErrorMessage error={error ?? mutation.error} />
-      <div className="form-actions">
-        <Button disabled={mutation.isPending}>
-          {mutation.isPending ? t('Saving…') : t('Save price')}
-        </Button>
-
-        <Button variant="outline" type="button" onClick={onClose}>
-          {t('Cancel ')}
-        </Button>
-      </div>
-    </form>
-  );
-}
-
-export function OfferDialog({
-  open,
-  onClose,
-  ...props
-}: {
-  open: boolean;
-  onClose: () => void;
-  offer?: Offer;
-  fixedProductId?: string;
-  fixedSupplierId?: string;
-}) {
-  return (
-    <Dialog
-      elevated
-      open={open}
-      onOpenChange={(v) => !v && onClose()}
-      title={props.offer ? t('Edit supplier price') : t('Add supplier price')}
-      description={t('Record what this supplier charges so prices can be compared.')}
-    >
-      {open && <SupplierOfferForm {...props} onClose={onClose} />}
-    </Dialog>
-  );
-}
-
-/** Supplier comparison for one product, cheapest per selling unit first. */
-export function ProductSuppliers({
-  productId,
-  unit,
-  layout = 'table',
-}: {
-  productId: string;
-  unit: string;
-  layout?: 'table' | 'cards';
-}) {
-  useLanguage();
-  const session = useSession().data!;
-  const currency = session.store.currency;
-  const canManage = session.user.permissions.includes('suppliers.manage');
-  const [editing, setEditing] = useState<Offer | undefined>(undefined);
-  const [adding, setAdding] = useState(false);
+  const currency = useSession().data!.store.currency;
   const q = useQuery({
     queryKey: ['product-suppliers', productId],
     queryFn: () => api<Offer[]>(`/products/${productId}/suppliers`),
   });
+  const suppliers = [...(q.data ?? [])].sort((a, b) =>
+    a.supplierName.localeCompare(b.supplierName),
+  );
   return (
     <section className="panel">
       <div className="panel-heading">
         <h2>{t('Suppliers for this product')}</h2>
-        <p>{t('Ranked by price per selling unit, so pack sizes compare fairly.')}</p>
-        {canManage && (
-          <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-            {t('Add supplier price')}
-          </Button>
-        )}
+        <p>{t('Link products from a supplier page or when recording a purchase.')}</p>
       </div>
       <ErrorMessage error={q.error} />
       {q.isPending ? (
         <p className="panel-padding muted">{t('Loading…')}</p>
-      ) : q.data?.length ? (
-        layout === 'cards' ? (
-          <div className="product-supplier-cards">
-            {q.data.map((offer) => (
-              <div key={offer.id} className="product-supplier-card">
-                <Truck size={20} aria-hidden="true" />
-                <div className="product-supplier-name">
+      ) : suppliers.length ? (
+        <div className="product-supplier-cards">
+          {suppliers.map((offer) => (
+            <div key={offer.id} className="product-supplier-card">
+              <Truck size={20} aria-hidden="true" />
+              <div className="product-supplier-name">
+                <Link to="/suppliers/$id" params={{ id: offer.supplierId }}>
                   <strong>{offer.supplierName}</strong>
-                  <small>
-                    {[
-                      offer.supplierSku,
-                      offer.leadTimeDays === null
-                        ? ''
-                        : t('{value0} days', { value0: offer.leadTimeDays }),
-                    ]
-                      .filter(Boolean)
-                      .join(' · ') || t('Lead time not specified')}
-                  </small>
-                </div>
-                <div className="product-supplier-price">
-                  {offer.cheapest && q.data.length > 1 && (
-                    <span className="badge badge-green">{t('Cheapest')}</span>
-                  )}
-                  <strong>
-                    <Price value={offer.unitCost} currency={currency} />
-                  </strong>
-                  <small>
-                    {t('per ')}
-                    {t(unit)}
-                  </small>
-                </div>
-                {canManage && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    aria-label={t('Edit supplier price for {value0}', {
-                      value0: offer.supplierName,
-                    })}
-                    onClick={() => setEditing(offer)}
-                  >
-                    {t('Edit ')}
-                  </Button>
+                </Link>
+                <small>
+                  {[
+                    offer.supplierSku,
+                    offer.leadTimeDays === null
+                      ? ''
+                      : t('{value0} days', { value0: offer.leadTimeDays }),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || t('Lead time not specified')}
+                </small>
+              </div>
+              <div className="product-supplier-price">
+                <small>{t('Last purchase price')}</small>
+                {offer.lastPaidCost == null ? (
+                  <small>{t('No deliveries recorded yet.')}</small>
+                ) : (
+                  <>
+                    <strong>{formatMoney(offer.lastPaidCost, currency)}</strong>
+                    <small>
+                      {t('per ')}
+                      {t(unit)}
+                    </small>
+                  </>
                 )}
               </div>
-            ))}
-          </div>
-        ) : (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>{t('Supplier')}</th>
-                  <th>{t('Pack')}</th>
-                  <th>{t('Per {value0}', { value0: t(unit) })}</th>
-                  <th>{t('Last paid')}</th>
-                  <th>{t('Lead time')}</th>
-                  {canManage && <th>{t('Actions')}</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {q.data.map((offer) => (
-                  <tr key={offer.id} className={offer.cheapest ? 'offer-cheapest' : undefined}>
-                    <td>
-                      <strong>{offer.supplierName}</strong>
-                      {offer.supplierSku && <small>{offer.supplierSku}</small>}
-                      {offer.cheapest && q.data.length > 1 && (
-                        <span className="badge badge-green">{t('Cheapest')}</span>
-                      )}
-                    </td>
-                    <td>
-                      <Price value={offer.packCost} currency={currency} />
-                      <small>
-                        {formatQuantity(offer.packSize)} × {t(offer.unit)}
-                      </small>
-                    </td>
-                    <td className="numeric">
-                      <Price value={offer.unitCost} currency={currency} />
-                      {offer.premiumPercent !== null && offer.premiumPercent > 0 && (
-                        <small className="delta-bad">
-                          +{offer.premiumPercent.toFixed(1)}% {t('more')}
-                        </small>
-                      )}
-                    </td>
-                    <td className="numeric">
-                      {!offer.lastPaidCost ? (
-                        <span className="muted">{t('Never ordered')}</span>
-                      ) : (
-                        <>
-                          {formatMoney(offer.lastPaidCost, currency)}
-                          {staleQuote(offer) && (
-                            <small className="delta-bad">{t('Differs from quote')}</small>
-                          )}
-                        </>
-                      )}
-                    </td>
-                    <td>
-                      {offer.leadTimeDays === null
-                        ? '—'
-                        : t('{value0} days', { value0: offer.leadTimeDays })}
-                    </td>
-                    {canManage && (
-                      <td>
-                        <Button variant="ghost" size="sm" onClick={() => setEditing(offer)}>
-                          {t('Edit ')}
-                        </Button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )
+            </div>
+          ))}
+        </div>
       ) : (
-        <p className="panel-padding muted">
-          {t('No supplier prices recorded for this product yet.')}
-        </p>
-      )}
-      {(adding || editing) && (
-        <OfferDialog
-          open
-          offer={editing}
-          fixedProductId={productId}
-          onClose={() => {
-            setAdding(false);
-            setEditing(undefined);
-          }}
-        />
+        <p className="panel-padding muted">{t('No suppliers linked to this product yet.')}</p>
       )}
     </section>
   );
 }
 
 /** What one supplier can supply. */
-export function SupplierCatalog({
-  supplierId,
-  pageActions = false,
-}: {
-  supplierId: string;
-  pageActions?: boolean;
-}) {
+export function SupplierCatalog({ supplierId }: { supplierId: string }) {
   useLanguage();
   const session = useSession().data!;
   const currency = session.store.currency;
   const canManage = session.user.permissions.includes('suppliers.manage');
-  const [editing, setEditing] = useState<Offer | undefined>(undefined);
-  const [adding, setAdding] = useState(false);
   const [search, setSearch] = useState('');
   const q = useQuery({
     queryKey: ['supplier-catalog', supplierId],
@@ -431,24 +92,19 @@ export function SupplierCatalog({
     ),
   );
   return (
-    <section className={pageActions ? 'panel supplier-products-panel' : 'panel'}>
+    <section className="panel supplier-products-panel">
       <div className="panel-heading">
         <h2>{t('Products from this supplier')}</h2>
-        <p>{t('What you can order, and what it costs per selling unit.')}</p>
-        {canManage &&
-          (pageActions ? (
-            <Link
-              className="button button-outline"
-              to="/suppliers/$id/products/new"
-              params={{ id: supplierId }}
-            >
-              {t('Add product')}
-            </Link>
-          ) : (
-            <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-              {t('Add product')}
-            </Button>
-          ))}
+        <p>{t('Linked products and their last recorded purchase prices.')}</p>
+        {canManage && (
+          <Link
+            className="button button-outline"
+            to="/suppliers/$id/products/new"
+            params={{ id: supplierId }}
+          >
+            {t('Add product')}
+          </Link>
+        )}
       </div>
       <ErrorMessage error={q.error} />
       {q.data && q.data.length > 3 && (
@@ -471,24 +127,6 @@ export function SupplierCatalog({
               offer={offer}
               currency={currency}
               canOpen={session.user.permissions.includes('catalog.read')}
-              quoteDiffers={staleQuote(offer)}
-              action={
-                canManage ? (
-                  pageActions ? (
-                    <Link
-                      className="button button-outline"
-                      to="/suppliers/$id/products/$offerId/edit"
-                      params={{ id: supplierId, offerId: offer.id }}
-                    >
-                      {t('Edit supplier price')}
-                    </Link>
-                  ) : (
-                    <Button variant="outline" onClick={() => setEditing(offer)}>
-                      {t('Edit supplier price')}
-                    </Button>
-                  )
-                ) : undefined
-              }
             />
           ))}
         </div>
@@ -498,17 +136,6 @@ export function SupplierCatalog({
             ? t('No products match your search.')
             : t('No products linked to this supplier yet.')}
         </p>
-      )}
-      {(adding || editing) && (
-        <OfferDialog
-          open
-          offer={editing}
-          fixedSupplierId={supplierId}
-          onClose={() => {
-            setAdding(false);
-            setEditing(undefined);
-          }}
-        />
       )}
     </section>
   );

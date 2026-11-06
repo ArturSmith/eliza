@@ -44,15 +44,26 @@ export class InventoryController {
     if (!product.rows[0]) throw new NotFoundException('Product not found.');
     const batches = await this.database.pool.query(
       `SELECT b.id,b.receipt_line_id AS "receiptLineId",b.expiry_date::text AS "expiryDate",
-       b.quantity::text,b.created_at AS "createdAt",
+       b.quantity::text,b.created_at AS "createdAt",CASE WHEN $4::boolean THEN sup.name END AS "supplierName",
+       CASE WHEN $4::boolean THEN sup.id END AS "supplierId",
+       CASE WHEN $4::boolean THEN sup.code END AS "supplierCode",
        CASE WHEN $3::boolean THEN b.unit_cost::text END AS "unitCost",
        CASE WHEN $3::boolean THEN b.cost_source END AS "costSource",
        CASE WHEN b.expiry_date IS NOT NULL AND b.expiry_date<=(now() AT TIME ZONE s.timezone)::date
        THEN true ELSE false END AS expired
        FROM stock_batches b JOIN stores s ON s.id=b.store_id
+       LEFT JOIN goods_receipt_lines l ON l.id=b.receipt_line_id AND l.store_id=b.store_id
+       LEFT JOIN goods_receipts g ON g.id=l.receipt_id AND g.store_id=l.store_id
+       LEFT JOIN purchases p ON p.id=g.purchase_id AND p.store_id=g.store_id
+       LEFT JOIN suppliers sup ON sup.id=COALESCE(p.supplier_id,b.supplier_id) AND sup.store_id=b.store_id
        WHERE b.store_id=$1 AND b.product_id=$2 AND b.quantity>0
        ORDER BY b.expiry_date ASC NULLS LAST,b.created_at,b.id`,
-      [req.context.store.id, id, req.context.user.permissions.includes('costs.read')],
+      [
+        req.context.store.id,
+        id,
+        req.context.user.permissions.includes('costs.read'),
+        req.context.user.permissions.includes('suppliers.read'),
+      ],
     );
     return { product: product.rows[0], batches: batches.rows };
   }
@@ -192,17 +203,39 @@ export class InventoryController {
         `);
         costTotal = valuation.rows[0].cost === null ? null : String(valuation.rows[0].cost);
       } else {
-        if (product.cost === null)
-          throw new BadRequestException('Set purchase cost before adding stock.');
-        await tx.execute(
-          sql`SELECT adjust_stock_batches(${store.id}::uuid,${product.id}::uuid,${body.quantity}::numeric)`,
-        );
+        // Older clients may still supply their reference cost on the product.
+        // Current forms always send unitCost explicitly; null means unknown.
+        const incomingCost = body.unitCost === undefined ? product.cost : body.unitCost;
+        if (
+          body.unitCost !== undefined &&
+          body.reason === 'received' &&
+          (incomingCost === null || !body.supplierId)
+        )
+          throw new BadRequestException('Choose a supplier and enter the cost of this delivery.');
+        if (body.supplierId) {
+          const supplier = await tx.execute(sql`SELECT id FROM suppliers WHERE id=${body.supplierId}
+            AND store_id=${store.id} AND active FOR SHARE`);
+          if (!supplier.rows.length) throw new BadRequestException('Choose an active supplier.');
+        }
+        await tx.execute(sql`INSERT INTO stock_batches(store_id,product_id,quantity,unit_cost,cost_source,supplier_id)
+          VALUES(${store.id},${product.id},${body.quantity},${incomingCost},
+            ${incomingCost === null ? 'unknown' : 'adjustment'},${body.supplierId ?? null})`);
+        if (body.reason === 'received' && body.supplierId) {
+          await tx.execute(sql`INSERT INTO supplier_products(store_id,supplier_id,product_id,pack_cost)
+            VALUES(${store.id},${body.supplierId},${product.id},NULL)
+            ON CONFLICT(supplier_id,product_id) DO NOTHING`);
+        }
       }
       await tx.update(products).set({ stock: balance }).where(eq(products.id, product.id));
       const [movement] = await tx
         .insert(movements)
         .values({
-          ...body,
+          productId: body.productId,
+          quantity: body.quantity,
+          reason: body.reason,
+          notes: body.notes,
+          requestId: body.requestId,
+          supplierId: body.supplierId,
           storeId: store.id,
           employeeId: user.id,
           deviceId: device.id,
@@ -224,6 +257,12 @@ export class InventoryController {
           reason: body.reason,
           notes: body.notes,
           movementId: movement.id,
+          ...(change > 0n
+            ? {
+                unitCost: body.unitCost === undefined ? product.cost : body.unitCost,
+                supplierId: body.supplierId ?? null,
+              }
+            : {}),
         },
       });
       return movement;

@@ -356,9 +356,9 @@ describe.sequential('owner dashboard', () => {
     expect(report.kpis.netProfit.value).toBe(-0.1);
   });
 
-  it('counts products that have no purchase cost', async () => {
+  it('does not treat genuine zero-cost products as missing cost', async () => {
     const res = await owner.request('/reports/owner-dashboard?period=today');
-    expect(res.body.readiness.missingCost).toBeGreaterThan(0);
+    expect(res.body.readiness.missingCost).toBe(0);
     expect(res.body.readiness.products).toBe(2);
     expect(freeProductId).toBeTruthy();
   });
@@ -537,7 +537,7 @@ describe.sequential('manager action centre', () => {
 
   it('uses age, positive stock and batch cost for store-local no-sales analysis', async () => {
     let nextCode = 105;
-    const make = async (name: string, cost: string, sku: string, withStock = true) => {
+    const make = async (name: string, cost: string | null, sku: string, withStock = true) => {
       const code = String(++nextCode);
       const product = await owner.request('/products', {
         name,
@@ -558,6 +558,7 @@ describe.sequential('manager action centre', () => {
           productId: product.body.id,
           quantity: '5',
           reason: 'opening_balance',
+          unitCost: cost,
         });
       return product.body.id as string;
     };
@@ -622,7 +623,7 @@ describe.sequential('manager action centre', () => {
       (await owner.request('/store-profile', { ...profile, noSalesThresholdDays: 30 })).status,
     ).toBe(201);
     expect((await owner.request('/reports/action-center/no-sales')).body.thresholdDays).toBe(30);
-    const missing = await make('Uncosted old stock', '0.00', 'NO-COST');
+    const missing = await make('Uncosted old stock', null, 'NO-COST');
     const noStock = await make('Empty old stock', '10.00', 'EMPTY', false);
     await db.pool.query(
       "UPDATE products SET created_at=now()-interval '70 days' WHERE id=ANY($1::uuid[])",
@@ -631,7 +632,7 @@ describe.sequential('manager action centre', () => {
     const withMissing = (await owner.request('/reports/action-center/no-sales')).body.rows;
     expect(withMissing.find((r: any) => r.id === missing)).toMatchObject({
       costMissing: true,
-      inventoryValue: '0.00',
+      inventoryValue: null,
     });
     expect(withMissing.some((r: any) => r.id === noStock)).toBe(false);
     const insightAfterThreshold = (

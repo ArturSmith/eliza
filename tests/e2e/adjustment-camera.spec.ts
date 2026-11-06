@@ -41,7 +41,8 @@ test('stock adjustment keeps product selection usable beside camera scanner', as
   await adjustment.getByRole('button', { name: 'Select a product' }).click();
   await adjustment.getByRole('option', { name: /Scanner bread/ }).click();
   await adjustment.getByPlaceholder('e.g. 24').fill('2');
-  await adjustment.getByLabel('Reason', { exact: true }).selectOption('received');
+  await adjustment.getByLabel('Reason', { exact: true }).selectOption('opening_balance');
+  await adjustment.getByLabel('Cost per unit for this stock').fill('2');
   await adjustment.getByRole('button', { name: 'Add stock', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Stock operation recorded' })).toBeVisible();
 });

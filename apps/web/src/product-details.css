@@ -30,16 +30,30 @@
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   gap: 24px;
-  align-items: start;
+  align-items: stretch;
 }
+/* Share rows between columns so card edges stay aligned as content changes. */
 .product-details-main,
 .product-details-aside {
-  display: grid;
-  gap: 24px;
-  min-width: 0;
+  display: contents;
+}
+.product-details-main > * {
+  grid-column: 1;
+}
+.product-details-aside > * {
+  grid-column: 2;
+}
+.product-details-general,
+.product-details-gallery {
+  grid-row: 1;
+}
+.product-details-pricing,
+.product-details-actions {
+  grid-row: 2;
 }
 .product-details-section {
   display: grid;
+  align-content: start;
   gap: 20px;
   padding: 24px;
   min-width: 0;
@@ -151,9 +165,21 @@
   .product-details-columns {
     grid-template-columns: minmax(0, 1fr);
   }
+  .product-details-main,
+  .product-details-aside {
+    display: grid;
+    gap: 24px;
+    min-width: 0;
+  }
+  .product-details-main > *,
+  .product-details-aside > * {
+    grid-column: auto;
+    grid-row: auto;
+  }
 }
 @media (max-width: 600px) {
   .product-details-page,
+  .product-details-columns,
   .product-details-main,
   .product-details-aside {
     gap: 16px;
@@ -281,12 +307,6 @@
   align-self: stretch;
 }
 
-.product-stock-tools {
-  display: grid;
-  align-content: start;
-  justify-items: start;
-  gap: 6px;
-}
 .product-stock-adjust {
   min-width: 0;
   padding: 16px;
@@ -298,19 +318,153 @@
   font-size: 14px;
 }
 
-.product-stock-field {
+.product-cost-summary {
   display: grid;
-  grid-template-rows: subgrid;
-  grid-row: span 3;
-  row-gap: 8px;
-  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0 24px 20px;
 }
-.product-stock-field > .field {
+.product-cost-summary dt {
+  color: var(--muted);
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.product-cost-summary dd {
+  margin: 0;
+  font-weight: 600;
+}
+.product-cost-summary small {
+  display: block;
+  margin-top: 6px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.product-batch-costs {
+  min-width: 0;
+  overflow: hidden;
+}
+.product-batch-costs .panel-heading {
+  border-bottom: 0;
+}
+.product-batch-list {
+  display: grid;
+  gap: 8px;
+  padding: 0 24px 16px;
+}
+.product-batch-row {
+  min-width: 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--page);
+}
+.product-batch-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.product-batch-heading strong {
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.product-batch-heading time {
+  color: var(--muted);
+  font-size: 11px;
+}
+.product-batch-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 8px;
+  margin: 10px 0 0;
+}
+.product-batch-facts dt {
+  color: var(--muted);
+  font-size: 11px;
+  margin: 0;
+}
+.product-batch-facts dd {
+  margin: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.product-batch-facts small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.product-batch-expand {
+  display: flex;
+  justify-content: center;
+  padding: 0 24px 20px;
+}
+.product-batch-expand .is-expanded {
+  transform: rotate(180deg);
+}
+@media (max-width: 600px) {
+  .product-batch-list {
+    padding: 0 18px 18px;
+  }
+  .product-batch-expand {
+    padding: 0 18px 18px;
+  }
+}
+
+.product-batch-facts > div {
   display: grid;
   grid-template-rows: subgrid;
   grid-row: span 2;
-  row-gap: 8px;
+  row-gap: 4px;
+  min-width: 0;
 }
-.product-stock-tools {
-  grid-row: 3;
+.product-batch-supplier {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+}
+.product-batch-supplier > svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.product-batch-supplier a {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 13px;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.product-batch-supplier a:hover {
+  text-decoration: underline;
+}
+.product-batch-supplier small {
+  color: var(--muted);
+  margin-left: 6px;
+  font-size: 10px;
+}
+.product-batch-source {
+  display: block;
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.product-batch-notes {
+  display: grid;
+  gap: 12px;
+  padding: 0 24px 24px;
+}
+.product-batch-notes .notice {
+  margin: 0;
+}
+@media (max-width: 600px) {
+  .product-cost-summary {
+    padding: 0 18px 16px;
+  }
+  .product-batch-notes {
+    padding: 0 18px 18px;
+  }
 }

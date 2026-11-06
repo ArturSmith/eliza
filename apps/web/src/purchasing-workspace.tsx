@@ -7,7 +7,7 @@ import { api, refresh, useSession } from './api';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { ErrorMessage } from './forms';
-import { SupplierCatalog, SupplierOfferForm, type Offer } from './supplier-products';
+import { SupplierCatalog } from './supplier-products';
 import {
   DraftForm,
   Heading,
@@ -338,11 +338,18 @@ export function SupplierDetailsPage() {
   const canManage = session.user.permissions.includes('suppliers.manage');
   const canReadPurchases = session.user.permissions.includes('purchases.read');
   const canOrder = canReadPurchases && session.user.permissions.includes('purchases.write');
+  const canReceive = canReadPurchases && session.user.permissions.includes('purchases.receive');
   const q = useSuppliers(canRead);
   const supplier = q.data?.find((s) => s.id === id);
   const [tab, setTab] = useState(() =>
     new URLSearchParams(window.location.search).get('tab') === 'history' ? 'history' : 'products',
   );
+  const [purchaseStage, setPurchaseStage] = useState(() => {
+    const stage = new URLSearchParams(window.location.search).get('stage');
+    return stage && ['draft', 'active', 'delivered', 'cancelled'].includes(stage)
+      ? stage
+      : 'active';
+  });
   const [deleting, setDeleting] = useState(false);
   const remove = useMutation({
     mutationFn: () => api(`/suppliers/${id}`, undefined, 'DELETE'),
@@ -379,6 +386,17 @@ export function SupplierDetailsPage() {
                 {t('Create order')}
               </Link>
             )}
+            {canReceive && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPurchaseStage('active');
+                  setTab('history');
+                }}
+              >
+                {t('Accept delivery')}
+              </Button>
+            )}
             {canManage && (
               <Link
                 to="/suppliers/$id/edit"
@@ -412,13 +430,18 @@ export function SupplierDetailsPage() {
             aria-controls="supplier-history-panel"
             onClick={() => setTab('history')}
           >
-            {t('Purchase history')}
+            {t('Purchases')}
           </button>
         )}
       </div>
       {tab === 'history' && canReadPurchases ? (
         <section id="supplier-history-panel" role="tabpanel" aria-labelledby="supplier-history-tab">
-          <PurchaseHistory key={supplier.id} supplierId={supplier.id} embedded />
+          <PurchaseHistory
+            key={supplier.id + purchaseStage}
+            supplierId={supplier.id}
+            embedded
+            initialStage={purchaseStage}
+          />
         </section>
       ) : (
         <section
@@ -426,7 +449,7 @@ export function SupplierDetailsPage() {
           role="tabpanel"
           aria-labelledby="supplier-products-tab"
         >
-          <SupplierCatalog key={supplier.id} supplierId={supplier.id} pageActions />
+          <SupplierCatalog key={supplier.id} supplierId={supplier.id} />
         </section>
       )}
       {canManage && (
@@ -499,49 +522,45 @@ export function SupplierEditorPage({ create = false }: { create?: boolean }) {
   );
 }
 
+// Preserve old price-editor URLs without exposing a manual price editor.
 export function SupplierOfferPage({ edit = false }: { edit?: boolean }) {
+  return edit ? <LegacySupplierPriceRedirect /> : <SupplierAddProductPage />;
+}
+
+function LegacySupplierPriceRedirect() {
+  const { id } = useParams({ strict: false });
+  const navigate = useNavigate();
+  useEffect(() => {
+    void navigate({ to: '/suppliers/$id', params: { id: id! }, replace: true });
+  }, [id, navigate]);
+  return null;
+}
+
+function SupplierAddProductPage() {
   useLanguage();
-  const { id, offerId } = useParams({ strict: false });
+  const { id } = useParams({ strict: false });
   const navigate = useNavigate();
   const session = useSession().data!;
   const allowed =
     session.user.permissions.includes('suppliers.manage') &&
     session.user.permissions.includes('suppliers.read');
   const suppliers = useSuppliers(allowed);
-  const offers = useQuery({
-    queryKey: ['supplier-catalog', id],
-    queryFn: () => api<Offer[]>(`/suppliers/${id}/products`),
-    enabled: allowed && edit,
-  });
   const supplier = suppliers.data?.find((s) => s.id === id);
-  const offer = offers.data?.find((o) => o.id === offerId);
   const back = () => {
     void navigate({ to: '/suppliers/$id', params: { id: id! } });
   };
   if (!allowed) return <Restricted />;
-  if (suppliers.isPending || (edit && offers.isPending))
-    return <p role="status">{t('Loading…')}</p>;
-  if (suppliers.error || offers.error)
-    return <ErrorMessage error={suppliers.error || offers.error} />;
-  if (!supplier || (edit && !offer))
-    return <p className="notice">{t('Supplier product not found.')}</p>;
+  if (suppliers.isPending) return <p role="status">{t('Loading…')}</p>;
+  if (suppliers.error) return <ErrorMessage error={suppliers.error} />;
+  if (!supplier) return <p className="notice">{t('Supplier product not found.')}</p>;
   return (
     <div className="purchasing-workspace">
       <Button variant="ghost" className="purchasing-back" onClick={back}>
         <ArrowLeft size={16} />
         {t('Back to supplier')}
       </Button>
-      <Heading
-        title={t(edit ? 'Edit supplier price' : 'Add product')}
-        description={supplier.name}
-      />
-      {edit ? (
-        <section className="panel purchasing-form-panel purchase-action-panel">
-          <SupplierOfferForm offer={offer} fixedSupplierId={id} onClose={back} />
-        </section>
-      ) : (
-        <SupplierAddProduct key={supplier.id} supplier={supplier} onDone={back} />
-      )}
+      <Heading title={t('Add product')} description={supplier.name} />
+      <SupplierAddProduct key={supplier.id} supplier={supplier} onDone={back} />
     </div>
   );
 }
@@ -606,7 +625,7 @@ export function PurchaseHistoryPage() {
 }
 const actionText: Record<PurchaseAction, [string, string]> = {
   edit: ['Edit purchase draft', 'Only drafts can be edited.'],
-  receive: ['Receive delivery', 'Enter only quantities delivered now. Leave other lines at zero.'],
+  receive: ['Accept delivery', 'Enter only quantities delivered now. Leave other lines at zero.'],
   payment: [
     'Update payment',
     'Payment is tracked separately from delivery. Mark paid only after the supplier has been paid in full.',
@@ -640,7 +659,21 @@ export function PurchaseDetailsPage({ action }: { action?: PurchaseAction }) {
       action
         ? { to: '/purchases/$id', params: { id: id! } }
         : supplierAccess && q.data
-          ? { to: '/suppliers/$id', params: { id: q.data.supplier_id }, search: { tab: 'history' } }
+          ? {
+              to: '/suppliers/$id',
+              params: { id: q.data.supplier_id },
+              search: {
+                tab: 'history',
+                stage:
+                  q.data.status === 'draft'
+                    ? 'draft'
+                    : ['received', 'closed'].includes(q.data.status)
+                      ? 'delivered'
+                      : q.data.status === 'cancelled'
+                        ? 'cancelled'
+                        : 'active',
+              },
+            }
           : { to: '/purchases/history' },
     );
   };

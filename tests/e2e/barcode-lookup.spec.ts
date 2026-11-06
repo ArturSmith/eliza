@@ -44,7 +44,6 @@ test('barcode creation reviews suggestions, saves attribution, and falls back to
   await expect(form.getByLabel('Unit', { exact: true })).toHaveValue('piece');
   await form.getByLabel('SKU', { exact: true }).fill('LOOKUP-1');
   await form.getByLabel('Selling price').fill('30');
-  await form.getByLabel('Purchase cost').fill('15');
   await form.getByRole('button', { name: 'Add product', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Edit product', exact: true })).toBeVisible();
   await page.reload();

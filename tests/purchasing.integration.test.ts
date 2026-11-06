@@ -899,8 +899,11 @@ describe.sequential('purchasing and receiving', () => {
       reason: 'count_correction',
       notes: 'No known cost yet',
     });
-    expect(adjustment.status).toBe(400);
-    expect(adjustment.body.message).toContain('Set purchase cost');
+    expect(adjustment.status).toBe(201);
+    expect(
+      (await db.pool.query('SELECT unit_cost FROM stock_batches WHERE product_id=$1', [id])).rows[0]
+        .unit_cost,
+    ).toBeNull();
     const draft = await manager.request('/purchases', {
       requestId: requestId(),
       supplierId: supplier.id,
@@ -928,7 +931,7 @@ describe.sequential('purchasing and receiving', () => {
     expect(received.status).toBe(201);
     expect(
       (await db.pool.query('SELECT price,cost,stock FROM products WHERE id=$1', [id])).rows[0],
-    ).toEqual({ price: '70.00', cost: '59.00', stock: '1.000' });
+    ).toEqual({ price: '70.00', cost: '59.00', stock: '2.000' });
     const cleared = await manager.request(
       '/products/' + id,
       { ...input, price: null, cost: null },
@@ -936,8 +939,12 @@ describe.sequential('purchasing and receiving', () => {
     );
     expect(cleared.status).toBe(200);
     expect(
-      (await db.pool.query('SELECT unit_cost FROM stock_batches WHERE product_id=$1', [id])).rows[0]
-        .unit_cost,
+      (
+        await db.pool.query(
+          'SELECT unit_cost FROM stock_batches WHERE product_id=$1 AND unit_cost IS NOT NULL',
+          [id],
+        )
+      ).rows[0].unit_cost,
     ).toBe('59.00');
   });
 });

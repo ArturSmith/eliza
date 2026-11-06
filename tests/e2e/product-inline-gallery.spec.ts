@@ -32,7 +32,6 @@ test('creates a blank product, edits inline with dirty/cancel/save states, and p
     'SKU',
     'PLU / short code (optional)',
     'Barcodes (optional)',
-    'Purchase cost (optional)',
     'Selling price (optional)',
     'Tax rate (%)',
     'Low-stock threshold',
@@ -43,10 +42,11 @@ test('creates a blank product, edits inline with dirty/cancel/save states, and p
   await page.getByLabel('Product name', { exact: true }).fill('Gallery yogurt');
   await page.getByLabel('Category', { exact: true }).fill('Dairy');
   await page.getByLabel('Unit', { exact: true }).selectOption('piece');
-  await page.getByLabel('Purchase cost (optional)', { exact: true }).fill('59');
   await page.getByLabel('Selling price (optional)', { exact: true }).fill('70');
-  await expect(page.getByLabel('Gross margin', { exact: true })).toContainText('15.71%');
-  await expect(page.getByRole('textbox', { name: 'Gross margin', exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('Estimated gross margin', { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole('textbox', { name: 'Estimated gross margin', exact: true }),
+  ).toHaveCount(0);
   const photos = await Promise.all(
     ['#ac3d26', '#367b99', '#5b8e53'].map(async (background, index) => ({
       name: `photo-${index}.jpg`,
@@ -84,6 +84,7 @@ test('creates a blank product, edits inline with dirty/cancel/save states, and p
   await expect(stockForm.getByLabel('Reason', { exact: true })).toHaveValue('received');
   await stockForm.getByLabel('Quantity change', { exact: true }).fill('5');
   await stockForm.getByLabel('Reason', { exact: true }).selectOption('opening_balance');
+  await stockForm.getByLabel('Cost per unit for this stock').fill('59');
   await stockForm.getByLabel('Notes', { exact: true }).fill('Initial stock from the product page');
   await stockForm.getByRole('button', { name: 'Record adjustment', exact: true }).click();
   await expect(stockForm).not.toBeVisible();
@@ -115,10 +116,10 @@ test('creates a blank product, edits inline with dirty/cancel/save states, and p
   await expect(name).toHaveAttribute('readonly');
   await page.getByRole('button', { name: 'Edit product', exact: true }).click();
   await page.getByLabel('Selling price (optional)', { exact: true }).fill('75');
-  await expect(page.getByLabel('Gross margin', { exact: true })).toContainText('21.33%');
+  await expect(page.getByLabel('Estimated gross margin', { exact: true })).toContainText('21.33%');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(page.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('70.00');
-  await expect(page.getByLabel('Gross margin', { exact: true })).toContainText('15.71%');
+  await expect(page.getByLabel('Estimated gross margin', { exact: true })).toContainText('15.71%');
   await page.getByLabel('Add product photos', { exact: true }).setInputFiles(photos[2]);
   await expect(page.locator('.product-photo-thumbnail')).toHaveCount(3);
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeVisible();
@@ -151,7 +152,9 @@ test('creates a blank product, edits inline with dirty/cancel/save states, and p
   expect(saved.image).not.toBe(product.image);
   expect(saved).toMatchObject({
     price: '70.00',
-    cost: '59.00',
+    cost: null,
+    averageCost: '59.00',
+    stockValue: '295.00',
     stock: '5.000',
     description: 'Three views of our yogurt.',
   });

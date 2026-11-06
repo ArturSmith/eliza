@@ -17,6 +17,30 @@ describe('purchase arithmetic and validation', () => {
       total: '510.60',
     });
   });
+  it('keeps an unpriced order distinct from a zero-cost order and validates delivery payment', () => {
+    const supplierId = crypto.randomUUID(),
+      productId = crypto.randomUUID();
+    const missing = purchaseDraftSchema.parse({
+      supplierId,
+      lines: [{ productId, quantity: '2' }],
+    });
+    expect(missing.lines[0].unitCost).toBeNull();
+    const free = purchaseDraftSchema.parse({
+      supplierId,
+      lines: [{ productId, quantity: '2', unitCost: '0' }],
+    });
+    expect(free.lines[0].unitCost).toBe('0');
+    expect(
+      receiptInputSchema.parse({
+        requestId: crypto.randomUUID(),
+        version: 1,
+        paymentStatus: 'paid',
+        lines: [
+          { purchaseLineId: crypto.randomUUID(), quantity: '2', unitCost: '8', taxRate: '15' },
+        ],
+      }).paymentStatus,
+    ).toBe('paid');
+  });
   it('rejects impossible calendar dates and duplicate lines', () => {
     const line = { productId: crypto.randomUUID(), quantity: '1', unitCost: '1', taxRate: '15' };
     expect(

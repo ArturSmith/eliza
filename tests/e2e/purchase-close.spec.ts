@@ -77,7 +77,7 @@ test('closes a partial purchase without changing delivered quantities', async ({
   await dialog.getByRole('button', { name: 'Confirm closure', exact: true }).click();
   await expect(dialog).not.toBeVisible();
   await expect(page.getByText('Remaining quantities closed', { exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Receive delivery', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Accept delivery', exact: true })).toHaveCount(0);
   await expect(
     page.getByRole('columnheader', { name: 'Closed quantity', exact: true }),
   ).toBeVisible();

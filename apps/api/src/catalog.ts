@@ -62,17 +62,38 @@ export class CatalogController {
     const values = canReadCosts
       ? (
           await this.database.pool.query(
-            'SELECT product_id,sum(round(quantity*unit_cost,2))::text AS value FROM stock_batches WHERE store_id=$1 GROUP BY product_id',
+            `SELECT product_id,
+              CASE WHEN bool_or(unit_cost IS NULL) THEN NULL ELSE sum(round(quantity*unit_cost,2))::text END AS value,
+              CASE WHEN bool_or(unit_cost IS NULL) THEN NULL ELSE round(sum(round(quantity*unit_cost,2))/sum(quantity),2)::text END AS average,
+              COALESCE(sum(quantity) FILTER(WHERE unit_cost IS NULL),0)::text AS unknown,
+              bool_or(cost_source='legacy_estimate') AS estimated
+             FROM stock_batches WHERE store_id=$1 AND quantity>0 GROUP BY product_id`,
             [req.context.store.id],
           )
         ).rows
       : [];
+    const latest = canReadCosts ? (await this.database.pool.query(
+      `SELECT DISTINCT ON (b.product_id) b.product_id,b.unit_cost::text AS cost,
+        b.created_at AS date,s.name AS supplier
+       FROM stock_batches b LEFT JOIN goods_receipt_lines l ON l.id=b.receipt_line_id AND l.store_id=b.store_id
+       LEFT JOIN goods_receipts g ON g.id=l.receipt_id AND g.store_id=l.store_id
+       LEFT JOIN purchases p ON p.id=g.purchase_id AND p.store_id=g.store_id
+       LEFT JOIN suppliers s ON s.id=COALESCE(p.supplier_id,b.supplier_id) AND s.store_id=b.store_id
+       WHERE b.store_id=$1 AND (b.receipt_line_id IS NOT NULL OR b.supplier_id IS NOT NULL)
+       ORDER BY b.product_id,b.created_at DESC,b.id DESC`, [req.context.store.id],
+    )).rows : [];
     return rows.map((p) => ({
       ...p,
       cost: canReadCosts ? p.cost : null,
       stockValue: canReadCosts
-        ? (values.find((v) => v.product_id === p.id)?.value ?? '0.00')
+        ? (values.find((v) => v.product_id === p.id)?.value ?? (Number(p.stock) > 0 ? null : '0.00'))
         : null,
+      averageCost: canReadCosts ? values.find((v) => v.product_id === p.id)?.average ?? null : null,
+      unknownCostQuantity: canReadCosts ? values.find((v) => v.product_id === p.id)?.unknown ?? '0' : undefined,
+      stockCostEstimated: canReadCosts ? values.find((v) => v.product_id === p.id)?.estimated ?? false : undefined,
+      lastPurchaseCost: canReadCosts ? latest.find((v) => v.product_id === p.id)?.cost ?? null : null,
+      lastPurchaseAt: canReadCosts ? latest.find((v) => v.product_id === p.id)?.date ?? null : null,
+      lastPurchaseSupplier: canReadCosts && req.context.user.permissions.includes('suppliers.read') ? latest.find((v) => v.product_id === p.id)?.supplier ?? null : null,
       plu: p.plu ?? '',
       barcodes: codes.filter((b) => b.productId === p.id).map((b) => b.value),
     }));
@@ -199,7 +220,7 @@ export class CatalogController {
       if (!old) throw new NotFoundException('Product not found.');
       Object.assign(body, normalizeProductGallery(body, old));
       // A catalog editor without cost access must not clear or overwrite a hidden cost.
-      if (!req.context.user.permissions.includes('costs.read')) body.cost = old.cost;
+      if (!req.context.user.permissions.includes('costs.read') || !Object.prototype.hasOwnProperty.call(input, 'cost')) body.cost = old.cost;
       if (old.baseProductId)
         throw new BadRequestException('Edit limited-price labels from the parent product.');
       if (old.unit !== body.unit)

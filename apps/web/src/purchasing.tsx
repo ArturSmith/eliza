@@ -1,3 +1,5 @@
+import { PurchaseOrderForm } from './purchase-order-form';
+import { PurchaseDeliveryForm } from './purchase-delivery-form';
 import { Link } from '@tanstack/react-router';
 import { formatQuantity, quantityInputValue } from './quantity-format';
 import { HistoryPagination, type HistoryPage } from './history-pagination';
@@ -51,7 +53,7 @@ export type Order = {
   number: string;
   status: string;
   version: number;
-  total: string;
+  total: string | null;
   supplierName: string;
   supplierCode: string;
   supplierPhone: string;
@@ -82,7 +84,7 @@ type Line = {
   quantity: string;
   expiry_date?: string | null;
   expiry_batches?: { quantity: string; expiryDate: string | null }[];
-  unit_cost: string;
+  unit_cost: string | null;
   proposed_selling_price?: string | null;
   tax_rate: string;
   total: string;
@@ -486,14 +488,16 @@ const statusTone: Record<string, string> = {
 export function PurchaseHistory({
   supplierId,
   embedded = false,
+  initialStage = 'active',
 }: {
   supplierId?: string;
   embedded?: boolean;
+  initialStage?: string;
 }) {
   useLanguage();
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState(embedded ? initialStage : 'all');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const q = useQuery({
     queryKey: ['purchases', supplierId, search.trim(), filter, paymentFilter, page],
@@ -512,6 +516,7 @@ export function PurchaseHistory({
   const store = useSession().data!.store;
   const currency = store.currency;
   const canWrite = useSession().data!.user.permissions.includes('purchases.write');
+  const canReceive = useSession().data!.user.permissions.includes('purchases.receive');
   const [deletingPurchase, setDeletingPurchase] = useState<Order | undefined>();
   const deletePurchase = useMutation({
     mutationFn: (id: string) => api<{ deleted: true }>(`/purchases/${id}`, undefined, 'DELETE'),
@@ -529,7 +534,7 @@ export function PurchaseHistory({
     <>
       {!embedded && (
         <Heading
-          title={t('Purchase history')}
+          title={t('Purchases')}
           className="purchases-heading"
           description={t(
             'Order stock, then record each delivery when it arrives. Costs exclude tax.',
@@ -550,10 +555,50 @@ export function PurchaseHistory({
       )}
       {embedded && (
         <div className="supplier-section-heading">
-          <h2>{t('Purchase history')}</h2>
+          <h2>{t('Purchases')}</h2>
         </div>
       )}
-      <section className="panel">
+      <div
+        className="supplier-detail-tabs purchase-stage-tabs"
+        role="tablist"
+        aria-label={t('Purchase stages')}
+      >
+        {(embedded
+          ? ['draft', 'active', 'delivered', 'cancelled']
+          : ['all', 'draft', 'active', 'delivered', 'cancelled']
+        ).map((stage) => (
+          <button
+            key={stage}
+            type="button"
+            role="tab"
+            id={'purchase-stage-' + stage}
+            aria-selected={filter === stage}
+            aria-controls="purchase-stage-panel"
+            onClick={() => {
+              setFilter(stage);
+              setPage(1);
+            }}
+          >
+            {t(
+              (
+                {
+                  all: 'All purchases',
+                  draft: 'Drafts',
+                  active: 'Active orders',
+                  delivered: 'Delivered',
+                  cancelled: 'Cancelled',
+                } as Record<string, string>
+              )[stage],
+            )}
+          </button>
+        ))}
+      </div>
+      <section
+        className="panel"
+        id="purchase-stage-panel"
+        role="tabpanel"
+        aria-labelledby={'purchase-stage-' + filter}
+      >
         <div className="table-toolbar">
           <div className="search-box">
             <Search size={18} />
@@ -567,28 +612,6 @@ export function PurchaseHistory({
               }}
             />
           </div>
-          <select
-            aria-label={t('Filter order status')}
-            value={filter}
-            onChange={(e) => {
-              setFilter(e.target.value);
-              setPage(1);
-            }}
-          >
-            {[
-              'all',
-              'draft',
-              'ordered',
-              'partially_received',
-              'received',
-              'closed',
-              'cancelled',
-            ].map((s) => (
-              <option key={s} value={s}>
-                {s === 'all' ? t('All statuses') : t(s)}
-              </option>
-            ))}
-          </select>
           <select
             aria-label={t('Payment status')}
             value={paymentFilter}
@@ -650,7 +673,11 @@ export function PurchaseHistory({
                         </small>
                       )}
                     </td>
-                    <td className="table-number-column">{formatMoney(p.total, currency)}</td>
+                    <td className="table-number-column">
+                      {p.total === null
+                        ? t('Costs recorded on delivery')
+                        : formatMoney(p.total, currency)}
+                    </td>
                     <td className="table-actions-column">
                       <Link
                         className="button button-ghost"
@@ -659,6 +686,15 @@ export function PurchaseHistory({
                       >
                         {t('View ')}
                       </Link>
+                      {canReceive && ['ordered', 'partially_received'].includes(p.status) && (
+                        <Link
+                          className="button button-primary"
+                          to="/purchases/$id/receive"
+                          params={{ id: p.id }}
+                        >
+                          {t('Accept delivery')}
+                        </Link>
+                      )}
                       {canWrite && p.status === 'draft' && (
                         <Button variant="ghost" onClick={() => setDeletingPurchase(p)}>
                           {t('Delete')}
@@ -710,7 +746,14 @@ export function PurchaseHistory({
     </>
   );
 }
-export function DraftForm({
+export function DraftForm(props: Parameters<typeof PricedDraftForm>[0]) {
+  const quantityOnly =
+    !props.fromDocument &&
+    (!props.order || props.order.lines.some((line) => line.unit_cost === null));
+  return quantityOnly ? <PurchaseOrderForm {...props} /> : <PricedDraftForm {...props} />;
+}
+
+function PricedDraftForm({
   done,
   order,
   fixedSupplierId,
@@ -793,7 +836,7 @@ export function DraftForm({
       order?.lines.map((l) => ({
         productId: l.product_id,
         quantity: quantityInputValue(l.ordered_quantity),
-        unitCost: l.unit_cost,
+        unitCost: l.unit_cost ?? '',
         taxRate: l.tax_rate,
         sellingPrice:
           l.proposed_selling_price ??
@@ -803,7 +846,7 @@ export function DraftForm({
         {
           productId: '',
           quantity: '1',
-          unitCost: '0',
+          unitCost: '',
           taxRate: '0',
           sellingPrice: '',
         },
@@ -815,23 +858,25 @@ export function DraftForm({
         .getElementById('purchase-review-row-' + handoff.focusLine)
         ?.scrollIntoView({ block: 'center' });
   }, [handoff]);
-  function selectProduct(index: number, product: Product) {
+  function selectProduct(index: number, product: Product, keepEnteredCost = false) {
     setLines((current) =>
       current.map((line, i) =>
         i === index
           ? {
               ...line,
               productId: product.id,
-              unitCost: line.source
-                ? line.unitCost
-                : (() => {
-                    const quote = supplierOffers.data?.find(
-                      (offer) => offer.productId === product.id && offer.supplierId === supplierId,
-                    )?.unitCost;
-                    return quote
-                      ? fromScaled((toScaled(quote, 4) + 50n) / 100n, 2)
-                      : (product.cost ?? '');
-                  })(),
+              unitCost:
+                line.source || (keepEnteredCost && line.unitCost !== '')
+                  ? line.unitCost
+                  : (() => {
+                      const quote = supplierOffers.data?.find(
+                        (offer) =>
+                          offer.productId === product.id && offer.supplierId === supplierId,
+                      )?.unitCost;
+                      return quote
+                        ? fromScaled((toScaled(quote, 4) + 50n) / 100n, 2)
+                        : (product.cost ?? '');
+                    })(),
               sellingPrice: product.price ?? '',
             }
           : line,
@@ -856,7 +901,7 @@ export function DraftForm({
       {
         productId: '',
         quantity: '1',
-        unitCost: '0',
+        unitCost: '',
         taxRate: '0',
         sellingPrice: '',
       },
@@ -980,7 +1025,6 @@ export function DraftForm({
                           imageImported: false,
                         }
                       : undefined,
-                    cost: lines[addingProduct].unitCost,
                     price: lines[addingProduct].sellingPrice || undefined,
                     barcodes: lines[addingProduct].source!.barcode
                       ? [lines[addingProduct].source!.barcode]
@@ -991,7 +1035,7 @@ export function DraftForm({
             onDone={() => setAddingProduct(null)}
             onCreated={(product) => {
               setCreatedProducts((current) => [...current, product]);
-              selectProduct(addingProduct, product);
+              selectProduct(addingProduct, product, true);
             }}
           />
         </section>
@@ -1673,7 +1717,7 @@ export function OrderDetail({
           <strong>{p.number}</strong>
           <span>{p.supplierName}</span>
         </div>
-        {action === 'receive' && <ReceiveForm order={p} done={close} />}
+        {action === 'receive' && <PurchaseDeliveryForm order={p} done={close} />}
         {action === 'payment' && (
           <PurchasePayment key={p.id + ':' + p.version} order={p} formOnly done={close} />
         )}
@@ -1726,7 +1770,9 @@ export function OrderDetail({
               {p.supplierName}
               {p.supplier_reference
                 ? t(' · {value0}', { value0: p.supplier_reference })
-                : ''} · {formatMoney(p.total, currency)} {t(' incl. tax ')}
+                : ''} ·{' '}
+              {p.total === null ? t('Costs recorded on delivery') : formatMoney(p.total, currency)}{' '}
+              {t(' incl. tax ')}
             </p>
           )}
         </div>
@@ -1807,7 +1853,9 @@ export function OrderDetail({
               </p>
               <p className="muted">
                 {t(
-                  'Original order totals are retained. Stock, deliveries and payment status are unchanged.',
+                  p.lines.some((line) => line.unit_cost === null)
+                    ? 'Total is based on accepted deliveries. Undelivered quantities are excluded.'
+                    : 'Original order totals are retained. Stock, deliveries and payment status are unchanged.',
                 )}
               </p>
             </div>
@@ -1823,8 +1871,12 @@ export function OrderDetail({
                   {p.status === 'closed' && (
                     <th className="table-number-column">{t('Closed quantity')}</th>
                   )}
-                  <th className="table-number-column">{t('Cost excl. tax')}</th>
-                  <th className="table-number-column">{t('Tax %')}</th>
+                  {p.lines.some((line) => line.unit_cost !== null) && (
+                    <>
+                      <th className="table-number-column">{t('Cost excl. tax')}</th>
+                      <th className="table-number-column">{t('Tax %')}</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -1851,8 +1903,14 @@ export function OrderDetail({
                         {t(l.unit ?? '')}
                       </td>
                     )}
-                    <td className="table-number-column">{formatMoney(l.unit_cost, currency)}</td>
-                    <td className="table-number-column">{Number(l.tax_rate)}%</td>
+                    {p.lines.some((line) => line.unit_cost !== null) && (
+                      <>
+                        <td className="table-number-column">
+                          {formatMoney(l.unit_cost, currency)}
+                        </td>
+                        <td className="table-number-column">{Number(l.tax_rate)}%</td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -1871,7 +1929,7 @@ export function OrderDetail({
             )}
             {canReceive && ['ordered', 'partially_received'].includes(p.status) && (
               <Link className="button button-primary" to="/purchases/$id/receive" params={{ id }}>
-                {t('Receive delivery')}
+                {t('Accept delivery')}
               </Link>
             )}
             {p.status === 'partially_received' && (
@@ -2048,226 +2106,6 @@ function WhatsAppOrderShare({ order, close }: { order: Order; close: () => void 
           {t('Cancel')}
         </Button>
       </div>
-    </form>
-  );
-}
-function ReceiveForm({ order, done }: { order: Order; done: () => void }) {
-  useLanguage();
-  const products = useProducts();
-  const session = useSession();
-  const canPrice = session.data?.user.permissions.includes('catalog.write');
-  const canCost = session.data?.user.permissions.includes('purchases.cost');
-  const [costs, setCosts] = useState<Record<string, string>>({});
-  const [prices, setPrices] = useState<Record<string, string>>(
-    Object.fromEntries(order.lines.map((l) => [l.id, l.proposed_selling_price ?? ''])),
-  );
-  type ExpiryBatch = { quantity: string; expiryDate: string };
-  const [batches, setBatches] = useState<Record<string, ExpiryBatch[]>>({});
-  const batchRows = (id: string) => batches[id] ?? [{ quantity: '0', expiryDate: '' }];
-  function updateBatch(id: string, index: number, key: keyof ExpiryBatch, value: string) {
-    setError(undefined);
-    setBatches((before) => ({
-      ...before,
-      [id]: batchRows(id).map((batch, i) => (i === index ? { ...batch, [key]: value } : batch)),
-    }));
-  }
-  function receivedQuantity(id: string) {
-    try {
-      return fromScaled(
-        batchRows(id).reduce((sum, b) => sum + toScaled(b.quantity || '0', 3), 0n),
-        3,
-      );
-    } catch {
-      return '';
-    }
-  }
-  const [reference, setReference] = useState('');
-  const [payload, setPayload] = useState<unknown>();
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<unknown>();
-  async function submit() {
-    const body = payload ?? {
-      requestId: crypto.randomUUID(),
-      version: order.version,
-      deliveryReference: reference,
-      lines: order.lines
-        .filter((l) =>
-          batchRows(l.id).some((b) => b.quantity.trim() !== '' && Number(b.quantity) !== 0),
-        )
-        .map((l) => ({
-          purchaseLineId: l.id,
-          quantity: receivedQuantity(l.id),
-          expiryBatches: batchRows(l.id).map((b) => ({
-            quantity: b.quantity,
-            expiryDate: b.expiryDate || null,
-          })),
-          unitCost: canCost ? (costs[l.id] ?? l.unit_cost) : undefined,
-          sellingPrice: canPrice && prices[l.id] ? prices[l.id] : undefined,
-          expectedSellingPrice:
-            canPrice && prices[l.id]
-              ? products.data?.find((p) => p.id === l.product_id)?.price
-              : undefined,
-        })),
-    };
-    const valid = receiptInputSchema.safeParse(body);
-    if (!valid.success) {
-      setError(t('Enter a positive quantity for every expiry batch, or remove unused batches.'));
-      return;
-    }
-    setError(undefined);
-    setPayload(body);
-    setPending(true);
-    try {
-      await api('/purchases/' + order.id + '/receipts', body);
-      void refresh();
-      done();
-    } catch (e) {
-      setError(e);
-      if (e instanceof ApiError && e.status >= 400 && e.status < 500) setPayload(undefined);
-    } finally {
-      setPending(false);
-    }
-  }
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        void submit();
-      }}
-    >
-      <fieldset disabled={!!payload}>
-        <Field label={t('Delivery reference (optional)')}>
-          <input value={reference} onChange={(e) => setReference(e.target.value)} />
-        </Field>
-        {order.lines
-          .filter((l) => toScaled(l.ordered_quantity, 3) > toScaled(l.received_quantity, 3))
-          .map((l) => (
-            <section key={l.id} className="delivery-product-card" aria-label={l.product_name}>
-              <header className="delivery-product-header">
-                <h3>{l.product_name}</h3>
-                <span className="muted">
-                  {formatQuantity(
-                    fromScaled(
-                      toScaled(l.ordered_quantity, 3) - toScaled(l.received_quantity, 3),
-                      3,
-                    ),
-                  )}{' '}
-                  {t(l.unit ?? '')} {t('remaining')}
-                </span>
-              </header>
-              <div className="delivery-expiry-batches">
-                {batchRows(l.id).map((batch, index) => (
-                  <div className="delivery-expiry-batch" key={index}>
-                    <Field label={t('Quantity')}>
-                      <input
-                        inputMode="decimal"
-                        value={batch.quantity}
-                        onChange={(e) => updateBatch(l.id, index, 'quantity', e.target.value)}
-                      />
-                    </Field>
-                    <Field label={t('Expiry date (optional)')}>
-                      <input
-                        type="date"
-                        value={batch.expiryDate}
-                        onChange={(e) => updateBatch(l.id, index, 'expiryDate', e.target.value)}
-                      />
-                    </Field>
-                    {batchRows(l.id).length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        aria-label={t('Remove expiry batch {number}', { number: index + 1 })}
-                        onClick={() => {
-                          setError(undefined);
-                          setBatches((before) => ({
-                            ...before,
-                            [l.id]: batchRows(l.id).filter((_, i) => i !== index),
-                          }));
-                        }}
-                      >
-                        {t('Remove batch')}
-                      </Button>
-                    )}
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={batchRows(l.id).length >= 50}
-                  onClick={() => {
-                    setError(undefined);
-                    setBatches((before) => ({
-                      ...before,
-                      [l.id]: [...batchRows(l.id), { quantity: '0', expiryDate: '' }],
-                    }));
-                  }}
-                >
-                  {t('Add expiry batch')}
-                </Button>
-                {batchRows(l.id).length > 1 && (
-                  <p className="muted">
-                    {t('Total received')}: {formatQuantity(receivedQuantity(l.id))}{' '}
-                    {t(l.unit ?? '')}
-                  </p>
-                )}
-              </div>
-              <Field label={t('Unit cost excl. tax')}>
-                <input
-                  inputMode="decimal"
-                  required
-                  disabled={!canCost}
-                  value={costs[l.id] ?? l.unit_cost}
-                  onChange={(e) => setCosts({ ...costs, [l.id]: e.target.value })}
-                />
-              </Field>
-              <CostComparison
-                cost={costs[l.id] ?? l.unit_cost}
-                previous={products.data?.find((p) => p.id === l.product_id)?.cost}
-                price={products.data?.find((p) => p.id === l.product_id)?.price}
-              />
-              {canPrice && (
-                <Field label={t('New selling price incl. tax (optional)')}>
-                  <input
-                    inputMode="decimal"
-                    value={prices[l.id] ?? ''}
-                    onChange={(e) => setPrices({ ...prices, [l.id]: e.target.value })}
-                  />
-                </Field>
-              )}
-              {canPrice && prices[l.id] && Number(receivedQuantity(l.id)) > 0 && (
-                <label className="delivery-price-confirmation">
-                  <input
-                    key={
-                      prices[l.id] + '-' + products.data?.find((p) => p.id === l.product_id)?.price
-                    }
-                    type="checkbox"
-                    required
-                  />
-                  <span>
-                    {t('Apply this selling price to all stock of ')}
-                    {l.product_name}
-                    {t(
-                      ', including older items. Purchase costs stay unchanged for each batch. Update the shelf label. ',
-                    )}
-                  </span>
-                </label>
-              )}
-            </section>
-          ))}
-      </fieldset>
-      <ErrorMessage error={error} />
-      <div className="delivery-submit">
-        <Button disabled={pending}>
-          {payload ? t('Retry same delivery') : t('Record delivery')}
-        </Button>
-      </div>
-      {!!payload && !pending && (
-        <p className="muted">
-          {t(
-            'The delivery details are locked for a safe retry. Refresh the order before starting a different delivery. ',
-          )}
-        </p>
-      )}
     </form>
   );
 }

@@ -9,7 +9,7 @@ import { ErrorMessage, ProductForm } from './forms';
 import type { Offer } from './supplier-products';
 import { t, useLanguage } from './i18n';
 
-/** Find the shared product first; supplier prices remain a separate, optional detail. */
+/** Associate a shared product here; actual costs are recorded with deliveries. */
 export function SupplierAddProduct({
   supplier,
   onDone,
@@ -130,6 +130,20 @@ export function SupplierAddProduct({
               link.reset();
             }}
           />
+          {canCreate && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="camera-scan-button"
+              aria-label={t('Create new product')}
+              title={t('Create new product')}
+              disabled={link.isPending}
+              onClick={() => setCreating(true)}
+            >
+              <Plus size={18} aria-hidden="true" />
+            </Button>
+          )}
         </div>
       </div>
       <ErrorMessage error={error || link.error} />

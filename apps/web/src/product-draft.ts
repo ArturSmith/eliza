@@ -9,7 +9,6 @@ export type ProductDraft = {
   sku: string;
   plu: string;
   barcodes: string;
-  cost: string;
   price: string;
   taxRate: string;
   minStock: string;
@@ -25,7 +24,6 @@ export function productDraft(product?: Product): ProductDraft {
     sku: product?.sku ?? '',
     plu: product?.plu ?? '',
     barcodes: product?.barcodes.join('\n') ?? '',
-    cost: product?.cost ?? '',
     price: product?.regularPrice ?? product?.price ?? '',
     taxRate: product ? quantityInputValue(product.taxRate) : '',
     minStock: product ? quantityInputValue(product.minStock) : '',
@@ -49,7 +47,6 @@ export function productDraftKey(draft: ProductDraft) {
     sku: draft.sku.trim(),
     plu: draft.plu.trim(),
     barcodes: productCodes(draft.barcodes),
-    cost: quantityInputValue(draft.cost.trim()),
     price: quantityInputValue(draft.price.trim()),
     taxRate: quantityInputValue(draft.taxRate.trim()),
     minStock: quantityInputValue(draft.minStock.trim()),
@@ -63,7 +60,6 @@ export function productDraftInput(draft: ProductDraft, defaultTaxRate: string) {
     image: draft.images[0] ?? '',
     taxRate: draft.taxRate.trim() || defaultTaxRate,
     minStock: draft.minStock.trim() || '0',
-    cost: draft.cost.trim(),
     price: draft.price.trim(),
   };
 }

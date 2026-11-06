@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 
-test('applies saved markup on purchase-cost changes and allows selling-price overrides', async ({
+test('keeps optional catalog selling prices independent of purchase costs and saved markup', async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -25,25 +25,10 @@ test('applies saved markup on purchase-cost changes and allows selling-price ove
   await add.getByLabel('Product name', { exact: true }).fill('Markup milk');
   await add.getByLabel('Category', { exact: true }).fill('Dairy');
   await add.getByLabel('Unit', { exact: true }).selectOption('piece');
-  await add.getByLabel('Purchase cost (optional)', { exact: true }).fill('100');
-  await expect(add.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('115.00');
-  await expect(add.locator('.product-margin-preview')).toContainText('13.04%');
+  await expect(add.getByLabel('Purchase cost (optional)', { exact: true })).toHaveCount(0);
+  await expect(add.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('');
   await add.getByLabel('Tax rate (%)', { exact: true }).fill('25');
-  await expect(add.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('115.00');
-  await add.getByLabel('Purchase cost (optional)', { exact: true }).fill('200');
-  await expect(add.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('230.00');
-  await add.getByLabel('Selling price (optional)', { exact: true }).fill('240');
-  await add.getByLabel('Purchase cost (optional)', { exact: true }).fill('300');
-  await expect(add.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('345.00');
-  await add.getByLabel('Selling price (optional)', { exact: true }).fill('240');
-  await expect(add.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('240');
-  await expect(add.locator('.product-margin-preview')).toContainText('-56.25%');
-  await add.getByLabel('Tax rate (%)', { exact: true }).fill('0');
-  await expect(add.locator('.product-margin-preview')).toContainText('-25%');
-  await add.getByLabel('Tax rate (%)', { exact: true }).fill('25');
-  await expect(add.getByRole('button', { name: 'Use default markup' })).toHaveCount(0);
   await add.getByLabel('Selling price (optional)', { exact: true }).fill('115.00');
-  await add.getByLabel('Purchase cost (optional)', { exact: true }).fill('100');
   await add.getByRole('button', { name: 'Add product', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Edit product', exact: true })).toBeVisible();
 
@@ -67,16 +52,14 @@ test('applies saved markup on purchase-cost changes and allows selling-price ove
   await page.getByRole('button', { name: 'Edit product', exact: true }).click();
   const edit = page.locator('.product-details-page');
   await expect(edit.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('115.00');
-  await edit.getByLabel('Purchase cost (optional)', { exact: true }).fill('200');
-  // Editing an existing purchase cost preserves the saved selling price.
+  // Changing the store markup does not rewrite a saved catalog selling price.
   await expect(edit.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('115.00');
   await edit.getByLabel('Selling price (optional)', { exact: true }).fill('260');
   await expect(edit.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('260');
   await edit.getByRole('button', { name: 'Cancel', exact: true }).click();
   await page.getByRole('link', { name: 'Back to products', exact: true }).click();
   await page.getByRole('link', { name: 'Add product', exact: true }).first().click();
-  await add.getByLabel('Purchase cost (optional)', { exact: true }).fill('100');
-  await expect(add.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('125.00');
+  await expect(add.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('');
   await page.getByRole('link', { name: 'Back to products', exact: true }).click();
   await page.goto('/settings');
   await page.getByLabel('Language', { exact: true }).selectOption('ru');

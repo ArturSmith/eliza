@@ -71,28 +71,33 @@ test('supplier cards, full-page ordering, delivery and payment keep the original
   await page.getByRole('searchbox', { name: 'Find a product', exact: true }).fill('Farm yogurt');
   await page.getByRole('button', { name: 'Add Farm yogurt to supplier', exact: true }).click();
   await expect(page).toHaveURL(`/suppliers/${supplierId}`);
-  await page
-    .getByRole('article', { name: 'Farm yogurt', exact: true })
-    .getByRole('link', { name: 'Edit supplier price', exact: true })
-    .click();
-  await page.getByLabel('Units per pack').fill('12');
-  await page.getByLabel('Price per pack').fill('90');
-  await page.getByLabel('Lead time in days').fill('2');
-  await page.getByRole('button', { name: 'Save price', exact: true }).click();
-  await expect(page).toHaveURL(`/suppliers/${supplierId}`);
+  // Existing reference prices remain stored, but cannot be manually edited in the UI.
+  const legacyOffer = await post('/supplier-products', {
+    requestId: crypto.randomUUID(),
+    supplierId,
+    productId: product.id,
+    packSize: '12',
+    packCost: '90',
+    leadTimeDays: 2,
+  });
+  await page.reload();
   const yogurtCard = page.getByRole('article', { name: 'Farm yogurt', exact: true });
   await expect(yogurtCard).toBeVisible();
   await expect(yogurtCard.locator('img')).toHaveAttribute('src', image);
   await expect(yogurtCard).toContainText('Plain yogurt from a local dairy.');
-  await expect(yogurtCard).toContainText('7.50');
-  await expect(yogurtCard).toContainText('90.00');
+  await expect(yogurtCard).toContainText('No deliveries recorded yet.');
+  await expect(yogurtCard).not.toContainText('90.00');
+  await expect(page.getByRole('link', { name: 'Edit supplier price', exact: true })).toHaveCount(0);
   await yogurtCard.getByRole('link', { name: 'View Farm yogurt', exact: true }).click();
   await expect(page).toHaveURL(`/products/${product.id}`);
-  await page.goBack();
-  await yogurtCard.getByRole('link', { name: 'Edit supplier price', exact: true }).click();
-  await expect(page.getByLabel('Units per pack')).toHaveValue('12');
-  await expect(page.getByLabel('Price per pack')).toHaveValue('90.00');
-  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  const suppliersCard = page.locator('.product-details-suppliers');
+  await expect(suppliersCard).toContainText('No deliveries recorded yet.');
+  await expect(suppliersCard.getByRole('button')).toHaveCount(0);
+  await suppliersCard.getByRole('link', { name: 'Nordic Dairy', exact: true }).click();
+  await expect(page).toHaveURL(`/suppliers/${supplierId}`);
+  await page.goto(`/suppliers/${supplierId}/products/${legacyOffer.id}/edit`);
+  await expect(page).toHaveURL(`/suppliers/${supplierId}`);
+  await expect(page.getByLabel('Price per pack')).toHaveCount(0);
   for (const name of ['Z Apples', 'Z Bread']) {
     const extra = await post('/products', {
       name,
@@ -145,10 +150,10 @@ test('supplier cards, full-page ordering, delivery and payment keep the original
   await page.getByLabel('Supplier reference').fill('DAIRY-001');
   await page.getByRole('button', { name: 'Select a product', exact: true }).click();
   await page.getByRole('option', { name: /Farm yogurt/ }).click();
-  const row = page.getByRole('row', { name: 'Purchase row 1' });
-  await expect(row.getByLabel('Unit cost excl. tax', { exact: true })).toHaveValue('7.50');
+  const row = page.locator('.quantity-order-item').first();
+  await expect(row.getByLabel('Unit cost excl. tax', { exact: true })).toHaveCount(0);
+  await expect(row.getByLabel('Proposed selling price incl. tax (optional)')).toHaveCount(0);
   await row.getByLabel('Quantity', { exact: true }).fill('4');
-  await row.getByLabel('Purchase tax %', { exact: true }).fill('15');
   await page.getByLabel('Order notes', { exact: true }).fill('Deliver to the back door');
   // Check the actual wrapped Russian labels, not just English text at one width.
   const settings = await page.context().newPage();
@@ -161,58 +166,19 @@ test('supplier cards, full-page ordering, delivery and payment keep the original
   await settings.goto('/settings');
   await settings.getByLabel('Language', { exact: true }).selectOption('ru');
   await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
-  let sawWrappedLabel = false;
   for (const width of [1536, 1280, 1100, 900, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
-    const layout = await page.evaluate(() => {
-      const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
-      const input = box('.purchase-reference-row input');
-      const generate = box('.purchase-reference-generate');
-      const fields = [...document.querySelectorAll('.purchase-line-field')].flatMap((cell) => {
-        const input = cell.querySelector('input');
-        return input
-          ? [
-              {
-                row: cell.getBoundingClientRect().top,
-                top: input.getBoundingClientRect().top,
-                height: input.getBoundingClientRect().height,
-              },
-            ]
-          : [];
-      });
-      return {
-        fits: document.documentElement.scrollWidth <= innerWidth,
-        referenceAligned:
-          generate.left >= input.right
-            ? Math.abs(generate.bottom - input.bottom) <= 1
-            : generate.top - input.bottom >= 12,
-        controlsAligned: fields.every((field) =>
-          fields.every(
-            (other) => Math.abs(field.row - other.row) > 1 || Math.abs(field.top - other.top) <= 1,
-          ),
-        ),
-        heightsMatch: fields.every((field) => Math.abs(field.height - fields[0].height) <= 1),
-        footerGap: box('.purchase-draft-footer').top - box('.purchase-draft-scroll').bottom,
-        wrappedLabel: [...document.querySelectorAll('.purchase-line-field')].some((cell) => {
-          const label = getComputedStyle(cell, '::before');
-          return parseFloat(label.height) > parseFloat(label.lineHeight) * 1.5;
-        }),
-      };
-    });
-    sawWrappedLabel ||= layout.wrappedLabel;
-    expect(layout.fits, `No horizontal overflow at ${width}px`).toBe(true);
-    expect(layout.referenceAligned, `Reference button at ${width}px`).toBe(true);
-    expect(layout.controlsAligned, `Input baselines at ${width}px`).toBe(true);
-    expect(layout.heightsMatch, `Input heights at ${width}px`).toBe(true);
-    expect(layout.footerGap, `Space before totals at ${width}px`).toBeGreaterThanOrEqual(24);
-    if (width === 1280 || width === 1100 || width === 390) {
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      `No overflow at ${width}px`,
+    ).toBe(true);
+    await expect(row.getByLabel('Количество', { exact: true })).toBeVisible();
+    if ([1280, 390].includes(width))
       await page.screenshot({
         path: test.info().outputPath(`purchase-form-ru-${width}.png`),
         fullPage: true,
       });
-    }
   }
-  expect(sawWrappedLabel, 'Exercise labels that actually wrap onto multiple lines').toBe(true);
   await settings.getByLabel('Язык', { exact: true }).selectOption('en');
   await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   await settings.close();
@@ -222,7 +188,7 @@ test('supplier cards, full-page ordering, delivery and payment keep the original
   await expect(page).toHaveURL(/\/purchases\/[\da-f-]+$/);
   const orderId = new URL(page.url()).pathname.split('/').pop()!;
   let order = await (await page.request.get('/api/purchases/' + orderId)).json();
-  expect(order.total).toBe('34.50');
+  expect(order.total).toBeNull();
   expect(order.supplier_id).toBe(supplierId);
   expect(
     (await (await page.request.get('/api/products')).json()).find(
@@ -237,18 +203,21 @@ test('supplier cards, full-page ordering, delivery and payment keep the original
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
   await expect(page.getByText('Bring two deliveries', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Place order', exact: true }).click();
-  await expect(page.getByRole('link', { name: 'Receive delivery', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Accept delivery', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Send via WhatsApp', exact: true }).click();
   await expect(page).toHaveURL(`/purchases/${orderId}/whatsapp`);
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.locator('.purchase-action-panel textarea')).toHaveValue(/Farm yogurt/);
   await page.getByRole('button', { name: 'Back to order', exact: true }).click();
-  await page.getByRole('link', { name: 'Receive delivery', exact: true }).click();
+  await page.getByRole('link', { name: 'Accept delivery', exact: true }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByLabel('Delivery reference (optional)').fill('DAIRY-DEL-1');
   await page.locator('.delivery-expiry-batch').getByLabel('Quantity', { exact: true }).fill('2');
+  await page.getByLabel('Unit cost excl. tax', { exact: true }).fill('7.50');
+  await page.getByLabel('Purchase tax %', { exact: true }).fill('15');
+  await page.getByLabel('New selling price incl. tax (optional)').fill('14');
   await page.locator('.delivery-price-confirmation input').check();
-  await page.getByRole('button', { name: 'Record delivery', exact: true }).click();
+  await page.getByRole('button', { name: 'Accept delivery', exact: true }).click();
   await expect(page).toHaveURL(`/purchases/${orderId}`);
   expect(
     (await (await page.request.get('/api/products')).json()).find(
@@ -272,7 +241,7 @@ test('supplier cards, full-page ordering, delivery and payment keep the original
     ).stock,
   ).toBe('2.000');
   await page.getByRole('button', { name: 'Back to supplier', exact: true }).click();
-  await expect(page.getByRole('tab', { name: 'Purchase history', exact: true })).toHaveAttribute(
+  await expect(page.getByRole('tab', { name: 'Purchases', exact: true })).toHaveAttribute(
     'aria-selected',
     'true',
   );
@@ -283,6 +252,11 @@ test('supplier cards, full-page ordering, delivery and payment keep the original
   expect(history.total).toBe(1);
   expect(history.rows[0].id).toBe(orderId);
   await expect(page.getByRole('cell', { name: /DAIRY-001/ })).toBeVisible();
+  await page.getByRole('tab', { name: 'Products from this supplier', exact: true }).click();
+  await expect(yogurtCard).toContainText('Last purchase price');
+  await expect(yogurtCard).toContainText('7.50');
+  await expect(yogurtCard).not.toContainText('No deliveries recorded yet.');
+
   await page.getByRole('link', { name: 'Edit supplier', exact: true }).click();
   await page.getByLabel('Supplier phone', { exact: true }).fill('+4793334444');
   await page.getByRole('button', { name: 'Save supplier', exact: true }).click();

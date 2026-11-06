@@ -311,4 +311,283 @@ describe.sequential('batch purchase costs', () => {
       (await manager.request('/inventory/products/' + productId + '/batches')).body.batches[0],
     ).toMatchObject({ quantity: '1.000', unitCost: '0.05' });
   });
+  it('values 250 units from three purchases at 315 and never reprices an earlier sale', async () => {
+    const created = await manager.request('/products', {
+      name: 'Three cost Cola',
+      sku: 'THREE-COST',
+      category: 'Drinks',
+      unit: 'piece',
+      price: '2',
+      minStock: '0',
+      barcodes: [],
+    });
+    expect(created.status).toBe(201);
+    const id = created.body.id;
+    const expiry = '2099-12-31';
+    await receive(id, '100', '1.00', expiry);
+    await receive(id, '100', '1.50', expiry);
+    await receive(id, '50', '1.30', expiry);
+    const summary = (await manager.request('/products')).body.find((p: any) => p.id === id);
+    expect(summary).toMatchObject({
+      stock: '250.000',
+      averageCost: '1.26',
+      stockValue: '315.00',
+      lastPurchaseCost: '1.30',
+    });
+    const sold = await register.request(
+      '/pos/sales',
+      sale({
+        lines: [{ productId: id, quantity: '120', expectedPrice: '2', expectedTaxRate: '0' }],
+        payment: { method: 'cash', tendered: '240' },
+      }),
+    );
+    expect(sold.status).toBe(201);
+    const before = (
+      await db.pool.query('SELECT cost_total::text,cost::text FROM sale_items WHERE sale_id=$1', [
+        sold.body.id,
+      ])
+    ).rows;
+    expect(before[0].cost_total).toBe('130.00');
+    await receive(id, '10', '10.00', expiry);
+    expect(
+      (
+        await db.pool.query('SELECT cost_total::text,cost::text FROM sale_items WHERE sale_id=$1', [
+          sold.body.id,
+        ])
+      ).rows,
+    ).toEqual(before);
+    const report = (
+      await manager.request(`/reports/gross-profit?from=${today()}&to=${today()}&productId=${id}`)
+    ).body;
+    expect(report).toMatchObject({ soldCost: '130.00', grossProfit: '110.00' });
+  });
+
+  it('keeps unknown opening costs distinct from free stock through sale, refund and losses', async () => {
+    const created = await manager.request('/products', {
+      name: 'Unknown opening stock',
+      sku: 'UNKNOWN-OPENING',
+      category: 'Dairy',
+      unit: 'piece',
+      price: '10',
+      minStock: '0',
+      barcodes: [],
+    });
+    const id = created.body.id;
+    const added = await manager.request('/inventory/adjustments', {
+      requestId: crypto.randomUUID(),
+      productId: id,
+      quantity: '4',
+      reason: 'opening_balance',
+      unitCost: null,
+    });
+    expect(added.status).toBe(201);
+    const batches = (await manager.request(`/inventory/products/${id}/batches`)).body.batches;
+    expect(batches[0]).toMatchObject({ quantity: '4.000', unitCost: null, costSource: 'unknown' });
+    expect((await manager.request('/products')).body.find((p: any) => p.id === id)).toMatchObject({
+      stock: '4.000',
+      averageCost: null,
+      stockValue: null,
+      unknownCostQuantity: '4.000',
+    });
+    const sold = await register.request(
+      '/pos/sales',
+      sale({
+        lines: [{ productId: id, quantity: '2', expectedPrice: '10', expectedTaxRate: '0' }],
+        payment: { method: 'cash', tendered: '20' },
+      }),
+    );
+    expect(sold.status).toBe(201);
+    expect(
+      (
+        await db.pool.query('SELECT cost,cost_total FROM sale_items WHERE sale_id=$1', [
+          sold.body.id,
+        ])
+      ).rows[0],
+    ).toMatchObject({ cost: null, cost_total: null });
+    const report = (
+      await manager.request(`/reports/gross-profit?from=${today()}&to=${today()}&productId=${id}`)
+    ).body;
+    expect(report).toMatchObject({
+      netRevenue: '20.00',
+      soldCost: null,
+      grossProfit: null,
+      costOfGoodsSold: null,
+    });
+    const returned = await register.request(`/pos/refunds`, {
+      saleId: sold.body.id,
+      requestId: crypto.randomUUID(),
+      shiftId,
+      reason: 'Return',
+      method: 'cash',
+      confirmed: true,
+      lines: [{ productId: id, quantity: '1', restock: true }],
+      approval: { employeeCode: 'OWNER', pin: '654321' },
+    });
+    expect(returned.status).toBe(201);
+    expect(
+      (
+        await db.pool.query('SELECT restored_cost FROM refund_lines WHERE refund_id=$1', [
+          returned.body.id,
+        ])
+      ).rows[0].restored_cost,
+    ).toBeNull();
+    expect(
+      (await manager.request(`/inventory/products/${id}/batches`)).body.batches[0],
+    ).toMatchObject({ quantity: '3.000', unitCost: null });
+    const loss = await manager.request('/inventory/adjustments', {
+      requestId: crypto.randomUUID(),
+      productId: id,
+      quantity: '-1',
+      reason: 'damaged',
+    });
+    expect(loss.status).toBe(201);
+    expect(loss.body.costTotal).toBeNull();
+    expect(
+      (
+        await manager.request('/inventory/adjustments', {
+          requestId: crypto.randomUUID(),
+          productId: id,
+          quantity: '1',
+          reason: 'other',
+          unitCost: '2',
+        })
+      ).status,
+    ).toBe(201);
+    const mixedSale = await register.request(
+      '/pos/sales',
+      sale({
+        lines: [{ productId: id, quantity: '3', expectedPrice: '10', expectedTaxRate: '0' }],
+        payment: { method: 'cash', tendered: '30' },
+      }),
+    );
+    expect(mixedSale.status).toBe(201);
+    expect(
+      (
+        await db.pool.query('SELECT cost_total FROM sale_items WHERE sale_id=$1', [
+          mixedSale.body.id,
+        ])
+      ).rows[0].cost_total,
+    ).toBeNull();
+    const allocations = (
+      await db.pool.query(
+        'SELECT a.unit_cost,a.cost_total FROM sale_batch_allocations a JOIN sale_items i ON i.id=a.sale_item_id WHERE i.sale_id=$1 ORDER BY a.unit_cost NULLS FIRST',
+        [mixedSale.body.id],
+      )
+    ).rows;
+    expect(allocations).toEqual([
+      { unit_cost: null, cost_total: null },
+      { unit_cost: '2.00', cost_total: '2.00' },
+    ]);
+    const free = (
+      await manager.request('/products', {
+        name: 'Free stock',
+        sku: 'GENUINELY-FREE',
+        category: 'Dairy',
+        unit: 'piece',
+        price: '10',
+        minStock: '0',
+        barcodes: [],
+      })
+    ).body;
+    expect(
+      (
+        await manager.request('/inventory/adjustments', {
+          requestId: crypto.randomUUID(),
+          productId: free.id,
+          quantity: '1',
+          reason: 'opening_balance',
+          unitCost: '0',
+        })
+      ).status,
+    ).toBe(201);
+    expect(
+      (await manager.request('/products')).body.find((p: any) => p.id === free.id),
+    ).toMatchObject({ averageCost: '0.00', stockValue: '0.00', unknownCostQuantity: '0' });
+    const freeSale = await register.request(
+      '/pos/sales',
+      sale({
+        lines: [{ productId: free.id, quantity: '1', expectedPrice: '10', expectedTaxRate: '0' }],
+        payment: { method: 'cash', tendered: '10' },
+      }),
+    );
+    expect(freeSale.status).toBe(201);
+    expect(
+      (
+        await db.pool.query('SELECT cost_total FROM sale_items WHERE sale_id=$1', [
+          freeSale.body.id,
+        ])
+      ).rows[0].cost_total,
+    ).toBe('0.00');
+    expect(
+      (
+        await manager.request(
+          `/reports/gross-profit?from=${today()}&to=${today()}&productId=${free.id}`,
+        )
+      ).body,
+    ).toMatchObject({ grossProfit: '10.00', soldCost: '0.00' });
+  });
+
+  it('requires supplier and actual cost for manual deliveries and preserves their provenance', async () => {
+    const id = (
+      await manager.request('/products', {
+        name: 'Manual delivery',
+        sku: 'MANUAL-COST',
+        category: 'Food',
+        unit: 'piece',
+        price: '10',
+        minStock: '0',
+        barcodes: [],
+      })
+    ).body.id;
+    const command = {
+      requestId: crypto.randomUUID(),
+      productId: id,
+      quantity: '5',
+      reason: 'received',
+      unitCost: '3.20',
+    };
+    expect((await manager.request('/inventory/adjustments', command)).status).toBe(400);
+    const received = await manager.request('/inventory/adjustments', { ...command, supplierId });
+    expect(received.status).toBe(201);
+    expect(
+      (await manager.request('/inventory/adjustments', { ...command, supplierId })).body.id,
+    ).toBe(received.body.id);
+    const batches = (await manager.request(`/inventory/products/${id}/batches`)).body.batches;
+    expect(batches).toHaveLength(1);
+    expect(batches[0]).toMatchObject({
+      unitCost: '3.20',
+      supplierName: 'Cola supplier',
+      supplierId,
+      supplierCode: 'COLA',
+    });
+    expect(
+      (await manager.request(`/suppliers/${supplierId}/products`)).body.find(
+        (offer: any) => offer.productId === id,
+      ),
+    ).toMatchObject({ lastPaidCost: '3.20', packCost: null });
+    const item = (await manager.request('/products')).body.find((p: any) => p.id === id);
+    expect(item).toMatchObject({
+      cost: null,
+      averageCost: '3.20',
+      stockValue: '16.00',
+      lastPurchaseCost: '3.20',
+    });
+    const edited = await manager.request(
+      `/products/${id}`,
+      {
+        name: item.name,
+        sku: item.sku,
+        category: item.category,
+        unit: item.unit,
+        price: '12',
+        minStock: '0',
+        barcodes: item.barcodes,
+      },
+      'PATCH',
+    );
+    expect(edited.status).toBe(200);
+    expect(
+      (await manager.request(`/inventory/products/${id}/batches`)).body.batches[0].unitCost,
+    ).toBe('3.20');
+  });
 });

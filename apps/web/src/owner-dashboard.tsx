@@ -175,7 +175,13 @@ function HourlySales({ rows, currency }: { rows: any[]; currency: string }) {
         <svg viewBox="0 0 1000 245" role="group" aria-label={t('Sales by hour')}>
           {[min, (min + max) / 2, max].map((value) => (
             <g key={value}>
-              <line x1="80" x2="980" y1={y(value)} y2={y(value)} stroke="var(--color-border-e4e9df)" />
+              <line
+                x1="80"
+                x2="980"
+                y1={y(value)}
+                y2={y(value)}
+                stroke="var(--color-border-e4e9df)"
+              />
               <text x="70" y={y(value) + 4} textAnchor="end" className="hour-line-label">
                 {formatMoney(String(value), currency)}
               </text>
@@ -606,7 +612,9 @@ export function OwnerDashboardPage() {
               <div className="stat-row panel-padding">
                 <div>
                   <span className="muted">{t('Stock value')}</span>
-                  <strong>{money(data.inventory.value)}</strong>
+                  <strong>
+                    {data.inventory.value === null ? t('Unavailable') : money(data.inventory.value)}
+                  </strong>
                 </div>
                 <div>
                   <span className="muted">{t('Out of stock')}</span>
@@ -620,7 +628,11 @@ export function OwnerDashboardPage() {
                   <span className="muted">
                     {t('Dead stock')} ({data.inventory.dead.days} {t('day abbreviation')})
                   </span>
-                  <strong>{money(data.inventory.dead.value)}</strong>
+                  <strong>
+                    {data.inventory.dead.value === null
+                      ? t('Unavailable')
+                      : money(data.inventory.dead.value)}
+                  </strong>
                 </div>
               </div>
               {data.inventory.missingCost > 0 && (

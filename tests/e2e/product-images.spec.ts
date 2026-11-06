@@ -33,7 +33,6 @@ test('product photos upload, survive reload, and can be removed', async ({ page 
   await form.getByLabel('Category', { exact: true }).fill('Test');
   await form.getByLabel('Unit', { exact: true }).selectOption('piece');
   await form.getByLabel('Selling price').fill('25');
-  await form.getByLabel('Purchase cost').fill('10');
   await form.getByRole('button', { name: 'Add product', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Edit product', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Back to products', exact: true }).click();

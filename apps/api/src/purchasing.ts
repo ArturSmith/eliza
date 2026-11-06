@@ -556,12 +556,17 @@ export class PurchasingController {
       JOIN suppliers s ON s.id=sp.supplier_id
       JOIN products p ON p.id=sp.product_id
       LEFT JOIN LATERAL (
-        SELECT l.unit_cost,r.created_at,count(*) OVER () ::int AS deliveries
-        FROM goods_receipt_lines l
-        JOIN goods_receipts r ON r.id=l.receipt_id AND r.store_id=l.store_id
-        JOIN purchases pu ON pu.id=r.purchase_id AND pu.store_id=r.store_id
-        WHERE l.product_id=sp.product_id AND pu.supplier_id=sp.supplier_id AND l.store_id=sp.store_id
-        ORDER BY r.created_at DESC LIMIT 1
+        SELECT paid.unit_cost,paid.created_at,count(*) OVER () ::int AS deliveries
+        FROM (
+          SELECT l.unit_cost,r.created_at FROM goods_receipt_lines l
+          JOIN goods_receipts r ON r.id=l.receipt_id AND r.store_id=l.store_id
+          JOIN purchases pu ON pu.id=r.purchase_id AND pu.store_id=r.store_id
+          WHERE l.product_id=sp.product_id AND pu.supplier_id=sp.supplier_id AND l.store_id=sp.store_id
+          UNION ALL
+          SELECT b.unit_cost,b.created_at FROM stock_batches b
+          WHERE b.store_id=sp.store_id AND b.product_id=sp.product_id AND b.supplier_id=sp.supplier_id
+            AND b.receipt_line_id IS NULL AND b.unit_cost IS NOT NULL
+        ) paid ORDER BY paid.created_at DESC LIMIT 1
       ) h ON true
       WHERE sp.store_id=$1 AND ${where}`;
   }
@@ -776,7 +781,7 @@ export class PurchasingController {
     const page = parse(z.coerce.number().int().min(1).max(1000000).default(1), pageInput);
     const status = parse(
       z
-        .enum(['all', 'draft', 'ordered', 'partially_received', 'received', 'closed', 'cancelled'])
+        .enum(['all', 'draft', 'active', 'delivered', 'ordered', 'partially_received', 'received', 'closed', 'cancelled'])
         .default('all'),
       statusInput,
     );
@@ -789,7 +794,7 @@ export class PurchasingController {
     const result = await this.database.pool.query(
       `WITH searched AS (SELECT p.id,p.number,p.supplier_id,p.supplier_reference,p.document_date::text,p.status,p.version,p.total::text AS total,p.payment_status,p.payment_due_date::text,p.paid_at,
 (p.payment_status='unpaid' AND p.status IN ('ordered','partially_received','received','closed') AND p.payment_due_date IS NOT NULL AND p.payment_due_date < (now() AT TIME ZONE (SELECT timezone FROM stores WHERE id=p.store_id))::date) AS payment_overdue,p.created_at AS "createdAt",s.name AS "supplierName" FROM purchases p JOIN suppliers s ON s.id=p.supplier_id WHERE p.store_id=$1 AND ($7::uuid IS NULL OR p.supplier_id=$7::uuid) AND ($2='' OR strpos(lower(p.number),$2)>0 OR strpos(lower(s.name),$2)>0 OR strpos(lower(p.supplier_reference),$2)>0)),
-       matching AS (SELECT * FROM searched WHERE ($3='all' OR status=$3)
+       matching AS (SELECT * FROM searched WHERE ($3='all' OR status=$3 OR ($3='active' AND status IN ('ordered','partially_received')) OR ($3='delivered' AND status IN ('received','closed')))
          AND ($4='all' OR ($4='overdue' AND payment_overdue) OR payment_status=$4)),
        paged AS (SELECT * FROM matching ORDER BY "createdAt" DESC,id DESC LIMIT $5 OFFSET $6)
        SELECT (SELECT count(*)::int FROM matching) AS total,
@@ -894,6 +899,8 @@ export class PurchasingController {
     const b = parse(purchasePaymentSchema, input);
     return this.run(req, b.requestId, 'payment', { id, ...b }, async (c) => {
       const previous = await this.lock(c, id, req.context.store.id, b.version);
+      if (b.status === 'paid' && previous.total === null)
+        throw new BadRequestException('Complete delivery costs before marking this order paid.');
       if (previous.status === 'cancelled')
         throw new ConflictException('Cancelled orders cannot change payment status.');
       await c.query(
@@ -1003,10 +1010,17 @@ export class PurchasingController {
         requestId: z.uuid(),
         id: z.uuid().optional(),
         version: z.number().int().positive().optional(),
+        placeOrder: z.boolean().optional(),
       }),
       input,
     );
-    return this.run(req, b.requestId, 'draft', b, (c) => this.saveDraft(c, req, b));
+    return this.run(req, b.requestId, 'draft', b, async (c) => {
+      const order = await this.saveDraft(c, req, b);
+      if (!b.placeOrder) return order;
+      await c.query("UPDATE purchases SET status='ordered',ordered_at=now(),version=version+1 WHERE id=$1 AND store_id=$2", [order.id, req.context.store.id]);
+      await audit(c, { storeId: req.context.store.id, employeeId: req.context.user.id, deviceId: req.context.device.id }, 'Purchase placed', order.id, {});
+      return this.details(c, order.id, req.context.store.id);
+    });
   }
   private async saveDraft(
     c: PoolClient,
@@ -1039,12 +1053,15 @@ export class PurchasingController {
       ).rows[0];
       if (!p) throw new BadRequestException('Choose active products from this store.');
       this.whole(p.unit, line.quantity);
-      const totals = calculatePurchaseLine(line.unitCost, line.quantity, line.taxRate);
-      subtotal += toScaled(totals.subtotal, 2);
-      tax += toScaled(totals.tax, 2);
+      const totals = line.unitCost === null ? null : calculatePurchaseLine(line.unitCost, line.quantity, line.taxRate);
+      if (totals) {
+        subtotal += toScaled(totals?.subtotal ?? null, 2);
+        tax += toScaled(totals?.tax ?? null, 2);
+      }
       lines.push({ p, line, totals });
     }
     if (subtotal + tax > 99999999999n) throw new BadRequestException('Order total is too large.');
+    const complete = lines.every(({ totals }) => totals !== null);
     const p = b.id
       ? { id: b.id }
       : (
@@ -1056,9 +1073,9 @@ export class PurchasingController {
               b.supplierReference,
               b.expectedDate || null,
               b.notes,
-              fromScaled(subtotal, 2),
-              fromScaled(tax, 2),
-              fromScaled(subtotal + tax, 2),
+              complete ? fromScaled(subtotal, 2) : null,
+              complete ? fromScaled(tax, 2) : null,
+              complete ? fromScaled(subtotal + tax, 2) : null,
               req.context.user.id,
               req.context.device.id,
               b.documentDate || null,
@@ -1085,9 +1102,9 @@ export class PurchasingController {
           b.supplierReference,
           b.expectedDate || null,
           b.notes,
-          fromScaled(subtotal, 2),
-          fromScaled(tax, 2),
-          fromScaled(subtotal + tax, 2),
+          complete ? fromScaled(subtotal, 2) : null,
+          complete ? fromScaled(tax, 2) : null,
+          complete ? fromScaled(subtotal + tax, 2) : null,
           b.documentDate || null,
           b.buyerName,
           b.buyerDetails,
@@ -1115,9 +1132,9 @@ export class PurchasingController {
           line.quantity,
           line.unitCost,
           line.taxRate,
-          totals.subtotal,
-          totals.tax,
-          totals.total,
+          totals?.subtotal ?? null,
+          totals?.tax ?? null,
+          totals?.total ?? null,
           line.sellingPrice ?? null,
         ],
       );
@@ -1133,7 +1150,7 @@ export class PurchasingController {
           [store, b.supplierId, product.id, line.unitCost],
         )
       ).rows[0];
-      if (linked) {
+      if (linked && line.unitCost !== null) {
         await c.query(
           'INSERT INTO supplier_price_history(store_id,supplier_product_id,pack_size,pack_cost,employee_id) VALUES($1,$2,1,$3,$4)',
           [store, linked.id, line.unitCost, req.context.user.id],
@@ -1151,7 +1168,7 @@ export class PurchasingController {
       { storeId: store, employeeId: req.context.user.id, deviceId: req.context.device.id },
       b.id ? 'Purchase draft edited' : 'Purchase drafted',
       p.id,
-      { total: fromScaled(subtotal + tax, 2) },
+      { total: complete ? fromScaled(subtotal + tax, 2) : null },
     );
     return this.details(c, p.id, store);
   }
@@ -1230,6 +1247,7 @@ export class PurchasingController {
         "UPDATE purchases SET status='closed',close_reason=$2,closed_at=now(),closed_by=$3,version=version+1 WHERE id=$1",
         [id, b.reason, req.context.user.id],
       );
+      await this.finalizeUnpricedOrder(c, id, req.context.store.id);
       await audit(
         c,
         {
@@ -1243,6 +1261,13 @@ export class PurchasingController {
       );
       return this.details(c, id, req.context.store.id);
     });
+  }
+  private async finalizeUnpricedOrder(c: PoolClient, id: string, store: string) {
+    await c.query(`UPDATE purchases p SET subtotal=g.subtotal,tax=g.tax,total=g.total
+      FROM (SELECT purchase_id,sum(subtotal) AS subtotal,sum(tax) AS tax,sum(total) AS total
+            FROM goods_receipts WHERE purchase_id=$1 AND store_id=$2 GROUP BY purchase_id) g
+      WHERE p.id=$1 AND p.store_id=$2 AND p.status IN ('received','closed') AND g.purchase_id=p.id
+        AND EXISTS(SELECT 1 FROM purchase_lines l WHERE l.purchase_id=p.id AND l.store_id=p.store_id AND l.unit_cost IS NULL)`, [id, store]);
   }
   private async lock(c: PoolClient, id: string, store: string, version: number) {
     const p = (
@@ -1264,6 +1289,8 @@ export class PurchasingController {
         p = await this.lock(c, id, store, b.version);
       if (!['ordered', 'partially_received'].includes(p.status))
         throw new ConflictException('Only placed orders can be received.');
+      if ((b.paymentStatus !== undefined || b.paymentDueDate !== undefined) && !req.context.user.permissions.includes('purchases.write'))
+        throw new ForbiddenException('You cannot update payment status.');
       const orderLines = (
         await c.query('SELECT * FROM purchase_lines WHERE purchase_id=$1 ORDER BY product_id', [id])
       ).rows;
@@ -1292,6 +1319,10 @@ export class PurchasingController {
         )
           throw new BadRequestException('Delivery exceeds the remaining order quantity.');
         const cost = entry.unitCost ?? line.unit_cost;
+        if (cost === null) throw new BadRequestException('Enter the actual purchase cost for every received product.');
+        const taxRate = entry.taxRate ?? line.tax_rate;
+        if (toScaled(taxRate, 2) !== toScaled(line.tax_rate, 2) && !req.context.user.permissions.includes('purchases.cost'))
+          throw new ForbiddenException('You cannot change receiving costs.');
         if (entry.sellingPrice !== undefined) {
           if (!req.context.user.permissions.includes('catalog.write'))
             throw new BadRequestException('You cannot change selling prices.');
@@ -1307,10 +1338,10 @@ export class PurchasingController {
         }
         if (cost !== line.unit_cost && !req.context.user.permissions.includes('purchases.cost'))
           throw new BadRequestException('You cannot change receiving costs.');
-        const totals = calculatePurchaseLine(cost, entry.quantity, line.tax_rate);
+        const totals = calculatePurchaseLine(cost, entry.quantity, taxRate);
         subtotal += toScaled(totals.subtotal, 2);
         tax += toScaled(totals.tax, 2);
-        received.push({ line, entry, cost, totals, product, expiryBatches });
+        received.push({ line, entry, cost, taxRate, totals, product, expiryBatches });
       }
       if (received.length !== b.lines.length)
         throw new BadRequestException('Delivery contains a line outside this order.');
@@ -1332,7 +1363,7 @@ export class PurchasingController {
           ],
         )
       ).rows[0];
-      for (const { line, entry, cost, totals, product, expiryBatches } of received) {
+      for (const { line, entry, cost, taxRate, totals, product, expiryBatches } of received) {
         const receiptLine = (
           await c.query(
             'INSERT INTO goods_receipt_lines(store_id,receipt_id,purchase_line_id,product_id,product_name,sku,unit,quantity,unit_cost,tax_rate,subtotal,tax,total,expiry_date,expiry_batches) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING id',
@@ -1346,7 +1377,7 @@ export class PurchasingController {
               line.unit,
               entry.quantity,
               cost,
-              line.tax_rate,
+              taxRate,
               totals.subtotal,
               totals.tax,
               totals.total,
@@ -1399,6 +1430,15 @@ export class PurchasingController {
         "UPDATE purchases SET version=version+1,status=CASE WHEN EXISTS(SELECT 1 FROM purchase_lines WHERE purchase_id=$1 AND received_quantity<ordered_quantity) THEN 'partially_received' ELSE 'received' END WHERE id=$1",
         [id],
       );
+      await this.finalizeUnpricedOrder(c, id, store);
+      if (b.paymentStatus !== undefined) {
+        const current = (await c.query('SELECT total,payment_status,payment_due_date,paid_at FROM purchases WHERE id=$1 AND store_id=$2', [id,store])).rows[0];
+        if (b.paymentStatus === 'paid' && current.total === null)
+          throw new BadRequestException('Complete delivery costs before marking this order paid.');
+        await c.query("UPDATE purchases SET payment_status=$2,payment_due_date=$3,paid_at=CASE WHEN $2='paid' THEN COALESCE(paid_at,now()) ELSE NULL END WHERE id=$1 AND store_id=$4", [id,b.paymentStatus,b.paymentDueDate || null,store]);
+        await audit(c, {storeId:store,employeeId:req.context.user.id,deviceId:req.context.device.id}, 'Purchase payment updated', id,
+          {before:{status:current.payment_status,dueDate:current.payment_due_date,paidAt:current.paid_at},after:{status:b.paymentStatus,dueDate:b.paymentDueDate || null}});
+      }
       await audit(
         c,
         { storeId: store, employeeId: req.context.user.id, deviceId: req.context.device.id },

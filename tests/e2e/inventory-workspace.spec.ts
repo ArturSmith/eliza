@@ -56,6 +56,19 @@ test('four stock actions lead to directed forms, counts and traceable history', 
     'Other',
   ]);
   await form.getByLabel('Reason', { exact: true }).selectOption('received');
+  const deliverySupplier = await page.request.post('/api/suppliers', {
+    headers: { Origin: 'http://localhost:5174', 'X-Eliza-Request': '1' },
+    data: { requestId: crypto.randomUUID(), code: 'MANUAL', name: 'Manual supplier' },
+  });
+  await page.reload();
+  await form.getByRole('button', { name: 'Select a product', exact: true }).click();
+  await form.getByRole('option').first().click();
+  await form.getByLabel('Quantity', { exact: true }).fill('5');
+  await form.getByLabel('Reason', { exact: true }).selectOption('received');
+  await form
+    .getByLabel('Supplier', { exact: true })
+    .selectOption((await deliverySupplier.json()).id);
+  await form.getByLabel('Cost per unit for this stock').fill('59');
   await form.getByLabel('Notes').fill('Shelf arrival');
   await form.getByRole('button', { name: 'Add stock', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Stock operation recorded' })).toBeVisible();

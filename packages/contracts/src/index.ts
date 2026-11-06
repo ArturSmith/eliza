@@ -130,6 +130,8 @@ export const productSchema = z.object({
 });
 export const adjustmentSchema = z.object({
   productId: z.uuid(),
+  unitCost: money.nullable().optional(),
+  supplierId: z.uuid().optional(),
   quantity: quantity.refine(
     (v) => isQuantity(v) && toScaled(v, 3) !== 0n,
     'Quantity cannot be zero',
@@ -158,6 +160,12 @@ export type Product = Omit<ProductInput, 'cost'> & {
   priceKind?: 'standard' | 'discount_all' | 'limited_discount';
   baseProductId?: string | null;
   stockValue?: string | null;
+  averageCost?: string | null;
+  unknownCostQuantity?: string;
+  stockCostEstimated?: boolean;
+  lastPurchaseCost?: string | null;
+  lastPurchaseAt?: string | null;
+  lastPurchaseSupplier?: string | null;
   cost: string | null;
   id: string;
   storeId: string;
@@ -545,8 +553,8 @@ export const purchaseDraftSchema = z.object({
       z.object({
         productId: z.uuid(),
         quantity: positiveQuantity,
-        unitCost: money,
-        taxRate: purchaseTax,
+        unitCost: money.nullable().optional().default(null),
+        taxRate: purchaseTax.default('0'),
         sellingPrice: money.optional(),
       }),
     )
@@ -562,6 +570,8 @@ export const receiptInputSchema = z.object({
   version: z.number().int().positive(),
   deliveryReference: z.string().trim().max(120).default(''),
   notes: z.string().trim().max(1000).default(''),
+  paymentStatus: z.enum(['paid', 'unpaid']).optional(),
+  paymentDueDate: optionalDate.optional(),
   lines: z
     .array(
       z
@@ -580,6 +590,7 @@ export const receiptInputSchema = z.object({
             .max(50)
             .optional(),
           unitCost: money.optional(),
+          taxRate: purchaseTax.optional(),
           sellingPrice: money.optional(),
           expectedSellingPrice: money.nullable().optional(),
         })
@@ -739,9 +750,9 @@ export type PurchaseSummary = {
   expectedDate: string;
   createdAt: string;
   orderedAt: string | null;
-  subtotal: string;
-  tax: string;
-  total: string;
+  subtotal: string | null;
+  tax: string | null;
+  total: string | null;
   supplierReference: string;
   notes: string;
   cancelReason: string;
@@ -757,11 +768,11 @@ export type PurchaseLine = {
   unit: string;
   orderedQuantity: string;
   receivedQuantity: string;
-  unitCost: string;
+  unitCost: string | null;
   taxRate: string;
-  subtotal: string;
-  tax: string;
-  total: string;
+  subtotal: string | null;
+  tax: string | null;
+  total: string | null;
 };
 export type GoodsReceipt = {
   id: string;

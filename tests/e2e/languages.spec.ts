@@ -26,7 +26,6 @@ test('language persists, switches across tabs, and preserves forms and business 
   await productForm.getByLabel('SKU', { exact: true }).fill('LANG-001');
   await productForm.getByLabel('Category', { exact: true }).fill('Sales');
   await productForm.getByLabel('Unit', { exact: true }).selectOption('piece');
-  await productForm.getByLabel('Purchase cost (optional)', { exact: true }).fill('15');
   await productForm.getByLabel('Selling price (optional)', { exact: true }).fill('30');
   await second.getByLabel('Language', { exact: true }).selectOption('ru');
   await expect(productForm.getByLabel('Название товара', { exact: true })).toHaveValue('Cash');

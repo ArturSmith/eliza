@@ -2,14 +2,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Barcode, ChevronRight, Package, Pencil, Plus, Trash2 } from 'lucide-react';
-import {
-  maxProductPhotos,
-  productSchema,
-  suggestSellingPrice,
-  toScaled,
-  units,
-  type Product,
-} from '@eliza/contracts';
+import { maxProductPhotos, productSchema, toScaled, units, type Product } from '@eliza/contracts';
 import { api, productCatalogUpdateKey, queryClient, refresh, useProducts, useSession } from './api';
 import { AdjustmentForm, ErrorMessage, Field } from './forms';
 import { Button } from './components/ui/button';
@@ -30,6 +23,7 @@ import {
   type ProductDraft,
 } from './product-draft';
 import { t, useLanguage } from './i18n';
+import { ProductBatchCosts } from './product-batch-costs';
 import './product-details.css';
 
 export function ProductDetailsPage({
@@ -181,8 +175,9 @@ function ProductDetailsForm({
       );
       return;
     }
+    const { cost: _legacyCost, ...catalogData } = parsed.data;
     save.mutate({
-      ...parsed.data,
+      ...catalogData,
       ...(creating ? { autoSku: !draft.sku.trim(), autoPlu: !draft.plu.trim() } : {}),
     });
   }
@@ -206,7 +201,7 @@ function ProductDetailsForm({
   const currency = session.store.currency;
   const previewInput = {
     price: draft.price,
-    cost: draft.cost,
+    cost: product?.averageCost ?? null,
     taxRate: draft.taxRate || (creating ? (profile.data?.defaultTaxRate ?? '0') : ''),
   };
   const price = productSchema.shape.price.safeParse(previewInput.price);
@@ -251,7 +246,7 @@ function ProductDetailsForm({
       <div className="product-details-columns">
         <div className="product-details-main">
           <section
-            className="panel product-details-section"
+            className="panel product-details-section product-details-general"
             aria-labelledby="product-general-heading"
           >
             <h1 id="product-general-heading">{t('General information')}</h1>
@@ -477,73 +472,29 @@ function ProductDetailsForm({
             </div>
           </section>
           <section
-            className="panel product-details-section"
+            className="panel product-details-section product-details-pricing"
             aria-labelledby="product-pricing-heading"
           >
             <h2 id="product-pricing-heading">{t('Pricing and stock')}</h2>
             <div className="product-details-fields">
-              {canReadCosts && (
-                <Field label={t('Purchase cost (optional)')}>
-                  <input
-                    {...controls}
-                    name="cost"
-                    inputMode="decimal"
-                    value={draft.cost}
-                    onChange={(event) => {
-                      const value = event.target.value;
-                      setDraft((current) => ({
-                        ...current,
-                        cost: value,
-                        ...(creating
-                          ? {
-                              price: suggestSellingPrice(
-                                value,
-                                profile.data?.defaultMarkupPercent ?? '15',
-                              ),
-                            }
-                          : {}),
-                      }));
-                    }}
-                  />
-                </Field>
-              )}
-              <div className="product-stock-field">
-                <Field label={t('On hand')}>
+              {canReadCosts && !creating && (
+                <Field label={t('Average cost of remaining stock')}>
                   <output className="product-detail-value">
-                    {product ? (
-                      <>
-                        {formatQuantity(product.stock)} {t(product.unit)}{' '}
-                        <small>{stockLabel}</small>
-                      </>
-                    ) : (
-                      '—'
-                    )}
+                    {formatMoney(product?.averageCost, currency)}
                   </output>
                 </Field>
-                {canAdjustStock && (
-                  <div className="product-stock-tools">
-                    {product ? (
-                      <>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={busy || !product.active || (editing && dirty) || adjustStock}
-                          onClick={() => setAdjustStock(true)}
-                        >
-                          <Plus size={14} />
-                          {t('Record stock')}
-                        </Button>
-                        {editing && dirty && (
-                          <small>{t('Save product changes before recording stock.')}</small>
-                        )}
-                      </>
-                    ) : (
-                      <small>{t('Save the product before recording stock.')}</small>
-                    )}
-                  </div>
-                )}
-              </div>
+              )}
+              <Field label={t('On hand')}>
+                <output className="product-detail-value">
+                  {product ? (
+                    <>
+                      {formatQuantity(product.stock)} {t(product.unit)} <small>{stockLabel}</small>
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </output>
+              </Field>
               <Field label={t('Selling price (optional)')}>
                 <input
                   {...controls}
@@ -553,8 +504,8 @@ function ProductDetailsForm({
                   onChange={(event) => change('price', event.target.value)}
                 />
               </Field>
-              {canReadCosts && (
-                <Field label={t('Gross margin')}>
+              {canReadCosts && !creating && (
+                <Field label={t('Estimated gross margin')}>
                   <output
                     className="product-detail-value product-margin-preview"
                     aria-live="polite"
@@ -600,38 +551,10 @@ function ProductDetailsForm({
                 />
               </Field>
             </div>
-            {adjustStock && canAdjustStock && product && (
-              <section className="product-stock-adjust" aria-label={t('Record stock')}>
-                <h3>{t('Record a stock adjustment')}</h3>
-                <AdjustmentForm
-                  products={[product]}
-                  fixedProduct={product}
-                  onDone={() => setAdjustStock(false)}
-                />
-              </section>
-            )}
-            {canReadCosts && (
-              <p className="product-details-hint">
-                {t(
-                  'Margin preview uses the product purchase cost and selling price, excluding included tax. Actual sale profit depends on the batch cost and discounts.',
-                )}
-              </p>
-            )}
           </section>
-          {canReadSuppliers &&
-            (product ? (
-              <div className="product-details-suppliers">
-                <ProductSuppliers productId={product.id} unit={product.unit} layout="cards" />
-              </div>
-            ) : (
-              <section className="panel product-details-section">
-                <h2>{t('Suppliers')}</h2>
-                <p className="muted">{t('Save the product before adding supplier prices.')}</p>
-              </section>
-            ))}
         </div>
         <aside className="product-details-aside">
-          <section className="panel product-details-section">
+          <section className="panel product-details-section product-details-gallery">
             <h2>{t('Product photo')}</h2>
             <div className="product-details-photo">
               {activePhoto ? (
@@ -740,7 +663,7 @@ function ProductDetailsForm({
               </p>
             )}
           </section>
-          {canEdit && (
+          {(canEdit || (canAdjustStock && product)) && (
             <section className="panel product-details-section product-details-actions">
               <ErrorMessage error={error ?? save.error ?? (creating ? profile.error : undefined)} />
               {canEdit && (
@@ -771,7 +694,26 @@ function ProductDetailsForm({
                   )}
                 </div>
               )}
-              {product && !editing && (
+              {product && canAdjustStock && (
+                <>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="full"
+                    disabled={busy || !product.active || (editing && dirty) || adjustStock}
+                    onClick={() => setAdjustStock(true)}
+                  >
+                    <Plus size={16} />
+                    {t('Record stock')}
+                  </Button>
+                  {editing && dirty && (
+                    <small className="product-details-hint">
+                      {t('Save product changes before recording stock.')}
+                    </small>
+                  )}
+                </>
+              )}
+              {canEdit && product && !editing && (
                 <>
                   <Button
                     variant="outline"
@@ -795,8 +737,32 @@ function ProductDetailsForm({
                   </Button>
                 </>
               )}
+              {adjustStock && canAdjustStock && product && (
+                <section className="product-stock-adjust" aria-label={t('Record stock')}>
+                  <h3>{t('Record a stock adjustment')}</h3>
+                  <AdjustmentForm
+                    products={[product]}
+                    fixedProduct={product}
+                    onDone={() => setAdjustStock(false)}
+                  />
+                </section>
+              )}
             </section>
           )}
+          {canReadCosts && product && <ProductBatchCosts key={product.id} product={product} />}
+          {canReadSuppliers &&
+            (product ? (
+              <div className="product-details-suppliers">
+                <ProductSuppliers productId={product.id} unit={product.unit} />
+              </div>
+            ) : (
+              <section className="panel product-details-section">
+                <h2>{t('Suppliers')}</h2>
+                <p className="muted">
+                  {t('Link products from a supplier page or when recording a purchase.')}
+                </p>
+              </section>
+            ))}
         </aside>
       </div>
       <ProductBarcode

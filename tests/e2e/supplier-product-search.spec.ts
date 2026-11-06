@@ -43,9 +43,16 @@ test('supplier product search reuses the catalog and creates missing products al
   ).toHaveCount(0);
   const search = page.getByRole('searchbox', { name: 'Find a product', exact: true });
   const result = page.getByRole('button', { name: 'Add Plain yogurt to supplier', exact: true });
+  const create = page.getByRole('button', { name: 'Create new product', exact: true });
+  await create.click();
+  await expect(page.getByLabel('Product name', { exact: true })).toHaveValue('');
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await expect(search).toHaveValue('');
+
   for (const term of ['yogurt', 'YOG-1', '101', '5901234123457']) {
     await search.fill(term);
     await expect(result).toBeVisible();
+    await expect(create).toBeVisible();
     await expect(
       page.getByRole('button', { name: 'Nothing found — create new product', exact: true }),
     ).toHaveCount(0);
@@ -59,7 +66,7 @@ test('supplier product search reuses the catalog and creates missing products al
   await result.click();
   await expect(page).toHaveURL(`/suppliers/${supplier.id}`);
   await expect(page.getByRole('article', { name: 'Plain yogurt', exact: true })).toContainText(
-    'No price',
+    'No deliveries recorded yet.',
   );
   expect(await (await page.request.get('/api/products')).json()).toHaveLength(1);
   await page.goto(url);
@@ -67,9 +74,7 @@ test('supplier product search reuses the catalog and creates missing products al
   await expect(result).toBeDisabled();
   await expect(page.getByText('Already added to this supplier')).toBeVisible();
   await search.fill('5901234123464');
-  await page
-    .getByRole('button', { name: 'Nothing found — create new product', exact: true })
-    .click();
+  await create.click();
   await expect(page.getByLabel('Barcodes (optional)')).toHaveValue('5901234123464');
   await page.getByLabel('Product name', { exact: true }).fill('New strawberry yogurt');
   await page.getByLabel('Category', { exact: true }).fill('Dairy');

@@ -28,7 +28,6 @@ describe('inline product draft', () => {
       'sku',
       'plu',
       'barcodes',
-      'cost',
       'price',
       'taxRate',
       'minStock',
@@ -57,7 +56,6 @@ describe('inline product draft', () => {
       productDraftKey({
         ...draft,
         name: ' Yogurt ',
-        cost: '59',
         price: '70',
         barcodes: ' 0400000000015 ',
       }),
@@ -72,6 +70,7 @@ describe('inline product draft', () => {
     expect(draft.images).toEqual(['front', 'back']);
     const payload = productDraftInput(draft, '0');
     expect(payload.image).toBe('front');
+    expect(payload).not.toHaveProperty('cost');
     expect(payload).not.toHaveProperty('stock');
     expect(payload).not.toHaveProperty('margin');
     expect(payload).not.toHaveProperty('active');

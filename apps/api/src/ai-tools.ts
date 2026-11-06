@@ -204,7 +204,7 @@ export const aiToolDefinitions = [
     name: 'product_details',
     permission: 'catalog.write',
     description:
-      'Get full editable product fields and barcodes by exact ID, including cost. Use before proposing a product update; do not guess fields.',
+      'Get product fields and barcodes by exact ID. The cost field is a legacy reference, not the average cost of current stock. Purchase costs belong to inventory inflows and receipt batches, not catalog edits. Use before proposing a product update; do not guess fields.',
     parameters: {
       type: 'object',
       properties: { id: { type: 'string' } },
@@ -313,7 +313,7 @@ export const aiToolDefinitions = [
     name: 'propose_change',
     permission: 'catalog.read',
     description:
-      'Prepare a supplier, product, or purchase draft create/update for explicit user approval. This does not write anything. First search existing records. Data is a JSON string matching the normal Eliza form fields. Supplier fields: code,name,contactName,contactPhone,email,phone,address,companyNumber,paymentTerms,notes,tags (array of strings),active; update also needs id,version. Product fields: name,sku,category,unit,price,cost,minStock,plu,barcodes,description (optional),autoSku,autoPlu; update also needs id and full current fields. Purchase fields: supplierId,supplierReference,documentDate,expectedDate,notes,lines array of productId,quantity,unitCost,taxRate and optional sellingPrice; optional buyerName,buyerDetails,driverName,driverPhone,goodsNumber,buyerTaxNumber,grossWeight,documentVat,returnAmount,documentComment; update also needs id,version and must be a draft. Never invent IDs, prices, costs, tax rates, or missing required fields. Ask user for missing information first. The proposal is saved only after user clicks Approve.',
+      'Prepare a supplier, product, or purchase draft create/update for explicit user approval. This does not write anything. First search existing records. Data is a JSON string matching the normal Eliza form fields. Supplier fields: code,name,contactName,contactPhone,email,phone,address,companyNumber,paymentTerms,notes,tags (array of strings),active; update also needs id,version. Product fields: name,sku,category,unit,price (optional),minStock,plu,barcodes,description (optional),autoSku,autoPlu; do not set purchase cost on a product card; update also needs id and full current fields. Purchase fields: supplierId,supplierReference,documentDate,expectedDate,notes,lines array of productId,quantity,unitCost,taxRate and optional sellingPrice; optional buyerName,buyerDetails,driverName,driverPhone,goodsNumber,buyerTaxNumber,grossWeight,documentVat,returnAmount,documentComment; update also needs id,version and must be a draft. Never invent IDs, prices, costs, tax rates, or missing required fields. Ask user for missing information first. The proposal is saved only after user clicks Approve.',
     parameters: {
       type: 'object',
       properties: {

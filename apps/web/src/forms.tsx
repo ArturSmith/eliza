@@ -25,17 +25,14 @@ import { Plus, ArrowRight, Store, PackagePlus, ChevronDown } from 'lucide-react'
 import {
   productSchema,
   productSku,
-  suggestSellingPrice,
-  calculateLine,
   toScaled,
-  fromScaled,
   setupSchema,
   adjustmentSchema,
   type Product,
   type AdjustmentInput,
   units,
 } from '@eliza/contracts';
-import { api, productCatalogUpdateKey, queryClient, refresh } from './api';
+import { api, productCatalogUpdateKey, queryClient, refresh, useSession } from './api';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { prepareProductImage } from './product-image';
@@ -259,7 +256,7 @@ export function ProductForm({
   onDone: () => void;
   initial?: Product;
   prefill?: Partial<
-    Pick<Product, 'name' | 'description' | 'category' | 'cost' | 'price' | 'barcodes' | 'source'>
+    Pick<Product, 'name' | 'description' | 'category' | 'price' | 'barcodes' | 'source'>
   >;
   onCreated?: (product: Product) => void;
   currency?: string;
@@ -268,12 +265,10 @@ export function ProductForm({
 }) {
   useLanguage();
   const formRef = useRef<HTMLFormElement>(null);
-  const [cost, setCost] = useState(initial?.cost ?? prefill?.cost ?? '');
   const [price, setPrice] = useState(
     initial?.regularPrice ?? initial?.price ?? prefill?.price ?? '',
   );
   const [taxRate, setTaxRate] = useState<string | undefined>(initial?.taxRate);
-  const [manualPrice, setManualPrice] = useState(!!initial || !!prefill?.price);
   const [productName, setProductName] = useState(initial?.name ?? prefill?.name ?? '');
   const [sku, setSku] = useState(initial?.sku ?? '');
   const [plu, setPlu] = useState(initial?.plu ?? '');
@@ -311,29 +306,7 @@ export function ProductForm({
     queryKey: ['store-profile'],
     queryFn: () => api<{ defaultTaxRate: string; defaultMarkupPercent: string }>('/store-profile'),
   });
-  const markup = profile.data?.defaultMarkupPercent ?? '15';
-  const suggestedPrice = suggestSellingPrice(cost, markup);
   const effectiveTaxRate = taxRate ?? profile.data?.defaultTaxRate ?? '0';
-  let marginPreview = '—';
-  const selling = productSchema.shape.price.safeParse(manualPrice ? price : suggestedPrice);
-  const buying = productSchema.shape.cost.safeParse(cost);
-  const tax = productSchema.shape.taxRate.safeParse(effectiveTaxRate);
-  if (
-    selling.success &&
-    selling.data !== null &&
-    buying.success &&
-    buying.data !== null &&
-    tax.success
-  ) {
-    const line = calculateLine(selling.data, '1', tax.data);
-    const net = toScaled(line.total, 2) - toScaled(line.tax, 2);
-    const profit = net - toScaled(buying.data, 2);
-    const percent =
-      net > 0n
-        ? (((profit < 0n ? -profit : profit) * 10000n + net / 2n) / net) * (profit < 0n ? -1n : 1n)
-        : 0n;
-    marginPreview = fromScaled(percent, 2) + '%';
-  }
 
   const [error, setError] = useState<unknown>(null);
   const mutation = useMutation({
@@ -370,8 +343,9 @@ export function ProductForm({
       setError(result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('. '));
       return;
     }
+    const { cost: _legacyCost, ...catalogData } = result.data;
     mutation.mutate({
-      ...result.data,
+      ...catalogData,
       ...(!initial
         ? { autoPlu: !manualPlu, autoSku: !manualSku, ...(supplierId ? { supplierId } : {}) }
         : {}),
@@ -562,42 +536,14 @@ export function ProductForm({
           </Field>
         </div>
         <div className="form-grid">
-          <Field label={t('Purchase cost (optional)')}>
-            <input
-              name="cost"
-              inputMode="decimal"
-              placeholder={t('0.00')}
-              value={cost}
-              onChange={(e) => {
-                setCost(e.target.value);
-                if (!initial) setManualPrice(false);
-              }}
-            />
-          </Field>
-          <Field
-            label={t('Selling price (optional)')}
-            hint={
-              !manualPrice
-                ? t(
-                    'Suggested using {percent}% markup on purchase cost. This price already includes VAT.',
-                    { percent: markup },
-                  )
-                : undefined
-            }
-          >
+          <Field label={t('Selling price (optional)')}>
             <input
               name="price"
               inputMode="decimal"
               placeholder={t('0.00')}
-              value={manualPrice ? price : suggestedPrice}
-              onChange={(e) => {
-                setPrice(e.target.value);
-                setManualPrice(true);
-              }}
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
             />
-            <small className="product-margin-preview" aria-live="polite">
-              {t('Gross margin')}: {marginPreview}
-            </small>
           </Field>
           <Field
             label={t('Tax rate (%)')}
@@ -864,6 +810,23 @@ export function AdjustmentForm({
   const [error, setError] = useState<unknown>(null);
   const [requestId, setRequestId] = useState(() => crypto.randomUUID());
   const [productId, setProductId] = useState(fixedProduct?.id ?? '');
+  const session = useSession().data!;
+  const canCost = session.user.permissions.includes('costs.read');
+  const [amount, setAmount] = useState('');
+  const [reason, setReason] = useState<AdjustmentInput['reason'] | ''>(
+    direction === 'signed' ? (fixedProduct ? 'received' : 'opening_balance') : '',
+  );
+  const [unitCost, setUnitCost] = useState('');
+  const [costUnknown, setCostUnknown] = useState(false);
+  const [supplierId, setSupplierId] = useState('');
+  const incoming =
+    direction === 'add' || (direction === 'signed' && Number(amount.replace(',', '.')) > 0);
+  const suppliers = useQuery({
+    queryKey: ['suppliers'],
+    queryFn: () => api<import('@eliza/contracts').Supplier[]>('/suppliers'),
+    enabled:
+      incoming && reason === 'received' && session.user.permissions.includes('suppliers.read'),
+  });
   const selected = products.find((p) => p.id === productId);
   const eligible = products.filter(
     (p) => p.active && (direction !== 'remove' || toScaled(p.stock, 3) > 0n),
@@ -881,6 +844,9 @@ export function AdjustmentForm({
       return;
     }
     setProductId(matches[0].id);
+    setUnitCost('');
+    setCostUnknown(false);
+    setSupplierId('');
     setRequestId(crypto.randomUUID());
     mutation.reset();
     setError(null);
@@ -910,6 +876,12 @@ export function AdjustmentForm({
     const result = adjustmentSchema.safeParse({
       ...data,
       quantity: signedQuantity,
+      ...(toScaled(signedQuantity, 3) > 0n
+        ? {
+            unitCost: costUnknown || !canCost ? null : unitCost.trim().replace(',', '.'),
+            ...(reason === 'received' ? { supplierId } : {}),
+          }
+        : {}),
       productId,
       requestId,
     });
@@ -950,6 +922,9 @@ export function AdjustmentForm({
               }))}
               onSelect={(id) => {
                 setProductId(id);
+                setUnitCost('');
+                setCostUnknown(false);
+                setSupplierId('');
                 setRequestId(crypto.randomUUID());
                 mutation.reset();
               }}
@@ -969,6 +944,8 @@ export function AdjustmentForm({
         >
           <input
             name="quantity"
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
             placeholder={direction === 'signed' ? t('e.g. 24 or -2') : t('e.g. 24')}
             inputMode="decimal"
             autoFocus={!!fixedProduct}
@@ -979,9 +956,11 @@ export function AdjustmentForm({
           <select
             name="reason"
             required
-            defaultValue={
-              direction === 'signed' ? (fixedProduct ? 'received' : 'opening_balance') : ''
-            }
+            value={reason}
+            onChange={(event) => {
+              setReason(event.target.value as AdjustmentInput['reason']);
+              setCostUnknown(false);
+            }}
           >
             {direction !== 'signed' && (
               <option value="" disabled>
@@ -995,6 +974,62 @@ export function AdjustmentForm({
             ))}
           </select>
         </Field>
+        {incoming && (
+          <>
+            {reason === 'received' && (
+              <>
+                <ErrorMessage error={suppliers.error} />
+                <Field label={t('Supplier')}>
+                  <select
+                    required
+                    value={supplierId}
+                    onChange={(event) => setSupplierId(event.target.value)}
+                  >
+                    <option value="">{t('Select a supplier')}</option>
+                    {(suppliers.data ?? [])
+                      .filter((supplier) => supplier.active)
+                      .map((supplier) => (
+                        <option key={supplier.id} value={supplier.id}>
+                          {supplier.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+              </>
+            )}
+            {canCost && !costUnknown && (
+              <Field
+                label={t('Cost per unit for this stock')}
+                hint={t('Excluding tax. Applies only to the quantity being added.')}
+              >
+                <input
+                  inputMode="decimal"
+                  required
+                  value={unitCost}
+                  onChange={(event) => setUnitCost(event.target.value)}
+                />
+              </Field>
+            )}
+            {reason !== 'received' && (
+              <label className="checkbox-field">
+                <input
+                  type="checkbox"
+                  checked={costUnknown || !canCost}
+                  disabled={!canCost}
+                  onChange={(event) => setCostUnknown(event.target.checked)}
+                />
+                {t('Cost is unknown')}
+              </label>
+            )}
+            {(costUnknown || !canCost) && (
+              <p className="notice">
+                {t(
+                  'Unknown cost is not zero. Profit will be unavailable for sales from this stock.',
+                )}
+              </p>
+            )}
+          </>
+        )}
         <Field label={t('Notes')}>
           <textarea
             name="notes"

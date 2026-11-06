@@ -630,3 +630,212 @@
     padding: 12px;
   }
 }
+
+.quantity-order-basics {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 20px;
+}
+.quantity-order-basics .field {
+  margin: 0;
+}
+.quantity-order-supplier {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.quantity-order-items {
+  display: grid;
+  gap: 20px;
+}
+.quantity-order-items > .button {
+  justify-self: start;
+}
+.quantity-order-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 20px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.quantity-order-product {
+  display: flex;
+  align-items: start;
+  min-width: 0;
+  gap: 16px;
+}
+.quantity-order-photo {
+  display: grid;
+  place-items: center;
+  flex: 0 0 72px;
+  height: 72px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--page);
+  color: var(--muted);
+  overflow: hidden;
+}
+.quantity-order-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.quantity-order-product-info {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+.quantity-order-product-info .field {
+  margin: 0;
+}
+.quantity-order-product-info p {
+  margin: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.quantity-order-controls {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+}
+.quantity-order-controls .field {
+  width: 100px;
+  margin: 0;
+}
+.quantity-order-controls > span {
+  align-self: end;
+  margin-bottom: 13px;
+}
+.quantity-order-controls > button {
+  margin-bottom: 3px;
+  flex-shrink: 0;
+}
+.purchase-stage-tabs {
+  margin-bottom: 20px;
+}
+@media (max-width: 1100px) {
+  .quantity-order-item {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .quantity-order-controls {
+    justify-content: end;
+  }
+}
+@media (max-width: 700px) {
+  .quantity-order-basics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .quantity-order-item {
+    padding: 14px;
+    gap: 16px;
+  }
+  .quantity-order-photo {
+    flex-basis: 48px;
+    height: 48px;
+  }
+  .quantity-order-product {
+    gap: 10px;
+  }
+  .quantity-order-controls .field {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+  }
+  .quantity-order-controls > span {
+    font-size: 12px;
+  }
+}
+
+.purchase-delivery-form > fieldset {
+  display: grid;
+  gap: 24px;
+}
+.delivery-cost-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.delivery-cost-fields > .field {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 3;
+  row-gap: 8px;
+  margin: 0;
+  min-width: 0;
+}
+.delivery-price-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(160px, 100%), 1fr));
+  gap: 16px;
+  margin: 0;
+}
+.delivery-price-facts dt {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.delivery-price-facts dd {
+  margin: 0;
+  font-weight: 600;
+}
+.delivery-price-facts small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 400;
+  margin-top: 5px;
+}
+.delivery-margin-preview {
+  display: grid;
+  gap: 16px;
+  padding: 16px;
+  background: var(--page);
+  border-radius: 10px;
+}
+.delivery-margin-preview p,
+.delivery-payment-section p {
+  margin: 0;
+  font-size: 12px;
+}
+.delivery-payment-section {
+  display: grid;
+  gap: 16px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+.delivery-payment-section h3 {
+  margin: 0;
+}
+.purchase-delivery-form .delivery-submit {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+@media (max-width: 700px) {
+  .delivery-cost-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .delivery-price-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .purchase-delivery-form .delivery-submit > .button {
+    width: 100%;
+  }
+}
+
+/* Keep values level when supplier-cost or margin labels wrap. */
+.delivery-price-facts > div {
+  display: grid;
+  grid-template-rows: subgrid;
+  grid-row: span 2;
+  row-gap: 8px;
+}
+.delivery-price-facts dt {
+  margin: 0;
+}

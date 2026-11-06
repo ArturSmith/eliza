@@ -108,7 +108,12 @@ const navGroups = [
         icon: PackagePlus,
         permission: 'purchases.read',
       },
-      { to: '/purchases', label: 'Suppliers & purchases', icon: Truck, permission: 'purchases.read' },
+      {
+        to: '/purchases',
+        label: 'Suppliers & purchases',
+        icon: Truck,
+        permission: 'purchases.read',
+      },
       {
         to: '/digital-purchases',
         label: 'Digital purchases',
@@ -323,7 +328,9 @@ export function Shell() {
                     <Link
                       key={to}
                       to={to}
-                      activeOptions={{ exact: !['/products', '/inventory', '/purchases'].includes(to) }}
+                      activeOptions={{
+                        exact: !['/products', '/inventory', '/purchases'].includes(to),
+                      }}
                       activeProps={{ className: 'nav-link active' }}
                       className={
                         to === '/purchases' && location.pathname.startsWith('/suppliers')
@@ -447,7 +454,9 @@ export function Overview() {
   const active = list.filter((p) => p.active);
   const low = active.filter((p) => toScaled(p.stock, 3) <= toScaled(p.minStock, 3));
   const total = active.reduce((sum, p) => sum + toScaled(p.stockValue ?? '0', 2), 0n);
-  const inventoryValue = fromScaled(total, 2);
+  const inventoryValue = active.some((p) => Number(p.stock) > 0 && p.stockValue === null)
+    ? null
+    : fromScaled(total, 2);
   return (
     <>
       <PageHeading
@@ -996,6 +1005,9 @@ export function InventoryHistoryPage() {
                       <> · {t('Estimated historical cost')}</>
                     )}
                   </span>
+                )}
+                {batch.unitCost === null && batch.costSource === 'unknown' && (
+                  <Badge tone="amber">{t('Cost is unknown')}</Badge>
                 )}
                 {batch.expired && <Badge tone="amber">{t('Expired')}</Badge>}
               </div>

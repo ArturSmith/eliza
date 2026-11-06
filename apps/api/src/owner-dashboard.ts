@@ -743,25 +743,26 @@ SELECT p.id,p.name,p.sku,p.category,p.unit,(p.stock+COALESCE((SELECT sum(child.s
 ), stocked AS (
  SELECT p.id,p.stock,p.cost,p.min_stock,p.active,l.sold_at,p.created_at,
  COALESCE((SELECT sum(round(b.quantity*b.unit_cost,2)) FROM stock_batches b WHERE b.product_id=p.id AND b.store_id=$1 AND b.quantity>0),0) AS batch_value,
- EXISTS(SELECT 1 FROM stock_batches b WHERE b.product_id=p.id AND b.store_id=$1 AND b.quantity>0 AND b.unit_cost=0) AS has_missing_batch_cost,
+ EXISTS(SELECT 1 FROM stock_batches b WHERE b.product_id=p.id AND b.store_id=$1 AND b.quantity>0 AND b.unit_cost IS NULL) AS has_missing_batch_cost,
  (p.stock>0) AS holds_stock,
  (CASE WHEN l.sold_at IS NULL THEN p.created_at ELSE l.sold_at END) < (($3::date::timestamp AT TIME ZONE $4) - ($2||' days')::interval) AS stale
  FROM products p LEFT JOIN last_sale l ON l.product_id=p.id WHERE p.store_id=$1
 )
 SELECT
- COALESCE(sum(batch_value) FILTER(WHERE holds_stock),0)::text AS value,
+ CASE WHEN count(*) FILTER(WHERE holds_stock AND has_missing_batch_cost)>0 THEN NULL ELSE COALESCE(sum(batch_value) FILTER(WHERE holds_stock),0)::text END AS value,
  count(*) FILTER(WHERE holds_stock)::text AS "inStock",
  count(*) FILTER(WHERE active AND stock<=0)::text AS "outOfStock",
  count(*) FILTER(WHERE active AND stock>0 AND stock<=min_stock)::text AS "lowStock",
  count(*) FILTER(WHERE active AND holds_stock AND stale)::text AS "deadCount",
  COALESCE(sum(stock) FILTER(WHERE active AND holds_stock AND stale),0)::text AS "deadUnits",
  count(*) FILTER(WHERE active AND holds_stock AND stale AND has_missing_batch_cost)::text AS "deadMissingCostProducts",
- COALESCE(sum(batch_value) FILTER(WHERE active AND holds_stock AND stale),0)::text AS "deadValue",
+ COALESCE(sum(batch_value) FILTER(WHERE active AND holds_stock AND stale),0)::text AS "knownDeadValue",
+ CASE WHEN count(*) FILTER(WHERE active AND holds_stock AND stale AND has_missing_batch_cost)>0 THEN NULL ELSE COALESCE(sum(batch_value) FILTER(WHERE active AND holds_stock AND stale),0)::text END AS "deadValue",
  (SELECT count(*) FROM stock_batches b JOIN products p ON p.id=b.product_id AND p.store_id=b.store_id
   LEFT JOIN last_sale l ON l.product_id=p.id WHERE b.store_id=$1 AND p.active AND p.stock>0 AND b.quantity>0
   AND b.cost_source='legacy_estimate' AND COALESCE(l.sold_at,p.created_at)<(($3::date::timestamp AT TIME ZONE $4)-($2||' days')::interval))::int AS "deadEstimatedBatches",
- count(*) FILTER(WHERE holds_stock AND cost=0)::text AS "missingCost",
- COALESCE(sum(batch_value) FILTER(WHERE holds_stock AND cost=0),0)::text AS "uncostedValue"
+ count(*) FILTER(WHERE holds_stock AND has_missing_batch_cost)::text AS "missingCost",
+ COALESCE(sum(batch_value) FILTER(WHERE holds_stock AND has_missing_batch_cost),0)::text AS "uncostedValue"
  FROM stocked`,
         [store.id, String(deadDays), storeToday(new Date(), store.timezone), store.timezone],
       )
@@ -769,13 +770,13 @@ SELECT
     const byCategory = (
       await this.database.pool.query(
         `SELECT COALESCE(category,'Uncategorised') AS category,
- sum(COALESCE((SELECT sum(round(b.quantity*b.unit_cost,2)) FROM stock_batches b WHERE b.product_id=products.id AND b.store_id=$1),0))::text AS value,count(*)::text AS products
+ CASE WHEN bool_or(EXISTS(SELECT 1 FROM stock_batches b WHERE b.product_id=products.id AND b.store_id=$1 AND b.quantity>0 AND b.unit_cost IS NULL)) THEN NULL ELSE sum(COALESCE((SELECT sum(round(b.quantity*b.unit_cost,2)) FROM stock_batches b WHERE b.product_id=products.id AND b.store_id=$1),0))::text END AS value,count(*)::text AS products
  FROM products WHERE store_id=$1 AND stock>0 GROUP BY 1 ORDER BY 2 DESC LIMIT 12`,
         [store.id],
       )
     ).rows;
     return {
-      value: money(row.value),
+      value: row.value === null ? null : money(row.value),
       inStock: num(row.inStock),
       outOfStock: num(row.outOfStock),
       lowStock: num(row.lowStock),
@@ -783,7 +784,8 @@ SELECT
         count: num(row.deadCount),
         units: money(row.deadUnits),
         missingCostProducts: num(row.deadMissingCostProducts),
-        value: money(row.deadValue),
+        value: row.deadValue === null ? null : money(row.deadValue),
+        knownValue: money(row.knownDeadValue),
         days: deadDays,
         estimated: num(row.deadEstimatedBatches) > 0,
       },
@@ -1181,7 +1183,7 @@ SELECT COALESCE(s.phase,f.phase) AS phase,
       await this.database.pool.query(
         `SELECT count(*)::text AS products,
  count(*) FILTER(WHERE active)::text AS active,
- count(*) FILTER(WHERE cost=0)::text AS "missingCost",
+ count(*) FILTER(WHERE EXISTS(SELECT 1 FROM stock_batches b WHERE b.product_id=p.id AND b.store_id=p.store_id AND b.quantity>0 AND b.unit_cost IS NULL))::text AS "missingCost",
  count(*) FILTER(WHERE category='' OR category IS NULL)::text AS "missingCategory",
  count(*) FILTER(WHERE NOT EXISTS(SELECT 1 FROM barcodes b WHERE b.product_id=p.id) AND (plu IS NULL OR plu=''))::text AS "missingCode",
  count(*) FILTER(WHERE NOT EXISTS(SELECT 1 FROM movements m WHERE m.product_id=p.id AND m.reason='opening_balance'))::text AS uncounted
@@ -1431,8 +1433,8 @@ SELECT m.month,COALESCE(sold.revenue,0)::text AS revenue,
         JOIN products p ON p.id=i.product_id AND p.store_id=i.store_id
         WHERE i.store_id=$1 GROUP BY 1
       ), batches AS (
-        SELECT COALESCE(p.base_product_id,b.product_id) AS product_id,sum(b.quantity) AS quantity,sum(round(b.quantity*b.unit_cost,2)) AS value,
-          bool_or(cost_source='legacy_estimate') AS estimated,bool_or(unit_cost=0) AS missing
+        SELECT COALESCE(p.base_product_id,b.product_id) AS product_id,sum(b.quantity) AS quantity,CASE WHEN bool_or(b.unit_cost IS NULL) THEN NULL ELSE sum(round(b.quantity*b.unit_cost,2)) END AS value,
+          bool_or(cost_source='legacy_estimate') AS estimated,bool_or(unit_cost IS NULL) AS missing
         FROM stock_batches b JOIN products p ON p.id=b.product_id AND p.store_id=b.store_id
         WHERE b.store_id=$1 AND b.quantity>0 GROUP BY 1
       )
@@ -1512,7 +1514,7 @@ SELECT m.month,COALESCE(sold.revenue,0)::text AS revenue,
             count: inventory.dead.count,
             units: inventory.dead.units,
             missingCostProducts: inventory.dead.missingCostProducts,
-            value: inventory.dead.value,
+            value: inventory.dead.knownValue,
             days: inventory.dead.days,
             estimated: inventory.dead.estimated,
           }

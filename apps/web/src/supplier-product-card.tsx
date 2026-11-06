@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Package } from 'lucide-react';
 import type { Offer } from './supplier-products';
@@ -18,14 +17,10 @@ export function SupplierProductCard({
   offer,
   currency,
   canOpen,
-  quoteDiffers,
-  action,
 }: {
   offer: SupplierCatalogOffer;
   currency: string;
   canOpen: boolean;
-  quoteDiffers: boolean;
-  action?: ReactNode;
 }) {
   const content = (
     <>
@@ -50,37 +45,29 @@ export function SupplierProductCard({
               <span className="badge badge-amber">{t('Inactive product')}</span>
             )}
             {!offer.active && (
-              <span className="badge badge-gray">{t('Inactive supplier price')}</span>
+              <span className="badge badge-gray">{t('Inactive supplier link')}</span>
             )}
           </div>
         )}
         <div className="supplier-product-unit-price">
-          <span>{t('Unit cost excl. tax')}</span>
-          <strong>
-            {offer.unitCost == null ? t('No price') : formatMoney(offer.unitCost, currency)}
-          </strong>
-          <small>
-            {t('per ')}
-            {t(offer.unit)}
-          </small>
+          <span>{t('Last purchase price')}</span>
+          {offer.lastPaidCost == null ? (
+            <small>{t('No deliveries recorded yet.')}</small>
+          ) : (
+            <strong>{formatMoney(offer.lastPaidCost, currency)}</strong>
+          )}
+          {offer.lastPaidCost != null && (
+            <small>
+              {t('per ')}
+              {t(offer.unit)}
+            </small>
+          )}
         </div>
         <dl className="supplier-product-facts">
           <div>
-            <dt>{t('Price per pack')}</dt>
+            <dt>{t('Units per pack')}</dt>
             <dd>
-              {offer.packCost === null ? t('No price') : formatMoney(offer.packCost, currency)}
-              <small>
-                {formatQuantity(offer.packSize)} × {t(offer.unit)}
-              </small>
-            </dd>
-          </div>
-          <div>
-            <dt>{t('Last purchase price')}</dt>
-            <dd>
-              {offer.lastPaidCost == null
-                ? t('No deliveries recorded yet.')
-                : formatMoney(offer.lastPaidCost, currency)}
-              {quoteDiffers && <small className="delta-bad">{t('Differs from quote')}</small>}
+              {formatQuantity(offer.packSize)} × {t(offer.unit)}
             </dd>
           </div>
           <div>
@@ -121,7 +108,6 @@ export function SupplierProductCard({
       ) : (
         <div className="supplier-product-open">{content}</div>
       )}
-      {action && <div className="supplier-product-actions">{action}</div>}
     </article>
   );
 }

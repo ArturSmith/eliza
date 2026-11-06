@@ -11,17 +11,9 @@ export async function addUnknownStock(
   quantity: string,
   historicalCost: string | null = null,
 ) {
-  if (historicalCost === null) {
-    const result = await c.query('SELECT cost FROM products WHERE store_id=$1 AND id=$2', [
-      storeId,
-      productId,
-    ]);
-    if (result.rows[0]?.cost == null)
-      throw new ConflictException('Set purchase cost before adding stock.');
-  }
   await c.query(
     `INSERT INTO stock_batches(store_id,product_id,quantity,unit_cost,cost_source)
-     SELECT $1,$2,$3,COALESCE($4::numeric,cost),CASE WHEN $4::numeric IS NULL THEN 'adjustment' ELSE 'legacy_estimate' END FROM products WHERE store_id=$1 AND id=$2`,
+     VALUES($1,$2,$3,$4,CASE WHEN $4::numeric IS NULL THEN 'unknown' ELSE 'legacy_estimate' END)`,
     [storeId, productId, quantity, historicalCost],
   );
 }
@@ -35,6 +27,7 @@ export async function consumeBatches(
 ) {
   let remaining = toScaled(quantity, 3);
   let totalCost = 0n;
+  let complete = true;
   const rows = (
     await c.query(
       `SELECT id,quantity::text,expiry_date,unit_cost::text FROM stock_batches
@@ -57,8 +50,10 @@ export async function consumeBatches(
       row.id,
       fromScaled(taken, 3),
     ]);
-    const cost = (toScaled(row.unit_cost, 2) * taken + 500n) / 1000n;
-    totalCost += cost;
+    const cost =
+      row.unit_cost === null ? null : (toScaled(row.unit_cost, 2) * taken + 500n) / 1000n;
+    if (cost === null) complete = false;
+    else totalCost += cost;
     if (options.saleItemId)
       await c.query(
         'INSERT INTO sale_batch_allocations(store_id,sale_item_id,batch_id,quantity,unit_cost,cost_total) VALUES($1,$2,$3,$4,$5,$6)',
@@ -68,7 +63,7 @@ export async function consumeBatches(
           row.id,
           fromScaled(taken, 3),
           row.unit_cost,
-          fromScaled(cost, 2),
+          cost === null ? null : fromScaled(cost, 2),
         ],
       );
     remaining -= taken;
@@ -79,7 +74,7 @@ export async function consumeBatches(
         ? 'Not enough unexpired stock. Remove expired items or correct the stock count.'
         : 'Batch stock is lower than the product stock. Reconcile this product before changing it.',
     );
-  return fromScaled(totalCost, 2);
+  return complete ? fromScaled(totalCost, 2) : null;
 }
 
 export async function restockSaleBatches(

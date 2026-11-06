@@ -22,7 +22,6 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await productForm.getByLabel('SKU', { exact: true }).fill('BREAD-01');
   await productForm.getByLabel('Category', { exact: true }).fill('Bakery');
   await productForm.getByLabel('Unit', { exact: true }).selectOption('piece');
-  await productForm.getByLabel('Purchase cost').fill('18.50');
   await productForm.getByLabel('Selling price').fill('49.90');
   await productForm.getByLabel('Tax rate (%)').fill('15');
   await productForm.getByRole('button', { name: 'Add product', exact: true }).click();
@@ -39,16 +38,23 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
     '7090123456789',
   );
   await page.getByRole('link', { name: 'Inventory', exact: true }).click();
-  await page.locator('.inventory-actions').getByRole('link', { name: /^Add stock/ }).click();
+  await page
+    .locator('.inventory-actions')
+    .getByRole('link', { name: /^Add stock/ })
+    .click();
   const stockForm = page.locator('.inventory-operation-panel');
   await stockForm.getByRole('button', { name: 'Select a product', exact: true }).click();
   await page.getByRole('option', { name: /Sourdough bread/ }).click();
   await stockForm.getByLabel('Quantity', { exact: true }).fill('24');
   await stockForm.getByLabel('Reason', { exact: true }).selectOption('opening_balance');
+  await stockForm.getByLabel('Cost per unit for this stock').fill('18.50');
   await stockForm.getByLabel('Notes').fill('Counted before opening');
   await stockForm.getByRole('button', { name: 'Add stock', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Stock operation recorded' })).toBeVisible();
-  await page.locator('.inventory-operation-panel').getByRole('link', { name: 'Movement history', exact: true }).click();
+  await page
+    .locator('.inventory-operation-panel')
+    .getByRole('link', { name: 'Movement history', exact: true })
+    .click();
   await expect(
     page.getByRole('cell', { name: 'Counted before opening', exact: false }),
   ).toBeVisible();
@@ -282,9 +288,7 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.getByLabel('Proposed selling price incl. tax (optional)').fill('54.90');
   await page.getByRole('button', { name: 'Save draft' }).click();
   await page.getByRole('link', { name: 'Edit draft' }).click();
-  await expect(page.getByLabel('Proposed selling price incl. tax (optional)')).toHaveValue(
-    '54.90',
-  );
+  await expect(page.getByLabel('Proposed selling price incl. tax (optional)')).toHaveValue('54.90');
   await page.getByLabel('Order notes').fill('Two deliveries expected');
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.getByText('Two deliveries expected', { exact: true })).toBeVisible();
@@ -298,13 +302,17 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await expect(page).toHaveURL(/\/receive$/);
   await page.getByRole('checkbox').check();
   await page.getByRole('button', { name: 'Record delivery' }).click();
-  await expect(page.locator('.order-detail-number').getByText('partially_received', { exact: true })).toBeVisible();
+  await expect(
+    page.locator('.order-detail-number').getByText('partially_received', { exact: true }),
+  ).toBeVisible();
   await page.getByRole('link', { name: 'Receive delivery' }).click();
   await page.getByLabel('Quantity', { exact: true }).fill('6');
   await expect(page.getByText('Current selling price: NOK 54.90 including tax.')).toBeVisible();
   await page.getByLabel('New selling price incl. tax (optional)').fill('');
   await page.getByRole('button', { name: 'Record delivery' }).click();
-  await expect(page.locator('.order-detail-number').getByText('received', { exact: true })).toBeVisible();
+  await expect(
+    page.locator('.order-detail-number').getByText('received', { exact: true }),
+  ).toBeVisible();
   await page.screenshot({ path: 'test-results/purchasing-desktop.png', fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -392,7 +400,6 @@ test('purchase pages create suppliers and products and finds barcodes without lo
   await product.getByLabel('Product name').fill('Orange juice');
   await product.getByLabel('SKU', { exact: true }).fill('JUICE-01');
   await product.getByLabel('Category', { exact: true }).fill('Drinks');
-  await product.getByLabel('Purchase cost').fill('20');
   await product.getByLabel('Selling price').fill('35');
   await product.getByLabel('Barcodes (optional)').fill('7090123456796');
   await product.getByRole('button', { name: 'Create product' }).click();

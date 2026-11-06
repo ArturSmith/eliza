@@ -680,7 +680,7 @@ export class CheckoutController {
             product.id,
             line.quantity,
             line.price,
-            fromScaled(
+            costTotal === null ? null : fromScaled(
               (toScaled(costTotal, 2) * 1000n + toScaled(line.quantity, 3) / 2n) /
                 toScaled(line.quantity, 3),
               2,
