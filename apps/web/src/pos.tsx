@@ -289,11 +289,50 @@ export function PosPage() {
         </p>
       </div>
     );
+  if (!value.shift)
+    return <ClosedShiftScreen key={`${value.device!.id}:${value.operator.id}`} context={value} />;
   return (
     <RegisterWorkspace
       key={`${value.device!.id}:${value.operator.id}:${value.shift?.id ?? 'no-shift'}`}
       context={value}
     />
+  );
+}
+function ClosedShiftScreen({ context }: { context: PosContext }) {
+  const [opening, setOpening] = useState(false);
+  return (
+    <div className="pos-shell pos-shift-screen">
+      <header className="pos-shift-header">
+        <BrandLogo />
+        <div>
+          <strong>{context.store!.name}</strong>
+          <span>{context.device!.name}</span>
+        </div>
+      </header>
+      <main className="pos-shift-main">
+        <section className="pos-shift-card" aria-labelledby="pos-shift-title">
+          <span className="icon-tile" aria-hidden="true">
+            <Banknote size={28} />
+          </span>
+          <h1 id="pos-shift-title">{opening ? t('Opening cash') : t('Shift closed')}</h1>
+          <p className="pos-shift-cashier">
+            <UserRound size={16} aria-hidden="true" />
+            {context.operator!.name}
+          </p>
+          {opening ? (
+            <ShiftForm context={context} mode="start" onDone={() => setOpening(false)} />
+          ) : (
+            <Button className="full pos-start-shift" autoFocus onClick={() => setOpening(true)}>
+              {t('Start shift')}
+              <ArrowRight size={18} aria-hidden="true" />
+            </Button>
+          )}
+        </section>
+      </main>
+      <footer className="pos-shift-footer">
+        <LanguageSwitcher />
+      </footer>
+    </div>
   );
 }
 function ShiftForm({
@@ -324,8 +363,8 @@ function ShiftForm({
             : `/pos/shifts/${context.shift!.id}/close`,
         body,
       ),
-    onSuccess: () => {
-      void posRefresh();
+    onSuccess: async () => {
+      await posRefresh();
       onDone();
     },
   });
@@ -351,13 +390,18 @@ function ShiftForm({
     mutation.mutate(body);
   }
   return (
-    <form onSubmit={submit} className={mode === 'close' ? 'shift-close-form' : undefined}>
+    <form
+      onSubmit={submit}
+      className={
+        mode === 'close' ? 'shift-close-form' : mode === 'start' ? 'shift-start-form' : undefined
+      }
+    >
       {mode === 'start' ? (
         <Field
           label={t('Opening cash')}
           hint={t('Count the cash already in the drawer before taking sales.')}
         >
-          <input name="openingCash" inputMode="decimal" required defaultValue="0.00" />
+          <input name="openingCash" inputMode="decimal" autoFocus required defaultValue="0.00" />
         </Field>
       ) : mode === 'cash' ? (
         <>
@@ -402,9 +446,11 @@ function ShiftForm({
       )}
       <ErrorMessage error={mutation.error} />
       <div className="form-actions">
-        <Button variant="outline" type="button" onClick={onDone}>
-          {t('Cancel ')}
-        </Button>
+        {mode !== 'start' && (
+          <Button variant="outline" type="button" onClick={onDone}>
+            {t('Cancel ')}
+          </Button>
+        )}
         <Button disabled={mutation.isPending}>
           {mutation.isPending
             ? t('Saving…')
@@ -414,6 +460,11 @@ function ShiftForm({
                 ? t('Record cash movement')
                 : t('Close shift')}
         </Button>
+        {mode === 'start' && (
+          <Button variant="outline" type="button" onClick={onDone} disabled={mutation.isPending}>
+            {t('Cancel ')}
+          </Button>
+        )}
       </div>
     </form>
   );
@@ -536,9 +587,9 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     }
   }
 
-  const [modal, setModal] = useState<
-    'payment' | 'start' | 'close' | 'cash' | 'held' | 'history' | null
-  >(null);
+  const [modal, setModal] = useState<'payment' | 'close' | 'cash' | 'held' | 'history' | null>(
+    null,
+  );
   const scaleProfile = useQuery({
     queryKey: ['pos-barcode-settings'],
     queryFn: () => api<{ scaleBarcode: ScaleBarcodeSettings }>('/pos/barcode-settings'),
@@ -918,18 +969,6 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
               {t('Refresh products ')}
             </Button>
           </div>
-          {!context.shift && (
-            <div className="pos-start-notice">
-              <div>
-                <strong>{t('Let’s start your shift.')}</strong>
-                <p>{t('Count your opening float before taking the first sale.')}</p>
-              </div>
-              <Button onClick={() => setModal('start')}>
-                {t('Start shift ')}
-                <ArrowRight size={16} />
-              </Button>
-            </div>
-          )}
           <form className="pos-search" onSubmit={scanItem}>
             <Barcode size={22} />
             <input
@@ -1260,18 +1299,12 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         </div>
       </footer>
       <Dialog
-        open={modal === 'start' || modal === 'close' || modal === 'cash'}
+        open={modal === 'close' || modal === 'cash'}
         onOpenChange={(v) => !v && setModal(null)}
-        title={
-          modal === 'start'
-            ? t('Start your shift')
-            : modal === 'cash'
-              ? t('Cash in / cash out')
-              : t('Close your shift')
-        }
+        title={modal === 'cash' ? t('Cash in / cash out') : t('Close your shift')}
         description={context.device!.name}
       >
-        {(modal === 'start' || modal === 'close' || modal === 'cash') && (
+        {(modal === 'close' || modal === 'cash') && (
           <ShiftForm context={context} mode={modal} onDone={() => setModal(null)} />
         )}
       </Dialog>

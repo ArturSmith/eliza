@@ -119,10 +119,10 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await page.getByLabel('Employee code').selectOption('ANNA');
   await page.getByLabel('Register PIN').fill('123456');
   await page.getByRole('button', { name: 'Unlock register' }).click();
-  await expect(page.getByRole('heading', { name: 'Checkout', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Shift closed', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Start shift', exact: true }).click();
-  await dialog.getByLabel('Opening cash').fill('100');
-  await dialog.getByRole('button', { name: 'Start shift', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Opening cash', exact: true }).fill('100');
+  await page.getByRole('button', { name: 'Start shift', exact: true }).click();
   await expect(page.getByText('Shift open', { exact: true })).toBeVisible();
   await page.getByLabel('Scan or search products').fill('7090123456789');
   await page.getByLabel('Scan or search products').press('Enter');

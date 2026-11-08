@@ -91,26 +91,6 @@ body:has(.pos-shell) #root > .language-bar {
   font-size: 9px;
   margin-bottom: 8px;
 }
-.pos-start-notice {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  background: var(--color-background-eaf0df);
-  border: 1px solid var(--color-border-dde7cf);
-  border-radius: 10px;
-  padding: 19px;
-  margin-bottom: 22px;
-}
-.pos-start-notice strong {
-  font-size: 13px;
-}
-.pos-start-notice p {
-  font-size: 11px;
-  color: var(--color-text-879779);
-  margin-top: 6px;
-  line-height: 1.6;
-}
 .pos-search {
   display: flex;
   align-items: center;
@@ -721,10 +701,6 @@ body:has(.pos-shell) #root > .language-bar {
     padding: 15px;
     min-height: 185px;
   }
-  .pos-start-notice {
-    flex-direction: column;
-    align-items: flex-start;
-  }
   .pos-operator > .badge {
     display: none;
   }
@@ -975,4 +951,160 @@ body:has(.pos-shell) #root > .language-bar {
   border-radius: 12px;
   padding: 10px 16px;
   background: var(--color-background-fff);
+}
+
+/* Closed registers have their own screen; checkout mounts after a shift opens. */
+.pos-shift-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 32px;
+}
+.pos-shift-header > .eliza-logo {
+  flex-shrink: 0;
+  font-size: 27px;
+}
+.pos-shift-header > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  text-align: right;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+.pos-shift-header > div > span,
+.pos-shift-cashier {
+  color: var(--color-text-77896a);
+}
+.pos-shift-main {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  padding: 24px;
+}
+.pos-shift-card {
+  width: 100%;
+  max-width: 440px;
+  margin: auto;
+  padding: 32px;
+  border: 1px solid var(--color-border-e1e8d8);
+  border-radius: 20px;
+  background: var(--color-background-fff);
+}
+.pos-shift-card > .icon-tile {
+  margin-bottom: 24px;
+}
+.pos-shift-card h1 {
+  font-size: 30px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.pos-shift-cashier {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 28px;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+.pos-start-shift,
+.shift-start-form .button {
+  min-height: 50px;
+}
+.pos-start-shift > svg {
+  margin-left: auto;
+}
+.shift-start-form > .field {
+  margin: 0;
+}
+.shift-start-form .field > span {
+  font-size: 14px;
+}
+.shift-start-form .field input {
+  min-height: 56px;
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+}
+.shift-start-form .field small {
+  font-size: 12px;
+}
+.shift-start-form > .form-actions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin: 24px 0 0;
+}
+.pos-shift-footer {
+  border: 0;
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: 16px 24px max(24px, env(safe-area-inset-bottom));
+}
+.pos-shift-footer .language-bar {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.pos-shift-footer .language-switcher > :is(svg, span) {
+  display: none;
+}
+.pos-shift-footer .language-switcher select {
+  min-height: 44px;
+  font-size: 16px;
+}
+@media (max-width: 480px) {
+  .pos-shift-header {
+    align-items: flex-start;
+    padding: 20px 16px;
+  }
+  .pos-shift-header > div {
+    font-size: 12px;
+  }
+  .pos-shift-main {
+    padding: 16px;
+  }
+  .pos-shift-card {
+    padding: 24px;
+  }
+  .pos-shift-card h1 {
+    font-size: 26px;
+  }
+}
+
+@media (max-height: 700px) {
+  .pos-shift-header {
+    padding: 16px;
+  }
+  .pos-shift-main {
+    padding: 12px 16px;
+  }
+  .pos-shift-card:has(.shift-start-form) {
+    padding: 16px;
+  }
+  .pos-shift-card:has(.shift-start-form) > :is(.icon-tile, .pos-shift-cashier) {
+    display: none;
+  }
+  .pos-shift-card:has(.shift-start-form) h1 {
+    margin-bottom: 20px;
+  }
+  .shift-start-form .field input {
+    min-height: 48px;
+  }
+  .shift-start-form > .form-actions {
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .shift-start-form .button {
+    min-height: 44px;
+  }
+  .pos-shift-footer {
+    padding: 8px 16px max(12px, env(safe-area-inset-bottom));
+  }
 }
