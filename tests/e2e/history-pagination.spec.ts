@@ -9,7 +9,7 @@ test('Sales and Purchases request separate pages and reset purchase filters to p
   await page.getByLabel('Email address').fill('history@example.test');
   await page.getByLabel('Password', { exact: true }).fill('local-test-password-123');
   await page.getByRole('button', { name: 'Create my store' }).click();
-  await expect(page.getByRole('link', { name: 'Sales', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Accounting', exact: true })).toBeVisible();
   await page.route('**/api/reports/sales?*', async (route) => {
     const current = Number(new URL(route.request().url()).searchParams.get('page'));
     await route.fulfill({
@@ -32,6 +32,8 @@ test('Sales and Purchases request separate pages and reset purchase filters to p
     });
   });
   await page.goto('/sales');
+  await expect(page).toHaveURL('/accounting/sales');
+  await expect(page.getByRole('heading', { name: 'Sales history', exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'SALE-1-0', exact: false })).toBeVisible();
   await expect(page.locator('table[aria-label="Recent receipts"] tbody tr')).toHaveCount(50);
   await page.getByRole('button', { name: 'Next', exact: true }).click();
@@ -65,7 +67,7 @@ test('Sales and Purchases request separate pages and reset purchase filters to p
   await page.goto('/purchases/history');
   await page.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(page.getByText('Page 2 of 2', { exact: true })).toBeVisible();
-  await page.getByLabel('Filter order status').selectOption('draft');
+  await page.getByRole('tab', { name: 'Drafts', exact: true }).click();
   await expect(page.getByText('Page 1 of 1', { exact: true })).toBeVisible();
   await expect(page.getByRole('cell', { name: 'MATCH', exact: true })).toBeVisible();
   await page.getByLabel('Search purchase orders').fill('supplier');

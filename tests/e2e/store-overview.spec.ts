@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import { storeToday, addDays } from '../../packages/contracts/src/index';
 
-test('a focused daily overview shows canonical metrics, shifts, dates and a responsive chart', async ({
+test('a focused daily overview shows sales metrics, shifts, dates and a responsive chart', async ({
   page,
   playwright,
 }) => {
@@ -87,12 +87,11 @@ test('a focused daily overview shows canonical metrics, shifts, dates and a resp
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Store overview', exact: true })).toBeVisible();
   const cards = page.locator('.overview-metric');
-  await expect(cards).toHaveCount(4);
+  await expect(cards).toHaveCount(3);
   await expect(cards.filter({ hasText: 'Total sales' })).toContainText('360.00');
-  await expect(cards.filter({ hasText: 'Gross profit / margin' })).toContainText('120.00');
-  await expect(cards.filter({ hasText: 'Gross profit / margin' })).toContainText('33.3%');
-  await expect(cards.filter({ hasText: 'Operating profit' })).toContainText('90.00');
-  await expect(cards.filter({ hasText: 'Expenses' })).toContainText('30.00');
+  await expect(cards.filter({ hasText: 'Transactions' })).toContainText('3');
+  await expect(cards.filter({ hasText: 'Average basket' })).toContainText('120.00');
+  await expect(page.locator('.overview-summary')).not.toContainText(/margin|profit|expenses/i);
   await expect(page.getByText('2 completed · 1 open', { exact: true })).toBeVisible();
   await expect(page.locator('.overview-shifts tbody tr')).toHaveCount(3);
   for (const title of [

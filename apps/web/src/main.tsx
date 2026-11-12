@@ -12,6 +12,7 @@ import {
   createRouter,
   RouterProvider,
   Outlet,
+  Navigate,
   useLocation,
 } from '@tanstack/react-router';
 import { api, queryClient } from './api';
@@ -66,13 +67,14 @@ import { AiAgentPage } from './ai-agent';
 import { DigitalPurchasesPage } from './digital-purchases';
 import { TeamManagementPage } from './team';
 import { OwnerDashboardPage } from './owner-dashboard';
+import { AccountingPage } from './accounting';
 import { StoreLayoutPage } from './store-layout';
 import { ActionCenterPage } from './action-center';
 import { PriceTagsPage } from './price-tags';
 import { PriceCheckPage } from './price-check';
 import { PromotionsPage } from './promotions';
 import { ManagementAccessPage } from './management-access';
-import { SalesPage, ShiftsPage } from './reports';
+import { ShiftsPage } from './reports';
 import { ReceiptDetailPage } from './refunds';
 function LegacyDocumentsRedirect() {
   React.useEffect(() => {
@@ -232,8 +234,23 @@ const routes = [
     component: ManagementAccessPage,
   }),
   createRoute({ getParentRoute: () => root, path: '/analytics', component: OwnerDashboardPage }),
+  createRoute({ getParentRoute: () => root, path: '/accounting', component: AccountingPage }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/accounting/sales',
+    component: () => <AccountingPage section="sales" />,
+  }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/accounting/receipts/$id',
+    component: () => <ReceiptDetailPage checkout={false} />,
+  }),
   createRoute({ getParentRoute: () => root, path: '/action-center', component: ActionCenterPage }),
-  createRoute({ getParentRoute: () => root, path: '/sales', component: SalesPage }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/sales',
+    component: () => <Navigate to="/accounting/sales" replace />,
+  }),
   createRoute({
     getParentRoute: () => root,
     path: '/sales/receipts/$id',

@@ -13,7 +13,7 @@ export const pageTours: Record<OnboardingPage, Tour> = {
       {
         selector: '.overview-summary',
         title: 'Today’s results',
-        body: 'Review total sales, gross profit, operating profit and daily allocated expenses.',
+        body: 'Review sales, completed receipts and the average basket for the selected day.',
       },
       {
         selector: '.overview-shifts',
@@ -208,20 +208,40 @@ export const pageTours: Record<OnboardingPage, Tour> = {
     ],
   },
   analytics: {
-    version: 1,
+    version: 2,
     steps: [
       {
-        selector: '.page-heading, .receipt-page-header, h1',
+        selector: '.page-heading',
         title: 'Analytics',
-        body: 'Explore store performance for the selected period. All financial summaries use the shared financial engine.',
+        body: 'Explore sales by product, category, shift and time. Financial results are in Accounting.',
       },
       {
-        selector: '.period-tabs, .period-switch, .page-heading',
+        selector: '.period-tabs',
         title: 'Choose the period',
         body: 'Switch the reporting period to compare sales and store performance over time.',
       },
       {
-        selector: '.today-financial-metrics, .financial-metrics, .panel',
+        selector: '.analytics-visuals, .panel',
+        title: 'Product and shift performance',
+        body: 'Compare bestsellers, quiet periods and shifts. Use filters to explore the sales breakdown.',
+      },
+    ],
+  },
+  accounting: {
+    version: 1,
+    steps: [
+      {
+        selector: '.page-heading',
+        title: 'Accounting',
+        body: 'Review revenue, costs, profit and expenses. All financial calculations use the shared financial engine.',
+      },
+      {
+        selector: '.analytics-presets, .form-grid',
+        title: 'Choose the period',
+        body: 'Choose dates and apply filters. Product and shift filters do not allocate store-wide expenses.',
+      },
+      {
+        selector: '.analytics-financial',
         title: 'Read financial results',
         body: 'Revenue, cost of goods sold and operating profit mean different things. Approximate values indicate estimated costs.',
       },
@@ -398,7 +418,7 @@ export const pageTours: Record<OnboardingPage, Tour> = {
       {
         selector: '.expenses-filters',
         title: 'Review the period',
-        body: 'Filter expense history by dates or category and compare it with operating profit in analytics.',
+        body: 'Filter expense history by dates or category and compare it with operating profit in Accounting.',
       },
     ],
   },
@@ -524,8 +544,9 @@ export const pageTours: Record<OnboardingPage, Tour> = {
   },
 };
 export function onboardingPage(pathname: string): OnboardingPage | null {
-  if (/^\/(pos|sales)\/receipts\/[^/]+\/refund\/?$/.test(pathname)) return 'refund';
-  if (/^\/(pos|sales)\/receipts\/[^/]+\/?$/.test(pathname)) return 'receipt';
+  if (/^\/(pos|sales|accounting)\/receipts\/[^/]+\/refund\/?$/.test(pathname)) return 'refund';
+  if (/^\/(pos|sales|accounting)\/receipts\/[^/]+\/?$/.test(pathname)) return 'receipt';
+  if (/^\/accounting\/sales\/?$/.test(pathname)) return 'sales';
   const key = pathname.replace(/^\/|\/$/g, '') || 'overview';
   return Object.hasOwn(pageTours, key) ? (key as OnboardingPage) : null;
 }

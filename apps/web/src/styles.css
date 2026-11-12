@@ -5886,3 +5886,30 @@ input.shopping-section-title {
     gap: 16px;
   }
 }
+
+/* Shared date/product/shift controls for Analytics and Accounting. */
+.sales-summary-filters.form-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+}
+.sales-summary-filters > .field {
+  margin-bottom: 0;
+}
+.sales-summary-filters > .button {
+  margin-bottom: 0 !important;
+  min-height: 42px;
+}
+.sales-summary-filter-note {
+  margin-top: 12px;
+  font-size: 12px;
+}
+@media (max-width: 1000px) {
+  .sales-summary-filters.form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .sales-summary-filters.form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

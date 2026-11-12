@@ -30,14 +30,17 @@ type FinancialSummary = {
     grossMarginPercent: string | null;
     storeOperatingProfit: string | null;
   } | null;
+  breakdown: { expensesByCategory: Record<string, string> };
   dataQuality: { missingCostSaleItems: number; missingCostRefundLines: number };
 };
 type Props = { from: string; to: string; productId?: string; shiftId?: string };
 
 export function GrossProfit(props: Props) {
   const session = useSession().data!;
-  if (session.user.permissions.includes('analytics.margin') &&
-      session.user.permissions.includes('expenses.read'))
+  if (
+    session.user.permissions.includes('analytics.margin') &&
+    session.user.permissions.includes('expenses.read')
+  )
     return <FinancialProfit {...props} />;
   return <LegacyGrossProfit {...props} />;
 }
@@ -48,23 +51,47 @@ function FinancialProfit({ from, to, productId = '', shiftId = '' }: Props) {
   const filtered = Boolean(productId || shiftId);
   const q = useQuery({
     queryKey: ['financial-summary', session.store.id, from, to, productId, shiftId],
-    queryFn: () => api<FinancialSummary>('/reports/financial-summary?' +
-      new URLSearchParams({ from, to, ...(productId ? { productId } : {}), ...(shiftId ? { shiftId } : {}) })),
+    queryFn: () =>
+      api<FinancialSummary>(
+        '/reports/financial-summary?' +
+          new URLSearchParams({
+            from,
+            to,
+            ...(productId ? { productId } : {}),
+            ...(shiftId ? { shiftId } : {}),
+          }),
+      ),
     refetchInterval: 60_000,
   });
   const summary = q.data;
   const estimate = summary?.estimated;
-  const cards: { label: string; value: string | null; estimate?: string | null; percent?: boolean }[] = summary
+  const cards: {
+    label: string;
+    value: string | null;
+    estimate?: string | null;
+    percent?: boolean;
+  }[] = summary
     ? [
         { label: 'Revenue', value: summary.revenue },
         { label: 'Cost of goods sold', value: summary.cogs, estimate: estimate?.cogs },
         { label: 'Gross profit', value: summary.grossProfit, estimate: estimate?.grossProfit },
-        { label: 'Gross margin', value: summary.grossMarginPercent, estimate: estimate?.grossMarginPercent, percent: true },
-        ...(!filtered ? [
-          { label: 'Inventory losses', value: summary.inventoryLosses },
-          { label: 'Operating expenses', value: summary.operatingExpenses },
-          { label: 'Store operating profit', value: summary.storeOperatingProfit, estimate: estimate?.storeOperatingProfit },
-        ] : []),
+        {
+          label: 'Gross margin',
+          value: summary.grossMarginPercent,
+          estimate: estimate?.grossMarginPercent,
+          percent: true,
+        },
+        ...(!filtered
+          ? [
+              { label: 'Inventory losses', value: summary.inventoryLosses },
+              { label: 'Operating expenses', value: summary.operatingExpenses },
+              {
+                label: 'Store operating profit',
+                value: summary.storeOperatingProfit,
+                estimate: estimate?.storeOperatingProfit,
+              },
+            ]
+          : []),
       ]
     : [];
   return (
@@ -72,29 +99,73 @@ function FinancialProfit({ from, to, productId = '', shiftId = '' }: Props) {
       <h3>{t('Store profitability')}</h3>
       <p className="muted">
         {filtered
-          ? t('Product and shift filters apply to revenue and gross profit. Store-wide losses and expenses are not allocated to these filters.')
-          : t('Revenue is sales less refunds. Gross profit subtracts the cost recorded at sale; store operating profit also subtracts inventory losses and operating expenses.')}
+          ? t(
+              'Product and shift filters apply to revenue and gross profit. Store-wide losses and expenses are not allocated to these filters.',
+            )
+          : t(
+              'Revenue is sales less refunds. Gross profit subtracts the cost recorded at sale; store operating profit also subtracts inventory losses and operating expenses.',
+            )}
       </p>
       <ErrorMessage error={q.error} />
       {q.isPending ? <p className="muted">{t('Calculating gross profit…')}</p> : null}
-      {summary && <>
-        <div className="today-metrics today-financial-metrics analytics-financial-metrics">
-          {cards.map((card) => {
-            const estimated = card.value === null && card.estimate != null;
-            const value = card.value ?? card.estimate ?? null;
-            return <article className="kpi" key={card.label} title={metricFormula(card.label)}>
-              <span className="kpi-label">{t(card.label)}</span>
-              <strong className={'kpi-value' + (value === null ? ' kpi-unavailable' : '')}>
-                {value === null ? t('Unavailable') : (estimated ? '≈' : '') +
-                  (card.percent ? Number(value).toFixed(1) + '%' : formatMoney(value, session.store.currency))}
-              </strong>
-              {estimated && <small className="muted">{t('Estimated')}</small>}
-            </article>;
-          })}
-        </div>
-        {(summary.dataQuality.missingCostSaleItems > 0 || summary.dataQuality.missingCostRefundLines > 0) &&
-          <p className="muted">{t('Historical cost records are missing. Profit is unavailable for this range. ')}</p>}
-      </>}
+      {summary && (
+        <>
+          <div className="today-metrics today-financial-metrics analytics-financial-metrics">
+            {cards.map((card) => {
+              const estimated = card.value === null && card.estimate != null;
+              const value = card.value ?? card.estimate ?? null;
+              return (
+                <article className="kpi" key={card.label} title={metricFormula(card.label)}>
+                  <span className="kpi-label">{t(card.label)}</span>
+                  <strong className={'kpi-value' + (value === null ? ' kpi-unavailable' : '')}>
+                    {value === null
+                      ? t('Unavailable')
+                      : (estimated ? '≈' : '') +
+                        (card.percent
+                          ? Number(value).toFixed(1) + '%'
+                          : formatMoney(value, session.store.currency))}
+                  </strong>
+                  {estimated && <small className="muted">{t('Estimated')}</small>}
+                </article>
+              );
+            })}
+          </div>
+          {!filtered && Object.keys(summary.breakdown.expensesByCategory).length > 0 && (
+            <section
+              className="accounting-expense-categories"
+              aria-label={t('Expenses by category')}
+            >
+              <h3>{t('Expenses by category')}</h3>
+              <div className="table-scroll">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>{t('Category')}</th>
+                      <th>{t('Allocated expenses')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(summary.breakdown.expensesByCategory).map(
+                      ([category, amount]) => (
+                        <tr key={category}>
+                          <td>{t(category)}</td>
+                          <td>{formatMoney(amount, session.store.currency)}</td>
+                        </tr>
+                      ),
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
+          {(summary.dataQuality.missingCostSaleItems > 0 ||
+            summary.dataQuality.missingCostRefundLines > 0) && (
+            <p className="muted">
+              {t('Historical cost records are missing. Profit is unavailable for this range. ')}
+            </p>
+          )}
+        </>
+      )}
     </section>
   );
 }

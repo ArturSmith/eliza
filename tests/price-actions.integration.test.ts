@@ -364,6 +364,27 @@ describe.sequential('manager price actions', () => {
     expect(Number(profit.body.costOfGoodsSold)).toBeGreaterThan(0);
     const sourceReport = await manager.request('/reports/pricing-sources?period=today');
     expect(sourceReport.status).toBe(200);
+    const datedSources = await manager.request(
+      `/reports/pricing-sources?period=custom&from=${today}&to=${today}`,
+    );
+    expect(datedSources.status).toBe(200);
+    expect(datedSources.body).toEqual(sourceReport.body);
+    expect((await manager.request('/reports/pricing-sources?period=custom')).status).toBe(400);
+    expect(
+      (
+        await manager.request(
+          '/reports/pricing-sources?period=custom&from=2026-02-30&to=2026-03-01',
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await manager.request(
+          '/reports/pricing-sources?period=custom&from=2026-03-02&to=2026-03-01',
+        )
+      ).status,
+    ).toBe(400);
+
     expect(
       sourceReport.body.find((row: { source: string }) => row.source === 'CATEGORY_PROMOTION'),
     ).toMatchObject({

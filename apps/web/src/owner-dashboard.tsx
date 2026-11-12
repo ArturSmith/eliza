@@ -1,34 +1,15 @@
 import { formatQuantity } from './quantity-format';
-import { dashboardSeverity, dashboardText, dashboardSummary } from './i18n/dashboard';
-import { useState, useId, useRef, useEffect, type ReactNode } from 'react';
+import { useState, useId, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
 import { api, useSession } from './api';
 import { ErrorMessage } from './forms';
-import { Button } from './components/ui/button';
 import { formatMoney } from './receipts';
 import { SalesSummary } from './sales-summary';
+import { DashboardTable } from './report-table';
 import { t, useLanguage, getLocale } from './i18n';
 import { tone, type Period } from '@eliza/contracts';
 
 type Dashboard = any;
-export type OverviewFinancialSummary = {
-  revenue: string;
-  cogs: string | null;
-  grossProfit: string | null;
-  grossMarginPercent: string | null;
-  inventoryLosses: string | null;
-  operatingExpenses: string | null;
-  storeOperatingProfit: string | null;
-  estimated: {
-    cogs: string;
-    grossProfit: string;
-    grossMarginPercent: string | null;
-    storeOperatingProfit: string | null;
-  } | null;
-  permissions: { margin: boolean; expenses: boolean };
-};
-
 const periods: { key: Period; label: string }[] = [
   { key: 'today', label: 'Today' },
   { key: 'week', label: 'Week' },
@@ -243,54 +224,6 @@ export function HourlySales({
   );
 }
 
-function Table({
-  title,
-  description,
-  head,
-  rows,
-  empty,
-}: {
-  title: string;
-  description?: string;
-  head: string[];
-  rows: ReactNode[][];
-  empty: string;
-}) {
-  useLanguage();
-  return (
-    <section className="panel">
-      <div className="panel-heading">
-        <h2>{t(title)}</h2>
-        {description && <p>{t(description)}</p>}
-      </div>
-      {rows.length ? (
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                {head.map((h) => (
-                  <th key={h}>{t(h)}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={i}>
-                  {row.map((cell, j) => (
-                    <td key={j}>{cell}</td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <p className="panel-padding muted">{t(empty)}</p>
-      )}
-    </section>
-  );
-}
-
 export function OwnerDashboardPage() {
   useLanguage();
   const session = useSession().data!;
@@ -298,23 +231,6 @@ export function OwnerDashboardPage() {
   const q = useQuery({
     queryKey: ['owner-dashboard', period],
     queryFn: () => api<Dashboard>('/reports/owner-dashboard?period=' + period),
-  });
-  const pricingSources = useQuery({
-    queryKey: ['pricing-sources', period],
-    queryFn: () =>
-      api<
-        {
-          source: string;
-          units: string;
-          revenue: string;
-          discount: string;
-          refunds: string;
-          netRevenue: string;
-          costOfGoodsSold: string | null;
-          grossProfit: string | null;
-        }[]
-      >('/reports/pricing-sources?period=' + period),
-    enabled: session.user.permissions.includes('analytics.margin'),
   });
   const data = q.data;
   const currency = session.store.currency;
@@ -325,9 +241,11 @@ export function OwnerDashboardPage() {
       <div className="page-heading">
         <div>
           <div className="eyebrow">{t('STORE PERFORMANCE')}</div>
-          <h1>{t('Dashboard')}</h1>
+          <h1>{t('Analytics')}</h1>
           <p className="muted">
-            {t('What is happening, what to change, and whether the business is improving.')}
+            {t(
+              'Explore sales by product, category, shift and time. Financial results are in Accounting.',
+            )}
           </p>
         </div>
         <div className="period-tabs" role="tablist">
@@ -356,55 +274,6 @@ export function OwnerDashboardPage() {
             </p>
           )}
 
-          {data.summary && <p className="owner-summary">{dashboardSummary(data.summary)}</p>}
-
-          {!!pricingSources.data?.length && (
-            <Table
-              title="Pricing and discounts"
-              description="Sales and gross profit by the price actually used at checkout."
-              head={[
-                'Price source',
-                'Sales',
-                'Discount',
-                'Refunds',
-                'Cost of goods sold',
-                'Gross profit',
-              ]}
-              empty="No sales in this period."
-              rows={pricingSources.data.map((row) => [
-                t(
-                  row.source === 'BASE'
-                    ? 'Regular price'
-                    : row.source === 'PRODUCT_PROMOTION'
-                      ? 'Product promotion'
-                      : row.source === 'CATEGORY_PROMOTION'
-                        ? 'Category promotion'
-                        : row.source === 'MARKDOWN'
-                          ? 'Unit markdown'
-                          : row.source === 'LEGACY_MARKDOWN'
-                            ? 'Legacy markdown'
-                            : 'Prior sale',
-                ),
-                money(row.revenue),
-                money(row.discount),
-                money(row.refunds),
-                row.costOfGoodsSold === null ? t('Unavailable') : money(row.costOfGoodsSold),
-                row.grossProfit === null ? t('Unavailable') : money(row.grossProfit),
-              ])}
-            />
-          )}
-
-          <p className="muted">
-            {t('Operating expenses')}:{' '}
-            {data.kpis.operatingExpenses.value === null
-              ? t('Restricted')
-              : formatMoney(String(data.kpis.operatingExpenses.value), currency)}
-            {' · '}
-            {t('Paid purchases')}:{' '}
-            {data.kpis.paidPurchases.value === null
-              ? t('Restricted')
-              : formatMoney(String(data.kpis.paidPurchases.value), currency)}
-          </p>
           <p className="muted comparison-note">
             {t('Compared with')}:{' '}
             {data.comparisons
@@ -437,33 +306,15 @@ export function OwnerDashboardPage() {
 
           {period === 'today' && <HourlySales rows={data.hourly} currency={currency} />}
 
-          {!!data.whatChanged.length && period !== 'today' && (
-            <section className="panel">
-              <div className="panel-heading">
-                <h2>{t('What changed')}</h2>
-                <p>{t('Measured differences against the previous period.')}</p>
-              </div>
-              <ul className="changed-list">
-                {data.whatChanged.map((line: any, i: number) => (
-                  <li key={i}>
-                    <span>{dashboardText(line.label)}</span>
-                    <Delta change={line.change} metric={line.metric} />
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          <Table
+          <DashboardTable
             title="Category performance"
-            description="Revenue, margin and share of sales."
-            head={['Category', 'Sales', 'Change', 'Margin', 'Share']}
+            description="Sales, growth and share of sales."
+            head={['Category', 'Sales', 'Change', 'Share']}
             empty="No sales in this period."
             rows={data.categories.rows.map((c: any) => [
               c.category,
               money(c.revenue),
               <Delta change={c.change} metric="revenue" />,
-              c.margin === null ? t('—') : c.margin.toFixed(1) + '%',
               c.share === null ? '—' : c.share.toFixed(1) + '%',
             ])}
           />
@@ -472,15 +323,8 @@ export function OwnerDashboardPage() {
             <section className="panel">
               <div className="panel-heading">
                 <h2>{t('Inventory health')}</h2>
-                <p>{t('How much money is tied up, and how much of it is moving.')}</p>
               </div>
               <div className="stat-row panel-padding">
-                <div>
-                  <span className="muted">{t('Stock value')}</span>
-                  <strong>
-                    {data.inventory.value === null ? t('Unavailable') : money(data.inventory.value)}
-                  </strong>
-                </div>
                 <div>
                   <span className="muted">{t('Out of stock')}</span>
                   <strong>{data.inventory.outOfStock}</strong>
@@ -489,112 +333,23 @@ export function OwnerDashboardPage() {
                   <span className="muted">{t('Low stock')}</span>
                   <strong>{data.inventory.lowStock}</strong>
                 </div>
-                <div>
-                  <span className="muted">
-                    {t('Dead stock')} ({data.inventory.dead.days} {t('day abbreviation')})
-                  </span>
-                  <strong>
-                    {data.inventory.dead.value === null
-                      ? t('Unavailable')
-                      : money(data.inventory.dead.value)}
-                  </strong>
-                </div>
               </div>
-              {data.inventory.missingCost > 0 && (
-                <p className="panel-padding notice">
-                  {t('Inventory valuation is incomplete')}: {data.inventory.missingCost}{' '}
-                  {t('products have no purchase cost.')}
-                </p>
-              )}
             </section>
           )}
 
-          <Table
+          <DashboardTable
             title="Product performance"
             description="Ranked by revenue in this period."
-            head={['Product', 'Units', 'Sales', 'Margin', 'Stock', 'Cover']}
+            head={['Product', 'Units', 'Sales', 'Stock', 'Cover']}
             empty="No products sold in this period."
             rows={data.products.byRevenue.map((p: any) => [
               p.name,
               formatQuantity(p.units),
               money(p.revenue),
-              p.margin === null ? t('—') : p.margin.toFixed(1) + '%',
               formatQuantity(p.stock),
               p.daysOfStock === null ? '—' : p.daysOfStock.toFixed(1) + ' ' + t('days'),
             ])}
           />
-
-          {!!data.purchasing.costIncreases.length && (
-            <Table
-              title="Margin protection"
-              description="Products whose purchase cost rose. Retail prices are never changed automatically."
-              head={['Product', 'Was', 'Now', 'Change', 'Retail price']}
-              empty="No purchase cost increases."
-              rows={data.purchasing.costIncreases
-                .slice(0, 10)
-                .map((p: any) => [
-                  p.label,
-                  money(p.previousCost),
-                  money(p.currentCost),
-                  <Delta change={p.percent} metric="purchaseCost" />,
-                  p.priceUnchanged ? t('Unchanged') : t('Reviewed'),
-                ])}
-            />
-          )}
-
-          {data.waste.available && (
-            <Table
-              title="Waste and shrinkage"
-              description="Damaged, expired and internal-use stock, valued at cost."
-              head={['Category', 'Value', 'Share of waste']}
-              empty="No waste recorded in this period."
-              rows={data.waste.byCategory.map((w: any) => [
-                w.category,
-                money(w.value.toFixed(2)),
-                w.share === null ? '—' : w.share.toFixed(1) + '%',
-              ])}
-            />
-          )}
-
-          {!!data.suppliers.rows.length && (
-            <Table
-              title="Suppliers"
-              description="Spend received in this period."
-              head={['Supplier', 'Received', 'Share', 'Deliveries']}
-              empty="No deliveries in this period."
-              rows={data.suppliers.rows.map((s: any) => [
-                s.name,
-                money(s.spend),
-                s.share === null ? '—' : s.share.toFixed(1) + '%',
-                s.deliveries,
-              ])}
-            />
-          )}
-
-          {!!data.shifts.rows.length && (
-            <Table
-              title="Shifts and registers"
-              description="Cash differences are shown for every closed shift."
-              head={['Register', 'Cashier', 'Sales', 'Expected', 'Counted', 'Difference']}
-              empty="No shifts in this period."
-              rows={data.shifts.rows
-                .slice(0, 10)
-                .map((s: any) => [
-                  s.register,
-                  s.cashier,
-                  money(s.sales),
-                  s.expected === null ? '—' : money(s.expected),
-                  s.counted === null ? '—' : money(s.counted),
-                  s.difference === null ? (
-                    t('Open')
-                  ) : (
-                    <span className={Number(s.difference) === 0 ? '' : 'delta-bad'}>
-                      {money(s.difference)}
-                    </span>
-                  ),
-                ])}
-            />
-          )}
 
           <section className="panel">
             <div className="panel-heading">
@@ -621,13 +376,6 @@ export function OwnerDashboardPage() {
                 <strong>{data.readiness.uncounted}</strong>
               </div>
             </div>
-            {!!data.unavailable.length && (
-              <ul className="panel-padding muted unavailable-list">
-                {data.unavailable.map((u: any) => (
-                  <li key={u.metric}>{t(u.reason)}</li>
-                ))}
-              </ul>
-            )}
           </section>
 
           {/* Drill-down: the full sales explorer stays available beneath the answers. */}

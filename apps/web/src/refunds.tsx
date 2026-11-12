@@ -101,7 +101,9 @@ export function ReceiptSearch({ context }: { context?: PosContext }) {
                 <Button
                   variant="ghost"
                   onClick={() =>
-                    window.location.assign((context ? '/pos/receipts/' : '/sales/receipts/') + r.id)
+                    window.location.assign(
+                      (context ? '/pos/receipts/' : '/accounting/receipts/') + r.id,
+                    )
                   }
                 >
                   {t('Open receipt ')}
@@ -142,8 +144,8 @@ export function ReceiptDetailPage({
 }) {
   useLanguage();
   const id = window.location.pathname.split('/')[3];
-  const listPath = checkout ? '/pos' : '/sales';
-  const receiptPath = `${listPath}/receipts/${id}`;
+  const listPath = checkout ? '/pos' : '/accounting/sales';
+  const receiptPath = `${checkout ? '/pos' : '/accounting'}/receipts/${id}`;
   const context = useQuery({
     queryKey: ['receipt-checkout-context'],
     queryFn: () => api<PosContext>('/pos/enter', {}),

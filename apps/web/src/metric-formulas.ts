@@ -1,6 +1,6 @@
 import { t } from './i18n';
 
-// Shared explanations for Overview and Analytics; these describe the existing calculations.
+// Shared explanations for Overview and Accounting; these describe the existing calculations.
 const formulas: Record<string, () => string> = {
   Revenue: () => t('Revenue = completed sales after discounts − refunds.'),
   'Cost of goods sold': () =>

@@ -9,7 +9,7 @@ import { ErrorMessage } from './forms';
 import { Dialog } from './components/ui/dialog';
 import { Button } from './components/ui/button';
 import { formatMoney } from './receipts';
-export function SalesPage() {
+export function SalesHistorySection() {
   useLanguage();
   const [page, setPage] = useState(1);
   const query = useQuery({
@@ -17,11 +17,10 @@ export function SalesPage() {
     queryFn: () => api<HistoryPage<Receipt>>('/reports/sales?page=' + page),
   });
   return (
-    <>
+    <section className="accounting-sales" aria-labelledby="sales-history-heading">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">{t('CHECKOUT HISTORY')}</div>
-          <h1>{t('Sales')}</h1>
+          <h2 id="sales-history-heading">{t('Sales history')}</h2>
           <p className="muted">
             {t('Completed receipts with the original prices, tax, and payment details.')}
           </p>
@@ -65,7 +64,7 @@ export function SalesPage() {
                     <td>
                       <Button
                         variant="ghost"
-                        onClick={() => window.location.assign('/sales/receipts/' + r.id)}
+                        onClick={() => window.location.assign('/accounting/receipts/' + r.id)}
                       >
                         {t('View receipt ')}
                       </Button>
@@ -90,7 +89,7 @@ export function SalesPage() {
           />
         )}
       </section>
-    </>
+    </section>
   );
 }
 export function ShiftsPage() {

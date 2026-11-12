@@ -3,6 +3,7 @@ import { metricFormula } from './metric-formulas';
 import { t, useLanguage, getLocale } from './i18n';
 import { AnalyticsCharts } from './analytics';
 import { GrossProfit } from './gross-profit';
+import { AccountingBreakdowns } from './accounting-breakdowns';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api, useSession } from './api';
@@ -76,7 +77,13 @@ export function rowLabel(row: Totals, group: Group, timezone: string) {
     );
   return row.label ?? row.bucket;
 }
-export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group }) {
+export function SalesSummary({
+  initialGroup = 'day',
+  accounting = false,
+}: {
+  initialGroup?: Group;
+  accounting?: boolean;
+}) {
   useLanguage();
   const store = useSession().data!.store;
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -107,9 +114,9 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
     <section
       className="panel panel-padding"
       style={{ marginBottom: 24 }}
-      aria-label={t('Sales summary')}
+      aria-label={t(accounting ? 'Financial summary' : 'Sales summary')}
     >
-      <h2>{t('Sales summary')}</h2>
+      <h2>{t(accounting ? 'Financial summary' : 'Sales summary')}</h2>
       <p className="muted">
         {t('All completed sales in the selected dates, using ')}
         {store.timezone}
@@ -141,7 +148,7 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
         ))}
       </div>
       <form
-        className="form-grid"
+        className="form-grid sales-summary-filters"
         onSubmit={(e) => {
           e.preventDefault();
           setPage(0);
@@ -193,11 +200,6 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
             ))}
           </select>
         </Field>
-        <p className="muted">
-          {t(
-            'Filters combine. Apply a new date range first to load its available shifts and products. ',
-          )}
-        </p>
         <Field label={t('Group sales by')}>
           <select
             value={draft.group}
@@ -217,12 +219,19 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
           {t('Apply filters ')}
         </Button>
       </form>
-      <GrossProfit
-        from={filter.from}
-        to={filter.to}
-        productId={filter.productId}
-        shiftId={filter.shiftId}
-      />
+      <p className="muted sales-summary-filter-note">
+        {t(
+          'Filters combine. Apply a new date range first to load its available shifts and products. ',
+        )}
+      </p>
+      {accounting && (
+        <GrossProfit
+          from={filter.from}
+          to={filter.to}
+          productId={filter.productId}
+          shiftId={filter.shiftId}
+        />
+      )}
       <ErrorMessage error={query.error} />
       {query.isFetching ? (
         <p className="muted">{t('Loading sales totals…')}</p>
@@ -248,35 +257,41 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                   'Amounts are payments collected, excluding change. Tax and discounts are not allocated between payment methods.',
                 )}
             </p>
-            <div className="analytics-sales-metrics">
-              {[
-                ['Sales before refunds', data.totals.total],
-                ['Refunds', data.totals.refunds],
-                ['Sales less refunds', data.totals.net],
-                ['Cash sales', data.totals.cash],
-                ['Card sales', data.totals.card],
-                ['Tax included', data.totals.tax],
-                ['Discounts', data.totals.discount],
-                [
-                  filter.productId ? 'Average per matching receipt' : 'Average basket',
-                  data.totals.average,
-                ],
-              ].map(([label, value]) => (
-                <div className="analytics-sales-metric" key={label} title={metricFormula(label ?? '')}>
-                  <small className="analytics-sales-metric-label">{t(label ?? '')}</small>
+            {accounting && (
+              <div className="analytics-sales-metrics">
+                {[
+                  ['Sales before refunds', data.totals.total],
+                  ['Refunds', data.totals.refunds],
+                  ['Sales less refunds', data.totals.net],
+                  ['Cash sales', data.totals.cash],
+                  ['Card sales', data.totals.card],
+                  ['Tax included', data.totals.tax],
+                  ['Discounts', data.totals.discount],
+                  [
+                    filter.productId ? 'Average per matching receipt' : 'Average basket',
+                    data.totals.average,
+                  ],
+                ].map(([label, value]) => (
+                  <div
+                    className="analytics-sales-metric"
+                    key={label}
+                    title={metricFormula(label ?? '')}
+                  >
+                    <small className="analytics-sales-metric-label">{t(label ?? '')}</small>
+                    <strong className="analytics-sales-metric-value">
+                      {value === null ? t('Not allocated') : formatMoney(value, data.currency)}
+                    </strong>
+                  </div>
+                ))}
+                <div className="analytics-sales-metric">
+                  <small className="analytics-sales-metric-label">{t('Transactions')}</small>
                   <strong className="analytics-sales-metric-value">
-                    {value === null ? t('Not allocated') : formatMoney(value, data.currency)}
+                    {data.totals.transactions}
                   </strong>
                 </div>
-              ))}
-              <div className="analytics-sales-metric">
-                <small className="analytics-sales-metric-label">{t('Transactions')}</small>
-                <strong className="analytics-sales-metric-value">
-                  {data.totals.transactions}
-                </strong>
               </div>
-            </div>
-            <AnalyticsCharts data={data} />
+            )}
+            {!accounting && <AnalyticsCharts data={data} />}
             <h3>{t('Detailed breakdown')}</h3>
             {filter.productId && (
               <p className="muted">
@@ -292,7 +307,7 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                     <th>
                       {filter.group === 'shift'
                         ? t('Cashier / register / shift opened')
-                        : groups[filter.group]}
+                        : t(groups[filter.group])}
                     </th>
                     <th>{t('Transactions')}</th>
                     <th>{t('Sales')}</th>
@@ -302,10 +317,14 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                         : t('Average basket')}
                     </th>
                     {filter.group === 'product' && <th>{t('Quantity sold')}</th>}
-                    <th>{t('Cash sales')}</th>
-                    <th>{t('Card sales')}</th>
-                    <th>{t('Discounts')}</th>
-                    <th>{t('Tax included')}</th>
+                    {accounting && (
+                      <>
+                        <th>{t('Cash sales')}</th>
+                        <th>{t('Card sales')}</th>
+                        <th>{t('Discounts')}</th>
+                        <th>{t('Tax included')}</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -334,9 +353,10 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                           {formatQuantity(r.quantity)} {t(r.unit ?? '')}
                         </td>
                       )}
-                      {[r.cash, r.card, r.discount, r.tax].map((v, i) => (
-                        <td key={i}>{v === null ? '—' : formatMoney(v, data.currency)}</td>
-                      ))}
+                      {accounting &&
+                        [r.cash, r.card, r.discount, r.tax].map((v, i) => (
+                          <td key={i}>{v === null ? '—' : formatMoney(v, data.currency)}</td>
+                        ))}
                     </tr>
                   ))}
                 </tbody>
@@ -360,6 +380,9 @@ export function SalesSummary({ initialGroup = 'day' }: { initialGroup?: Group })
                   {t('Next ')}
                 </Button>
               </div>
+            )}
+            {accounting && !filter.productId && !filter.shiftId && (
+              <AccountingBreakdowns from={filter.from} to={filter.to} />
             )}
             {!data.rows.length && !(filter.group === 'payment' && filter.productId) && (
               <p className="muted">{t('No completed sales in this date range.')}</p>

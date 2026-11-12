@@ -152,6 +152,8 @@ export class OwnerDashboardController {
     return {
       day,today,timezone:store.timezone,currency:store.currency,
       totalSales:totals.grossSales,refunds:fromScaled(toScaled(String(totals.refunds),2),2),
+      transactions: totals.transactions,
+      averageBasket: totals.averageBasket === null ? null : totals.averageBasket.toFixed(2),
       financialSummary:totals.financialSummary,
       comparisonDate,
       hourly:hourly.map((row,index)=>({...row,comparison:previous?.[index].total ?? null})),

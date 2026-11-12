@@ -1099,6 +1099,7 @@ export const onboardingPages = [
   'digital-purchases',
   'ai',
   'analytics',
+  'accounting',
   'action-center',
   'sales',
   'shifts',

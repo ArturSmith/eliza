@@ -145,6 +145,8 @@ describe.sequential('compact store overview', () => {
     const today = storeToday(new Date(), 'Europe/Oslo');
     expect(report.body.day).toBe(today);
     expect(report.body.totalSales).toBe('200.00');
+    expect(report.body.transactions).toBe(1);
+    expect(report.body.averageBasket).toBe('200.00');
     expect(report.body.comparisonDate).toBeNull();
     expect(report.body.hourly.every((h: any) => h.comparison === null)).toBe(true);
     expect(report.body.shifts).toMatchObject({ total: 1, open: 1, closed: 0 });
@@ -185,6 +187,8 @@ describe.sequential('compact store overview', () => {
     expect(old.hourly.every((h: any) => h.elapsed)).toBe(true);
     const empty = (await owner.request('/reports/store-overview?date=2000-01-01')).body;
     expect(empty.totalSales).toBe('0.00');
+    expect(empty.transactions).toBe(0);
+    expect(empty.averageBasket).toBeNull();
     expect(empty.shifts.total).toBe(0);
   });
   it('validates dates and requires analytics access', async () => {

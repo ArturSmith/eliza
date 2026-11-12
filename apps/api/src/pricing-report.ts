@@ -16,11 +16,30 @@ export class PricingReportController {
 
   @Get('pricing-sources') @Require('analytics.margin') async report(
     @Req() req: AuthRequest,
-    @Query('period') input: unknown,
+    @Query() input: unknown,
   ) {
-    const period = parse(z.enum(['today', 'week', 'month']), input);
+    const request = parse(
+      z
+        .object({
+          period: z.enum(['today', 'week', 'month', 'custom']),
+          from: z.iso.date().optional(),
+          to: z.iso.date().optional(),
+        })
+        .refine(
+          (value) => value.period !== 'custom' || Boolean(value.from && value.to),
+          'A custom range needs both dates',
+        )
+        .refine(
+          (value) => !value.from || !value.to || value.from <= value.to,
+          'Start date must not follow end date',
+        ),
+      input,
+    );
     const timezone = req.context.store.timezone;
-    const range = periodRange(period, storeToday(new Date(), timezone));
+    const range =
+      request.period === 'custom'
+        ? { from: request.from!, to: request.to! }
+        : periodRange(request.period, storeToday(new Date(), timezone));
     // Only the descriptive units/discounts are grouped here. Every money/profit
     // figure below is calculated by the same service used by Overview.
     const sources = (

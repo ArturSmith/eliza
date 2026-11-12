@@ -535,15 +535,13 @@ test('analytics combines dates, product and shift filters with charts', async ({
       payment: { method: 'cash', tendered: '150' },
     });
     await page.goto('/analytics');
-    await expect(page.getByRole('heading', { name: 'Dashboard', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Analytics', exact: true })).toBeVisible();
     const summary = page.getByRole('region', { name: 'Sales summary', exact: true });
     await summary.getByLabel('Product filter').selectOption(ids[0]);
     await summary.getByLabel('Shift filter').selectOption(shift.id);
     await summary.getByRole('button', { name: 'Apply filters' }).click();
     await expect(summary).toContainText('NOK 100.00');
-    await expect(page.getByRole('region', { name: 'Gross profit', exact: true })).toContainText(
-      'NOK 90.00',
-    );
+    await expect(page.locator('.analytics-financial')).toHaveCount(0);
     await expect(summary.getByRole('region', { name: 'Best products', exact: true })).toContainText(
       'Analytics tea',
     );
@@ -563,7 +561,7 @@ test('analytics combines dates, product and shift filters with charts', async ({
     );
     await page.screenshot({ path: 'test-results/analytics-mobile.png', fullPage: true });
     await page.goto('/sales');
-    await expect(page.getByRole('heading', { name: 'Sales', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Sales history', exact: true })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Sales summary', exact: true })).toHaveCount(0);
     await page.goto('/shifts');
     await expect(page.getByRole('heading', { name: 'Shifts', exact: true })).toBeVisible();

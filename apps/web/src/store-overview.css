@@ -45,7 +45,7 @@
 }
 .overview-summary {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 .overview-metric {
@@ -171,6 +171,11 @@
 .overview-sales-chart .hour-line-tooltip {
   max-width: calc(100% - 24px);
   white-space: normal;
+}
+@media (max-width: 1000px) {
+  .overview-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 @media (max-width: 700px) {
   .store-overview {

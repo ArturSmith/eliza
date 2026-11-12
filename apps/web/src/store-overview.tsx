@@ -4,7 +4,7 @@ import { CalendarDays, ChevronDown } from 'lucide-react';
 import { addDays, storeToday } from '@eliza/contracts';
 import { api, useSession } from './api';
 import { ErrorMessage } from './forms';
-import { HourlySales, type OverviewFinancialSummary } from './owner-dashboard';
+import { HourlySales } from './owner-dashboard';
 import { metricFormula } from './metric-formulas';
 import { formatMoney } from './receipts';
 import { getLocale, t, useLanguage } from './i18n';
@@ -16,7 +16,8 @@ type OverviewData = {
   totalSales: string;
   refunds: string;
   comparisonDate: string | null;
-  financialSummary: OverviewFinancialSummary;
+  transactions: number;
+  averageBasket: string | null;
   hourly: { hour: string; total: number; comparison: number | null; elapsed: boolean }[];
   shifts: {
     total: number;
@@ -49,36 +50,22 @@ function Metric({
   currency,
   formula,
   note,
-  estimated = false,
-  restricted = false,
+  count = false,
 }: {
   label: string;
   value: string | null;
   currency: string;
   formula: string;
   note: string;
-  estimated?: boolean;
-  restricted?: boolean;
+  count?: boolean;
 }) {
   return (
-    <article
-      className="overview-metric"
-      title={[
-        metricFormula(formula),
-        label === 'Gross profit / margin' ? metricFormula('Gross margin') : null,
-      ]
-        .filter(Boolean)
-        .join('\n')}
-    >
+    <article className="overview-metric" title={metricFormula(formula)}>
       <span className="overview-metric-label">{t(label)}</span>
       <strong
         className={'overview-metric-value' + (value === null ? ' overview-metric-unavailable' : '')}
       >
-        {restricted
-          ? t('Restricted')
-          : value === null
-            ? t('Unavailable')
-            : (estimated ? '≈' : '') + formatMoney(value, currency)}
+        {value === null ? '—' : count ? value : formatMoney(value, currency)}
       </strong>
       <p className="overview-metric-note">{note}</p>
     </article>
@@ -101,12 +88,7 @@ export function StoreOverview() {
     refetchInterval: 60_000,
   });
   const data = report.data;
-  const financial = data?.financialSummary;
   const currency = session.store.currency;
-  const estimated = financial?.estimated;
-  const profit = financial?.grossProfit ?? estimated?.grossProfit ?? null;
-  const margin = financial?.grossMarginPercent ?? estimated?.grossMarginPercent ?? null;
-  const operating = financial?.storeOperatingProfit ?? estimated?.storeOperatingProfit ?? null;
   const time = (value: string) =>
     new Intl.DateTimeFormat(getLocale(), {
       timeZone: session.store.timezone,
@@ -169,10 +151,9 @@ export function StoreOverview() {
       ) : report.error ? (
         <ErrorMessage error={report.error} />
       ) : (
-        data &&
-        financial && (
+        data && (
           <>
-            <section className="overview-summary" aria-label={t('Store profitability')}>
+            <section className="overview-summary" aria-label={t('Daily sales overview')}>
               <Metric
                 label="Total sales"
                 value={data.totalSales}
@@ -187,40 +168,19 @@ export function StoreOverview() {
                 }
               />
               <Metric
-                label="Gross profit / margin"
-                value={profit}
+                label="Transactions"
+                value={String(data.transactions)}
                 currency={currency}
-                formula="Gross profit"
-                estimated={financial.grossProfit === null && profit !== null}
-                restricted={!financial.permissions.margin}
-                note={
-                  !financial.permissions.margin
-                    ? t('Restricted')
-                    : margin === null
-                      ? t('Gross margin unavailable')
-                      : t('{value}% gross margin', { value: Number(margin).toFixed(1) })
-                }
+                formula="Transactions"
+                count
+                note={t('Completed receipts')}
               />
               <Metric
-                label="Operating profit"
-                value={operating}
+                label="Average basket"
+                value={data.averageBasket}
                 currency={currency}
-                formula="Store operating profit"
-                estimated={financial.storeOperatingProfit === null && operating !== null}
-                restricted={!financial.permissions.margin || !financial.permissions.expenses}
-                note={
-                  day === today && data.shifts.open > 0
-                    ? t('Provisional estimate')
-                    : t('Based on recorded costs and expenses')
-                }
-              />
-              <Metric
-                label="Expenses"
-                value={financial.operatingExpenses}
-                currency={currency}
-                formula="Operating expenses"
-                restricted={!financial.permissions.expenses}
-                note={t('Allocated to this day')}
+                formula="Average basket"
+                note={t('Per completed receipt')}
               />
             </section>
             <section className="panel overview-shifts" aria-labelledby="overview-shifts-heading">

@@ -26,7 +26,6 @@ import {
   Package,
   PackagePlus,
   Plus,
-  Receipt,
   ScrollText,
   Search,
   Settings,
@@ -70,7 +69,6 @@ const navGroups = [
   {
     label: 'Sales',
     items: [
-      { to: '/sales', label: 'Sales', icon: Receipt, permission: 'sales.read' },
       { to: '/analytics', label: 'Analytics', icon: Activity, permission: 'analytics.view' },
       {
         to: '/action-center',
@@ -78,8 +76,14 @@ const navGroups = [
         icon: ListChecks,
         permission: 'analytics.view',
       },
-      { to: '/expenses', label: 'Expenses', icon: ScrollText, permission: 'expenses.read' },
       { to: '/shifts', label: 'Shifts', icon: Clock3, permission: 'sales.read' },
+    ],
+  },
+  {
+    label: 'Finance',
+    items: [
+      { to: '/accounting', label: 'Accounting', icon: ScrollText, permission: 'analytics.margin' },
+      { to: '/expenses', label: 'Expenses', icon: ScrollText, permission: 'expenses.read' },
     ],
   },
   {
@@ -264,15 +268,24 @@ export function Shell() {
   const advancedHidden = !isFeatureVisible(location.pathname, store.advancedFeaturesEnabled);
   const canVisit = (item: { to: string; permission: Permission }) =>
     isFeatureVisible(item.to, store.advancedFeaturesEnabled) &&
-    (item.to === '/promotions'
-      ? canOpenPromotions(user.permissions)
-      : item.to === '/purchases'
-        ? user.permissions.includes('purchases.read') || user.permissions.includes('suppliers.read')
-        : user.permissions.includes(item.permission));
+    (item.to === '/accounting'
+      ? user.permissions.includes('sales.read') ||
+        (user.permissions.includes('analytics.view') &&
+          user.permissions.includes('analytics.margin') &&
+          user.permissions.includes('expenses.read'))
+      : item.to === '/promotions'
+        ? canOpenPromotions(user.permissions)
+        : item.to === '/purchases'
+          ? user.permissions.includes('purchases.read') ||
+            user.permissions.includes('suppliers.read')
+          : user.permissions.includes(item.permission));
   const current = nav.find(
     (n) =>
       n.to === location.pathname ||
-      ((n.to === '/products' || n.to === '/inventory' || n.to === '/purchases') &&
+      ((n.to === '/products' ||
+        n.to === '/inventory' ||
+        n.to === '/purchases' ||
+        n.to === '/accounting') &&
         location.pathname.startsWith(n.to + '/')) ||
       (n.to === '/purchases' && location.pathname.startsWith('/suppliers')),
   );
