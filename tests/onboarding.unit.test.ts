@@ -17,6 +17,7 @@ describe('page walkthrough definitions', () => {
     expect(onboardingPage('/')).toBe('overview');
     expect(onboardingPage('/pos/receipts/abc/refund')).toBe('refund');
     expect(onboardingPage('/sales/receipts/abc')).toBe('receipt');
+    expect(onboardingPage('/accounting/expenses')).toBe('expenses');
     expect(onboardingPage('/unknown')).toBeNull();
   });
   it('keeps the card inside narrow and short viewports', () => {

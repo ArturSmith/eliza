@@ -249,7 +249,7 @@ test('Accounting owns financial results while Overview and Analytics show operat
   await page.reload();
   await expect(page.getByRole('heading', { name: 'Бухгалтерия', exact: true })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Финансовая сводка', exact: true })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Учёт расходов', exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'Расходы', exact: true })).toBeVisible();
   expect(await (await page.request.get(canonicalPath)).json()).toEqual(canonical);
 
   // A cashier without sales.read still cannot enter management receipt history or financial reporting.

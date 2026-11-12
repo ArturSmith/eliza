@@ -86,3 +86,16 @@
 .accounting-sales .table-scroll {
   max-width: 100%;
 }
+
+.accounting-expenses {
+  min-width: 0;
+}
+.accounting-expenses > .page-heading h2 {
+  font-size: 22px;
+}
+.accounting-expenses .expenses-summary {
+  flex-wrap: wrap;
+}
+.accounting-expenses .expenses-summary > div {
+  min-width: 0;
+}

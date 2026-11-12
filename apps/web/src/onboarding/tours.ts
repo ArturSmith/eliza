@@ -547,6 +547,7 @@ export function onboardingPage(pathname: string): OnboardingPage | null {
   if (/^\/(pos|sales|accounting)\/receipts\/[^/]+\/refund\/?$/.test(pathname)) return 'refund';
   if (/^\/(pos|sales|accounting)\/receipts\/[^/]+\/?$/.test(pathname)) return 'receipt';
   if (/^\/accounting\/sales\/?$/.test(pathname)) return 'sales';
+  if (/^\/accounting\/expenses\/?$/.test(pathname)) return 'expenses';
   const key = pathname.replace(/^\/|\/$/g, '') || 'overview';
   return Object.hasOwn(pageTours, key) ? (key as OnboardingPage) : null;
 }

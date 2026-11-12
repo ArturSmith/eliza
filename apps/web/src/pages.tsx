@@ -83,7 +83,6 @@ const navGroups = [
     label: 'Finance',
     items: [
       { to: '/accounting', label: 'Accounting', icon: ScrollText, permission: 'analytics.margin' },
-      { to: '/expenses', label: 'Expenses', icon: ScrollText, permission: 'expenses.read' },
     ],
   },
   {
@@ -270,6 +269,7 @@ export function Shell() {
     isFeatureVisible(item.to, store.advancedFeaturesEnabled) &&
     (item.to === '/accounting'
       ? user.permissions.includes('sales.read') ||
+        user.permissions.includes('expenses.read') ||
         (user.permissions.includes('analytics.view') &&
           user.permissions.includes('analytics.margin') &&
           user.permissions.includes('expenses.read'))

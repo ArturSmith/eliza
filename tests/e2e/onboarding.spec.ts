@@ -120,7 +120,7 @@ test('page walkthroughs support navigation, completion, replay, mobile and cross
       '/devices',
       '/settings',
       '/store-layout',
-      '/expenses',
+      '/accounting/expenses',
       '/promotions',
     ]) {
       await otherPage.goto(path);

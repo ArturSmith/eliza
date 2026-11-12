@@ -27,7 +27,7 @@ function localDate(timezone: string) {
   const part = (name: string) => parts.find((p) => p.type === name)!.value;
   return `${part('year')}-${part('month')}-${part('day')}`;
 }
-export function ExpensesPage() {
+export function ExpensesSection() {
   useLanguage();
   const session = useSession();
   const today = localDate(session.data?.store.timezone ?? 'UTC');
@@ -60,11 +60,10 @@ export function ExpensesPage() {
     },
   });
   return (
-    <>
+    <section className="accounting-expenses" aria-labelledby="expenses-heading">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">{t('SHOP COSTS')}</div>
-          <h1>{t('Expenses')}</h1>
+          <h2 id="expenses-heading">{t('Expenses')}</h2>
           <p className="muted">
             {t('Record operating costs and review where your shop spends money.')}
           </p>
@@ -226,7 +225,7 @@ export function ExpensesPage() {
           </Button>
         </div>
       </Dialog>
-    </>
+    </section>
   );
 }
 function ExpenseForm({
