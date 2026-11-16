@@ -227,7 +227,7 @@ export function Shell() {
   useLanguage();
   const status = useQuery({
     queryKey: ['setup'],
-    queryFn: () => api<{ needsSetup: boolean }>('/auth/status'),
+    queryFn: () => api<{ needsSetup: boolean; registrationEnabled: boolean }>('/auth/status'),
   });
   const session = useSession();
   const [mobile, setMobile] = useState(false);
@@ -250,12 +250,19 @@ export function Shell() {
         <Button onClick={() => void refresh()}>{t('Try again')}</Button>
       </div>
     );
-  if (status.data?.needsSetup) return <AuthForm setup />;
+  if (status.data?.needsSetup)
+    return (
+      <AuthForm
+        setup
+        registration={status.data.registrationEnabled}
+        canRegister={status.data.registrationEnabled}
+      />
+    );
   if (session.error instanceof ApiError && session.error.status === 401)
-    return <AuthForm setup={false} />;
+    return <AuthForm setup={false} canRegister={status.data?.registrationEnabled} />;
   if (!session.data) {
     if (session.error instanceof ApiError && session.error.status === 401)
-      return <AuthForm setup={false} />;
+      return <AuthForm setup={false} canRegister={status.data?.registrationEnabled} />;
     return (
       <div className="connection-error">
         <ErrorMessage error={session.error} />

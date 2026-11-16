@@ -67,6 +67,7 @@ import { DigitalPurchasesPage } from './digital-purchases';
 import { TeamManagementPage } from './team';
 import { OwnerDashboardPage } from './owner-dashboard';
 import { AccountingPage } from './accounting';
+import { AuthEntryPage } from './auth-pages';
 import { StoreLayoutPage } from './store-layout';
 import { ActionCenterPage } from './action-center';
 import { PriceTagsPage } from './price-tags';
@@ -85,10 +86,12 @@ function LegacyDocumentsRedirect() {
 function Root() {
   useLanguage();
   const location = useLocation();
+  const publicAuth = location.pathname === '/register' || location.pathname === '/login';
   const environment = useQuery({
     queryKey: ['device-environment'],
     queryFn: () => api<{ type: string }>('/auth/device-environment'),
     enabled:
+      !publicAuth &&
       !location.pathname.startsWith('/pos/') &&
       location.pathname !== '/pos' &&
       location.pathname !== '/price-tags' &&
@@ -96,13 +99,14 @@ function Root() {
       location.pathname !== '/management-access',
   });
   React.useEffect(() => {
-    if (location.pathname === '/management-access') return;
+    if (publicAuth || location.pathname === '/management-access') return;
     if (location.pathname.startsWith('/pos/')) return;
     if (environment.data?.type === 'pos') window.location.replace('/pos');
     if (environment.data?.type === 'price_tags') window.location.replace('/price-tags');
     if (environment.data?.type === 'price_check') window.location.replace('/price-check');
-  }, [environment.data?.type, location.pathname]);
+  }, [environment.data?.type, location.pathname, publicAuth]);
   if (
+    !publicAuth &&
     !location.pathname.startsWith('/pos/') &&
     location.pathname !== '/pos' &&
     location.pathname !== '/price-tags' &&
@@ -116,7 +120,8 @@ function Root() {
     return <div className="loading">{t('Loading…')}</div>;
   return (
     <>
-      {location.pathname === '/pos' ||
+      {publicAuth ||
+      location.pathname === '/pos' ||
       location.pathname.startsWith('/pos/') ||
       location.pathname === '/price-tags' ||
       location.pathname === '/price-check' ||
@@ -138,6 +143,12 @@ const root = createRootRoute({
   ),
 });
 const routes = [
+  createRoute({
+    getParentRoute: () => root,
+    path: '/register',
+    component: () => <AuthEntryPage register />,
+  }),
+  createRoute({ getParentRoute: () => root, path: '/login', component: AuthEntryPage }),
   createRoute({ getParentRoute: () => root, path: '/replenishment', component: ReplenishmentPage }),
   createRoute({
     getParentRoute: () => root,

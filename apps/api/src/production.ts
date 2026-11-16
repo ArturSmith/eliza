@@ -38,3 +38,8 @@ export function setupAuthorized(value: unknown) {
     b = Buffer.from(expected);
   return a.length === b.length && timingSafeEqual(a, b);
 }
+
+/** Self-registration is opt-in and unavailable in isolated desktop installs. */
+export function registrationEnabled() {
+  return process.env.ALLOW_REGISTRATION === 'true' && process.env.ELIZA_DESKTOP !== 'true';
+}

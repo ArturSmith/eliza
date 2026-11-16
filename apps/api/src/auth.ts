@@ -19,7 +19,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { Request, Response } from 'express';
 import { loginSchema, permissions, setupSchema, cashierPermissions } from '@eliza/contracts';
 import { Database } from './database.js';
-import { setupAuthorized } from './production.js';
+import { setupAuthorized, registrationEnabled } from './production.js';
 import {
   AccessGuard,
   type AuthRequest,
@@ -48,54 +48,84 @@ export class AuthService {
       throw new HttpException('Too many attempts. Try again in ten minutes.', 429);
   }
   async setup(input: unknown) {
-    const body = parse(setupSchema, input);
+    return this.createOwner(parse(setupSchema, input), true);
+  }
+  async register(input: unknown) {
+    if (!registrationEnabled())
+      throw new ForbiddenException('Store registration is currently disabled.');
+    return this.createOwner(parse(setupSchema, input), false);
+  }
+  private async createOwner(body: ReturnType<typeof setupSchema.parse>, bootstrap: boolean) {
     const encoded = await passwordHash(body.password);
-    return this.database.db.transaction(async (tx) => {
-      await tx.execute(sql`SELECT pg_advisory_xact_lock(734101)`);
-      if ((await tx.select().from(organizations).limit(1)).length)
-        throw new ConflictException('This application has already been set up. Please sign in.');
-      const [org] = await tx.insert(organizations).values({ name: body.storeName }).returning();
-      const [store] = await tx
-        .insert(stores)
-        .values({
-          organizationId: org.id,
-          name: body.storeName,
-          currency: body.currency,
-          timezone: body.timezone,
-        })
-        .returning();
-      const [ownerRole] = await tx
-        .insert(roles)
-        .values({ storeId: store.id, name: 'Owner', permissions: [...permissions] })
-        .returning();
-      const [generalRole] = await tx
-        .insert(roles)
-        .values({ storeId: store.id, name: 'General employee', permissions: [] })
-        .returning();
-      await tx.insert(roles).values([
-        {
-          storeId: store.id,
-          name: 'Manager',
-          permissions: permissions.filter((p) => !['settings.manage', 'team.manage'].includes(p)),
-        },
-        { storeId: store.id, name: 'Cashier', permissions: cashierPermissions },
-      ]);
-      const [owner] = await tx
-        .insert(employees)
-        .values({
-          storeId: store.id,
-          roleId: ownerRole.id,
-          name: body.ownerName,
-          employeeCode: 'OWNER',
-          email: body.email,
-          passwordHash: encoded,
-        })
-        .returning();
-      await tx.execute(
-        sql`INSERT INTO employee_roles(employee_id,role_id,store_id) VALUES(${owner.id},${ownerRole.id},${store.id}),(${owner.id},${generalRole.id},${store.id})`,
-      );
-      return { id: owner.id, storeId: store.id };
-    });
+    try {
+      return await this.database.db.transaction(async (tx) => {
+        if (bootstrap) {
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(734101)`);
+          if ((await tx.select().from(organizations).limit(1)).length)
+            throw new ConflictException(
+              'This application has already been set up. Please sign in.',
+            );
+        }
+        const existing = await tx
+          .select({ id: employees.id })
+          .from(employees)
+          .where(sql`lower(${employees.email}) = ${body.email}`)
+          .limit(1);
+        if (existing.length)
+          throw new ConflictException('An account with this email already exists. Please sign in.');
+        const [org] = await tx.insert(organizations).values({ name: body.storeName }).returning();
+        const [store] = await tx
+          .insert(stores)
+          .values({
+            organizationId: org.id,
+            name: body.storeName,
+            currency: body.currency,
+            timezone: body.timezone,
+          })
+          .returning();
+        const [ownerRole] = await tx
+          .insert(roles)
+          .values({ storeId: store.id, name: 'Owner', permissions: [...permissions] })
+          .returning();
+        const [generalRole] = await tx
+          .insert(roles)
+          .values({ storeId: store.id, name: 'General employee', permissions: [] })
+          .returning();
+        await tx.insert(roles).values([
+          {
+            storeId: store.id,
+            name: 'Manager',
+            permissions: permissions.filter((p) => !['settings.manage', 'team.manage'].includes(p)),
+          },
+          { storeId: store.id, name: 'Cashier', permissions: cashierPermissions },
+        ]);
+        const [owner] = await tx
+          .insert(employees)
+          .values({
+            storeId: store.id,
+            roleId: ownerRole.id,
+            name: body.ownerName,
+            employeeCode: 'OWNER',
+            email: body.email,
+            passwordHash: encoded,
+          })
+          .returning();
+        await tx.execute(
+          sql`INSERT INTO employee_roles(employee_id,role_id,store_id) VALUES(${owner.id},${ownerRole.id},${store.id}),(${owner.id},${generalRole.id},${store.id})`,
+        );
+        return { id: owner.id, storeId: store.id };
+      });
+    } catch (error) {
+      const failure = error as {
+        code?: string;
+        constraint?: string;
+        cause?: { code?: string; constraint?: string };
+      };
+      const duplicate = failure.cause ?? failure;
+      if (duplicate.code === '23505' && duplicate.constraint === 'employees_email_key')
+        throw new ConflictException('An account with this email already exists. Please sign in.');
+      throw error;
+    }
   }
   async login(input: unknown) {
     const body = parse(loginSchema, input);
@@ -174,7 +204,11 @@ export class AuthService {
         deviceId: device.id,
         expiresAt: new Date(Date.now() + 12 * 3600_000),
       });
-      return { device, isNew: !existing };
+      return {
+        device,
+        isNew: !existing,
+        clearWorkspace: !existing || Boolean(registerToken && !registerDevice.length),
+      };
     });
     const options = {
       httpOnly: true,
@@ -190,6 +224,11 @@ export class AuthService {
         ...options,
         maxAge: 365 * 86400_000,
       });
+    if (device.clearWorkspace) {
+      res.clearCookie('eliza_register', { path: '/api' });
+      res.clearCookie('eliza_pos_session', { path: '/api' });
+      res.clearCookie('eliza_price_tags_session', { path: '/api' });
+    }
     return { ok: true };
   }
 }
@@ -212,6 +251,7 @@ export class AuthController {
   }
   @Get('status') async status() {
     return {
+      registrationEnabled: registrationEnabled(),
       needsSetup:
         (await this.database.db.select({ id: organizations.id }).from(organizations).limit(1))
           .length === 0,
@@ -228,6 +268,15 @@ export class AuthController {
         'A valid setup token is required. Contact the deployment administrator.',
       );
     const user = await this.auth.setup(body);
+    return this.auth.issue(user, req, res);
+  }
+  @Post('register') async register(
+    @Body() body: unknown,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    await this.auth.limit(req.ip ?? 'local');
+    const user = await this.auth.register(body);
     return this.auth.issue(user, req, res);
   }
   @Post('login') @HttpCode(200) async login(

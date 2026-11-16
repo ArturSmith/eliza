@@ -77,17 +77,25 @@ function values(e: FormEvent<HTMLFormElement>) {
   e.preventDefault();
   return Object.fromEntries(new FormData(e.currentTarget));
 }
-export function AuthForm({ setup }: { setup: boolean }) {
+export function AuthForm({
+  setup,
+  registration = false,
+  canRegister = false,
+}: {
+  setup: boolean;
+  registration?: boolean;
+  canRegister?: boolean;
+}) {
   useLanguage();
   const [setupToken, setSetupToken] = useState('');
   const [error, setError] = useState<unknown>(null);
   const mutation = useMutation({
     mutationFn: (body: unknown) =>
       api(
-        `/auth/${setup ? 'setup' : 'login'}`,
+        `/auth/${registration ? 'register' : setup ? 'setup' : 'login'}`,
         body,
         'POST',
-        setup ? { 'X-Eliza-Setup-Token': setupToken } : {},
+        setup && !registration ? { 'X-Eliza-Setup-Token': setupToken } : {},
       ),
     onSuccess: () => {
       queryClient.clear();
@@ -155,19 +163,21 @@ export function AuthForm({ setup }: { setup: boolean }) {
           <form onSubmit={submit}>
             {setup && (
               <>
-                <Field
-                  label={t('Setup token')}
-                  hint={t(
-                    'For a hosted installation, enter the token supplied by your administrator. Leave blank for local development.',
-                  )}
-                >
-                  <input
-                    type="password"
-                    value={setupToken}
-                    onChange={(event) => setSetupToken(event.target.value)}
-                    autoComplete="off"
-                  />
-                </Field>
+                {!registration && (
+                  <Field
+                    label={t('Setup token')}
+                    hint={t(
+                      'For a hosted installation, enter the token supplied by your administrator. Leave blank for local development.',
+                    )}
+                  >
+                    <input
+                      type="password"
+                      value={setupToken}
+                      onChange={(event) => setSetupToken(event.target.value)}
+                      autoComplete="off"
+                    />
+                  </Field>
+                )}
                 <Field label={t('Store name')}>
                   <input
                     name="storeName"
@@ -201,7 +211,9 @@ export function AuthForm({ setup }: { setup: boolean }) {
               label={t('Password')}
               hint={
                 setup
-                  ? t('At least 12 characters. This account is created on your local server.')
+                  ? registration
+                    ? t('At least 12 characters. Use a unique password for your store account.')
+                    : t('At least 12 characters. This account is created on your local server.')
                   : undefined
               }
             >
@@ -234,6 +246,13 @@ export function AuthForm({ setup }: { setup: boolean }) {
               <ArrowRight size={17} />
             </Button>
           </form>
+          {(registration || canRegister) && (
+            <p className="auth-foot">
+              <a className="text-link" href={setup ? '/login' : '/register'}>
+                {setup ? t('Already have an account? Sign in') : t('Create a store account')}
+              </a>
+            </p>
+          )}
           <p className="auth-foot">
             {setup
               ? t('You can start adding products right away.')

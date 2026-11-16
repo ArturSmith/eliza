@@ -51,3 +51,7 @@ Imported fields retain source barcode, brand, package size and image provenance.
 ## Optional purchase document assistant
 
 Set `OPENAI_API_KEY` on the backend service and redeploy/restart it. `OPENAI_MODEL` is optional (default `gpt-4o-mini`). Keep these variables out of the frontend. See [Purchase document assistant](purchase-document-assistant.md) for supported files, limits, review workflow and the deployment smoke test.
+
+## Independent owner registration
+
+Hosted registration remains off unless `ALLOW_REGISTRATION=true` is explicitly configured. Enable it on the API service and redeploy to expose `/register` and the login-page registration link. Each owner receives a separate organization/store; existing data is retained. Remove or disable the flag to close registration. The protected one-time setup endpoint remains separate. See [owner registration](owner-registration.md).

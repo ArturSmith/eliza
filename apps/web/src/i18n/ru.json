@@ -2595,5 +2595,10 @@
   "Profitability by category": "Рентабельность по категориям",
   "Profitability by product": "Рентабельность по товарам",
   "Sales history": "История продаж",
-  "Accounting sections": "Разделы бухгалтерии"
+  "Accounting sections": "Разделы бухгалтерии",
+  "At least 12 characters. Use a unique password for your store account.": "Не менее 12 символов. Используйте уникальный пароль для аккаунта магазина.",
+  "Already have an account? Sign in": "Уже есть аккаунт? Войти",
+  "Create a store account": "Создать аккаунт владельца",
+  "Store registration is currently disabled.": "Регистрация новых магазинов сейчас отключена.",
+  "An account with this email already exists. Please sign in.": "Аккаунт с этим email уже существует. Войдите в него."
 }
