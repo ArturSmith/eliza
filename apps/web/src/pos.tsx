@@ -77,6 +77,7 @@ const draftLine = z.object({
 const loyaltyDraft = z.object({
   id: z.uuid(),
   code: z.string(),
+  mode: z.enum(['collect', 'spend']).optional(),
   balance: z.string().regex(/^-?\d{1,12}(\.\d{1,2})?$/),
   maxPoints: money.optional(),
   earnPercent: money,
@@ -660,6 +661,8 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     ),
     taxRate: l.product.taxRate,
   }));
+  const selectedLoyaltyMode =
+    draft.loyalty?.mode ?? (draft.loyalty?.maxPoints ? 'spend' : 'collect');
   const loyaltyPreview = draft.loyalty
     ? applyLoyaltyDiscount(pricedLines, draft.loyalty)
     : undefined;
@@ -673,12 +676,14 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     { subtotal: 0n, discount: 0n, tax: 0n, total: 0n },
   );
   const [loyaltyCode, setLoyaltyCode] = useState('');
+  const [loyaltyCandidate, setLoyaltyCandidate] = useState<LoyaltyMember | null>(null);
   const resolveLoyalty = useMutation({
     mutationFn: (code: string) => api<LoyaltyMember>('/pos/loyalty/resolve', { code }),
     onSuccess: (member) => {
-      setDraft((d) => ({ ...d, loyalty: member }));
+      setLoyaltyCandidate(member);
       setLoyaltyCode('');
-      setModal(null);
+      setMessage('');
+      setModal('loyalty');
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : String(error)),
   });
@@ -898,7 +903,14 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         ...(l.product.markdownUnitId ? { markdownUnitId: l.product.markdownUnitId } : {}),
       })),
       discountPercent: '0',
-      ...(draft.loyalty ? { loyalty: { code: draft.loyalty.code } } : {}),
+      ...(draft.loyalty
+        ? {
+            loyalty: {
+              code: draft.loyalty.code,
+              ...(draft.loyalty.mode ? { mode: draft.loyalty.mode } : {}),
+            },
+          }
+        : {}),
       payment: { method, tendered: method === 'card' ? total : tendered },
     };
     const parsed = saleSchema.safeParse({ ...payload, approval: approvalFrom(data) });
@@ -1241,26 +1253,74 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
           <div className="cart-bottom">
             <div className="pos-loyalty">
               {draft.loyalty ? (
-                <div>
-                  <strong>{draft.loyalty.programName}</strong>
+                <div className="pos-loyalty-member">
+                  <div className="pos-loyalty-heading">
+                    <strong>{draft.loyalty.programName}</strong>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={frozen}
+                      onClick={() => setDraft((d) => ({ ...d, loyalty: undefined }))}
+                    >
+                      {t('Remove')}
+                    </Button>
+                  </div>
+                  <div className="pos-loyalty-balance">
+                    <span>{t('Bonus balance')}</span>
+                    <strong>{formatQuantity(draft.loyalty.balance)}</strong>
+                  </div>
+                  <div className="pos-loyalty-options" role="group" aria-label={t('Bonus action')}>
+                    <Button
+                      variant={selectedLoyaltyMode !== 'spend' ? 'default' : 'outline'}
+                      aria-pressed={selectedLoyaltyMode !== 'spend'}
+                      disabled={frozen}
+                      onClick={() =>
+                        setDraft((d) => ({
+                          ...d,
+                          loyalty: d.loyalty ? { ...d.loyalty, mode: 'collect' } : undefined,
+                        }))
+                      }
+                    >
+                      {t('Collect')}
+                    </Button>
+                    <Button
+                      variant={selectedLoyaltyMode === 'spend' ? 'default' : 'outline'}
+                      aria-pressed={selectedLoyaltyMode === 'spend'}
+                      disabled={frozen || toScaled(draft.loyalty.balance, 2) <= 0n}
+                      onClick={() =>
+                        setDraft((d) => ({
+                          ...d,
+                          loyalty: d.loyalty ? { ...d.loyalty, mode: 'spend' } : undefined,
+                        }))
+                      }
+                    >
+                      {t('Spend')}
+                    </Button>
+                  </div>
                   <small>
-                    {t('Bonuses earned')}: {loyaltyPreview?.earned ?? '0'} · {t('Bonuses used')}:{' '}
-                    {loyaltyPreview?.spent ?? '0'}
+                    {selectedLoyaltyMode === 'spend' ? t('Bonuses used') : t('Bonuses earned')}:{' '}
+                    {formatQuantity(
+                      selectedLoyaltyMode === 'spend'
+                        ? (loyaltyPreview?.spent ?? '0')
+                        : (loyaltyPreview?.earned ?? '0'),
+                    )}
                   </small>
                 </div>
               ) : (
-                <span>{t('Customer loyalty')}</span>
+                <>
+                  <span>{t('Customer loyalty')}</span>
+                  <Button
+                    variant="outline"
+                    disabled={frozen}
+                    onClick={() => {
+                      setLoyaltyCandidate(null);
+                      setModal('loyalty');
+                    }}
+                  >
+                    {t('Scan loyalty card')}
+                  </Button>
+                </>
               )}
-              <Button
-                variant="outline"
-                disabled={frozen}
-                onClick={() => {
-                  if (draft.loyalty) setDraft((d) => ({ ...d, loyalty: undefined }));
-                  else setModal('loyalty');
-                }}
-              >
-                {draft.loyalty ? t('Remove') : t('Scan loyalty card')}
-              </Button>
             </div>
             <div className="cart-tools">
               <Button
@@ -1310,12 +1370,16 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
               onClick={() => {
                 setMessage('');
                 setMethod(draft.pending?.payment.method ?? 'cash');
-                setTendered(draft.pending?.payment.tendered ?? '');
+                setTendered(draft.pending?.payment.tendered ?? (totals.total === 0n ? '0' : ''));
                 setModal('payment');
               }}
             >
               <Banknote size={18} />
-              {draft.pending ? t('Recover payment') : t('Take payment')}
+              {draft.pending
+                ? t('Recover payment')
+                : totals.total === 0n
+                  ? t('Complete sale')
+                  : t('Take payment')}
               <ArrowRight size={18} />
             </Button>
             <p className="cart-footnote">{t('Prices include each product’s configured tax.')}</p>
@@ -1515,32 +1579,75 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       </Dialog>
       <Dialog
         open={modal === 'loyalty'}
-        title={t('Scan loyalty card')}
-        description={t('Scan the customer membership card or a single-use bonus authorization.')}
+        title={t(loyaltyCandidate ? 'Collect or spend bonuses?' : 'Scan loyalty card')}
+        description={t('Ask the customer whether to collect or spend bonuses.')}
         onOpenChange={(open) => {
-          if (!open) setModal(null);
+          if (!open) {
+            setModal(null);
+            setLoyaltyCandidate(null);
+          }
         }}
       >
-        <form
-          className="pos-loyalty-input"
-          onSubmit={(e) => {
-            e.preventDefault();
-            resolveLoyalty.mutate(loyaltyCode.trim());
-          }}
-        >
-          <Field label={t('Membership or bonus authorization QR')}>
-            <input
-              autoFocus
-              value={loyaltyCode}
-              onChange={(e) => setLoyaltyCode(e.target.value)}
-              required
-              autoComplete="off"
-            />
-          </Field>
-          <CameraBarcodeScanner onScan={(code) => resolveLoyalty.mutate(code)} />
-          <ErrorMessage error={resolveLoyalty.error} />
-          <Button disabled={resolveLoyalty.isPending}>{t('Attach customer')}</Button>
-        </form>
+        {loyaltyCandidate ? (
+          <div className="pos-loyalty-choice">
+            <p>{loyaltyCandidate.programName}</p>
+            <div className="pos-loyalty-balance">
+              <span>{t('Bonus balance')}</span>
+              <strong>{formatQuantity(loyaltyCandidate.balance)}</strong>
+            </div>
+            <p className="muted">
+              {t(
+                'Collect earns bonuses. Spend uses available bonuses up to the purchase total and earns no new bonuses.',
+              )}
+            </p>
+            <div className="pos-loyalty-options">
+              <Button
+                onClick={() => {
+                  setDraft((d) => ({ ...d, loyalty: { ...loyaltyCandidate, mode: 'collect' } }));
+                  setLoyaltyCandidate(null);
+                  setModal(null);
+                }}
+              >
+                {t('Collect')}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={toScaled(loyaltyCandidate.balance, 2) <= 0n}
+                onClick={() => {
+                  setDraft((d) => ({ ...d, loyalty: { ...loyaltyCandidate, mode: 'spend' } }));
+                  setLoyaltyCandidate(null);
+                  setModal(null);
+                }}
+              >
+                {t('Spend')}
+              </Button>
+            </div>
+            <Button variant="ghost" onClick={() => setLoyaltyCandidate(null)}>
+              {t('Scan another card')}
+            </Button>
+          </div>
+        ) : (
+          <form
+            className="pos-loyalty-input"
+            onSubmit={(e) => {
+              e.preventDefault();
+              resolveLoyalty.mutate(loyaltyCode.trim());
+            }}
+          >
+            <Field label={t('Customer QR code')}>
+              <input
+                autoFocus
+                value={loyaltyCode}
+                onChange={(e) => setLoyaltyCode(e.target.value)}
+                required
+                autoComplete="off"
+              />
+            </Field>
+            <CameraBarcodeScanner onScan={(code) => resolveLoyalty.mutate(code)} />
+            <ErrorMessage error={resolveLoyalty.error} />
+            <Button disabled={resolveLoyalty.isPending}>{t('Find customer')}</Button>
+          </form>
+        )}
       </Dialog>
       <Dialog
         open={!!receipt}

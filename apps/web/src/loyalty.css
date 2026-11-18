@@ -146,3 +146,39 @@
     min-height: 0;
   }
 }
+
+.pos-loyalty-member {
+  width: 100%;
+  display: grid;
+  gap: 12px;
+}
+.pos-loyalty-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.pos-loyalty-balance {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+.pos-loyalty-balance > strong {
+  font-size: 25px;
+}
+.pos-loyalty-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.pos-loyalty-choice {
+  display: grid;
+  gap: 20px;
+  margin-top: 22px;
+}
+.pos-loyalty-choice .pos-loyalty-balance {
+  padding: 20px;
+  border-radius: 14px;
+  background: var(--color-background-f6f8f1);
+}

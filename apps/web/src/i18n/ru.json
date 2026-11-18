@@ -2643,5 +2643,17 @@
   "The campaign changed or is unavailable. Reload and try again.": "Кампания изменилась или недоступна. Обновите страницу и повторите.",
   "Campaign end must follow its start": "Окончание кампании должно быть позже её начала",
   "Not enough available bonuses.": "Недостаточно доступных бонусов.",
-  "Members": "Участники"
+  "Members": "Участники",
+  "Collect": "Накопить",
+  "Spend": "Списать",
+  "Bonus action": "Действие с бонусами",
+  "Collect or spend bonuses?": "Накопить или списать бонусы?",
+  "Ask the customer whether to collect or spend bonuses.": "Спросите покупателя, хочет ли он накопить или списать бонусы.",
+  "Collect earns bonuses. Spend uses available bonuses up to the purchase total and earns no new bonuses.": "«Накопить» начисляет бонусы. «Списать» использует бонусы в пределах баланса и суммы покупки без начисления новых.",
+  "Scan another card": "Сканировать другую карту",
+  "Customer QR code": "QR-код покупателя",
+  "Find customer": "Найти покупателя",
+  "No bonuses are available. Scan the card again and choose Collect.": "Нет доступных бонусов. Отсканируйте карту снова и выберите «Накопить».",
+  "One point gives one unit of your shop currency as a discount. Scan the customer QR and choose Collect to earn bonuses or Spend to use them, up to the balance and purchase total. Spend purchases do not earn new bonuses.": "Один балл равен одной единице валюты магазина. Отсканируйте QR-код покупателя и выберите «Накопить» для начисления или «Списать» для оплаты бонусами в пределах баланса и суммы покупки. При списании новые бонусы не начисляются.",
+  "Paid with bonuses": "Оплачено бонусами"
 }

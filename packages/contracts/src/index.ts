@@ -439,7 +439,13 @@ export type PosContext = {
   employees?: { name: string; employeeCode: string }[];
 };
 export type Receipt = {
-  loyalty?: { membershipId: string; earned: string; spent: string; balanceAfter: string };
+  loyalty?: {
+    membershipId: string;
+    mode?: 'collect' | 'spend';
+    earned: string;
+    spent: string;
+    balanceAfter: string;
+  };
   storeAddress?: string;
   storePhone?: string;
   businessNumber?: string;
@@ -1136,13 +1142,14 @@ export function applyLoyaltyDiscount<
   T extends { total: string; discount: string; tax: string; taxRate: string },
 >(
   lines: T[],
-  member: { balance: string; maxPoints?: string; redeemPercent: string; earnPercent: string },
+  member: { balance: string; maxPoints?: string; mode?: 'collect' | 'spend'; earnPercent: string },
 ) {
   const before = lines.reduce((sum, l) => sum + toScaled(l.total, 2), 0n);
-  const allowed = (before * toScaled(member.redeemPercent, 2)) / 10000n;
+  const mode = member.mode ?? (member.maxPoints ? 'spend' : 'collect');
   const balance = toScaled(member.balance, 2) > 0n ? toScaled(member.balance, 2) : 0n;
-  const requested = member.maxPoints ? toScaled(member.maxPoints, 2) : 0n;
-  const spent = [allowed, balance, requested].reduce((a, b) => (a < b ? a : b));
+  const requested = member.maxPoints ? toScaled(member.maxPoints, 2) : balance;
+  const spent =
+    mode === 'spend' ? [before, balance, requested].reduce((a, b) => (a < b ? a : b)) : 0n;
   let allocated = 0n,
     cumulative = 0n;
   const result = lines.map((line) => {
@@ -1160,7 +1167,10 @@ export function applyLoyaltyDiscount<
       discount: fromScaled(toScaled(line.discount, 2) + reduction, 2),
       tax: fromScaled((total * rate + divisor / 2n) / divisor, 2),
       loyaltyDiscount: fromScaled(reduction, 2),
-      loyaltyEarned: fromScaled((total * toScaled(member.earnPercent, 2) + 5000n) / 10000n, 2),
+      loyaltyEarned:
+        mode === 'collect'
+          ? fromScaled((total * toScaled(member.earnPercent, 2) + 5000n) / 10000n, 2)
+          : '0.00',
     };
   });
   const earned = result.reduce((sum, l) => sum + toScaled(l.loyaltyEarned, 2), 0n);

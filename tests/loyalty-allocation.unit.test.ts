@@ -6,52 +6,64 @@ const line = (total: string, taxRate = '0') => ({
   discount: '0.00',
   tax: taxRate === '25' ? '20.00' : '0.00',
 });
-describe('loyalty discount and bonus allocation', () => {
-  it('reconciles a capped redemption, included tax and earned points across mixed-rate lines', () => {
-    const result = applyLoyaltyDiscount([line('100', '25'), line('60')], {
+describe('cashier Collect or Spend bonus allocation', () => {
+  it('spends 50 from a balance of 100 on a purchase of 50 without earning new points', () => {
+    const r = applyLoyaltyDiscount([line('50', '25')], {
+      balance: '100',
+      mode: 'spend',
+      earnPercent: '3',
+    });
+    expect(r.spent).toBe('50.00');
+    expect(r.earned).toBe('0.00');
+    expect(r.lines[0].total).toBe('0.00');
+    expect(r.lines[0].tax).toBe('0.00');
+  });
+  it('collects instead of spending when Collect is selected, even with an existing balance', () => {
+    const r = applyLoyaltyDiscount([line('50')], {
+      balance: '100',
+      mode: 'collect',
+      earnPercent: '3',
+    });
+    expect(r.spent).toBe('0.00');
+    expect(r.earned).toBe('1.50');
+    expect(r.lines[0].total).toBe('50.00');
+  });
+  it('uses only the available balance and reconciles taxes and cash across mixed-rate lines', () => {
+    const r = applyLoyaltyDiscount([line('100', '25'), line('60')], {
       balance: '80',
-      maxPoints: '80',
-      redeemPercent: '20',
+      mode: 'spend',
       earnPercent: '3',
     });
-    expect(result.spent).toBe('32.00');
-    expect(result.earned).toBe('3.84');
-    expect(result.lines.map((l) => l.total)).toEqual(['80.00', '48.00']);
-    expect(result.lines.map((l) => l.tax)).toEqual(['16.00', '0.00']);
-    expect(result.lines.map((l) => l.loyaltyDiscount)).toEqual(['20.00', '12.00']);
+    expect(r.spent).toBe('80.00');
+    expect(r.earned).toBe('0.00');
+    expect(r.lines.map((l) => l.total)).toEqual(['50.00', '30.00']);
+    expect(r.lines.map((l) => l.tax)).toEqual(['10.00', '0.00']);
   });
-  it('preserves the exact single-cent discount across tiny basket lines', () => {
-    const result = applyLoyaltyDiscount([line('0.01'), line('0.01'), line('0.01')], {
+  it('allocates a single-cent redemption exactly and does not earn on the cash remainder', () => {
+    const r = applyLoyaltyDiscount([line('0.01'), line('0.01'), line('0.01')], {
       balance: '0.01',
-      maxPoints: '0.01',
-      redeemPercent: '100',
+      mode: 'spend',
       earnPercent: '3',
     });
-    expect(result.lines.reduce((sum, l) => sum + toScaled(l.total, 2), 0n)).toBe(2n);
-    expect(result.lines.reduce((sum, l) => sum + toScaled(l.loyaltyDiscount, 2), 0n)).toBe(1n);
-    expect(result.lines.every((l) => toScaled(l.total, 2) >= 0n)).toBe(true);
+    expect(r.lines.reduce((s, l) => s + toScaled(l.total, 2), 0n)).toBe(2n);
+    expect(r.lines.reduce((s, l) => s + toScaled(l.loyaltyDiscount, 2), 0n)).toBe(1n);
+    expect(r.earned).toBe('0.00');
   });
-  it('never spends from a membership identifier alone or from a negative balance', () => {
-    for (const member of [
-      { balance: '100', redeemPercent: '100', earnPercent: '3' },
-      { balance: '-3', maxPoints: '20', redeemPercent: '100', earnPercent: '3' },
-    ]) {
-      const result = applyLoyaltyDiscount([line('100')], member);
-      expect(result.spent).toBe('0.00');
-      expect(result.earned).toBe('3.00');
-      expect(result.lines[0].total).toBe('100.00');
-    }
-  });
-  it('limits redemption to the purchase total and awards no points on the free portion', () => {
-    const result = applyLoyaltyDiscount([line('100', '25')], {
-      balance: '200',
-      maxPoints: '200',
-      redeemPercent: '100',
+  it('never redeems a negative balance and keeps legacy capped codes bounded by their authorization', () => {
+    const negative = applyLoyaltyDiscount([line('100')], {
+      balance: '-3',
+      mode: 'spend',
       earnPercent: '3',
     });
-    expect(result.spent).toBe('100.00');
-    expect(result.earned).toBe('0.00');
-    expect(result.lines[0].total).toBe('0.00');
-    expect(result.lines[0].tax).toBe('0.00');
+    expect(negative.spent).toBe('0.00');
+    expect(negative.lines[0].total).toBe('100.00');
+    const legacy = applyLoyaltyDiscount([line('100')], {
+      balance: '100',
+      maxPoints: '6',
+      earnPercent: '3',
+    });
+    expect(legacy.spent).toBe('6.00');
+    expect(legacy.lines[0].total).toBe('94.00');
+    expect(legacy.earned).toBe('0.00');
   });
 });

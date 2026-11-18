@@ -11,7 +11,6 @@ type Program = {
   name: string;
   description: string;
   earnPercent: string;
-  redeemPercent: string;
   version: number;
 };
 type Campaign = {
@@ -77,7 +76,7 @@ export function LoyaltyPage() {
                 </p>
                 <p>
                   {t(
-                    'One point gives one unit of your shop currency as a discount. Bonuses are earned on the amount paid after discounts. Customer-authorized redemption codes expire after five minutes.',
+                    'One point gives one unit of your shop currency as a discount. Scan the customer QR and choose Collect to earn bonuses or Spend to use them, up to the balance and purchase total. Spend purchases do not earn new bonuses.',
                   )}
                 </p>
                 <p className="muted">
@@ -194,17 +193,6 @@ function ProgramEditor({ program }: { program: Program }) {
             step="0.01"
             value={v.earnPercent}
             onChange={(e) => setV({ ...v, earnPercent: e.target.value })}
-          />
-        </Field>
-        <Field label={t('Maximum purchase paid with bonuses, %')}>
-          <input
-            required
-            type="number"
-            min="0"
-            max="100"
-            step="0.01"
-            value={v.redeemPercent}
-            onChange={(e) => setV({ ...v, redeemPercent: e.target.value })}
           />
         </Field>
       </div>

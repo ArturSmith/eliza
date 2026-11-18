@@ -105,16 +105,28 @@ export function ReceiptView({
             <dt>{t('Total')}</dt>
             <dd>{formatMoney(receipt.total, receipt.currency)}</dd>
           </div>
-          <div>
-            <dt>{receipt.payment.method === 'cash' ? t('Cash tendered') : t('Card recorded')}</dt>
-            <dd>{formatMoney(receipt.payment.tendered, receipt.currency)}</dd>
-          </div>
-          {receipt.payment.method === 'cash' && (
+          {receipt.loyalty && Number(receipt.loyalty.spent) > 0 && Number(receipt.total) === 0 ? (
             <div>
-              <dt>{t('Change')}</dt>
-              <dd>{formatMoney(receipt.payment.change, receipt.currency)}</dd>
+              <dt>{t('Paid with bonuses')}</dt>
+              <dd>{receipt.loyalty.spent}</dd>
+            </div>
+          ) : (
+            <div>
+              <dt>{receipt.payment.method === 'cash' ? t('Cash tendered') : t('Card recorded')}</dt>
+              <dd>{formatMoney(receipt.payment.tendered, receipt.currency)}</dd>
             </div>
           )}
+          {receipt.payment.method === 'cash' &&
+            !(
+              receipt.loyalty &&
+              Number(receipt.total) === 0 &&
+              Number(receipt.loyalty.spent) > 0
+            ) && (
+              <div>
+                <dt>{t('Change')}</dt>
+                <dd>{formatMoney(receipt.payment.change, receipt.currency)}</dd>
+              </div>
+            )}
         </dl>
         {receipt.loyalty && (
           <p className="muted">

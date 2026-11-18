@@ -8,10 +8,6 @@ export const loyaltyProgramSchema = z.object({
     .string()
     .regex(/^\d{1,2}(\.\d{1,2})?$/)
     .refine((v) => Number(v) <= 25),
-  redeemPercent: z
-    .string()
-    .regex(/^\d{1,3}(\.\d{1,2})?$/)
-    .refine((v) => Number(v) <= 100),
   version: z.number().int().min(0),
 });
 export const loyaltyCampaignSchema = z
@@ -26,6 +22,8 @@ export const loyaltyCampaignSchema = z
   .refine((v) => new Date(v.endsAt) > new Date(v.startsAt), 'Campaign end must follow its start');
 export const loyaltySaleSchema = z.object({
   code: z.string().regex(/^ELIZA-(LOYALTY|REDEEM):[a-f0-9]{64}$/),
+  // Optional preserves retry fingerprints for sales submitted by older clients.
+  mode: z.enum(['collect', 'spend']).optional(),
 });
 export type LoyaltyMember = {
   id: string;

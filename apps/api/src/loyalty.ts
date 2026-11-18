@@ -113,7 +113,7 @@ export class LoyaltyManagementController {
       name: 'Your everyday rewards',
       description: '',
       earnPercent: '3.00',
-      redeemPercent: '20.00',
+      redeemPercent: '100.00',
       version: 0,
     };
     const campaigns = (
@@ -136,22 +136,15 @@ export class LoyaltyManagementController {
   ) {
     const b = parse(loyaltyProgramSchema, input);
     return this.operations.transaction(async (c) => {
-      const params = [
-        req.context.store.id,
-        b.enabled,
-        b.name,
-        b.description,
-        b.earnPercent,
-        b.redeemPercent,
-      ];
+      const params = [req.context.store.id, b.enabled, b.name, b.description, b.earnPercent];
       const result =
         b.version === 0
           ? await c.query(
-              'INSERT INTO loyalty_programs(store_id,enabled,name,description,earn_percent,redeem_percent) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(store_id) DO NOTHING RETURNING version',
+              'INSERT INTO loyalty_programs(store_id,enabled,name,description,earn_percent) VALUES($1,$2,$3,$4,$5) ON CONFLICT(store_id) DO NOTHING RETURNING version',
               params,
             )
           : await c.query(
-              'UPDATE loyalty_programs SET enabled=$2,name=$3,description=$4,earn_percent=$5,redeem_percent=$6,version=version+1,updated_at=now() WHERE store_id=$1 AND version=$7 RETURNING version',
+              'UPDATE loyalty_programs SET enabled=$2,name=$3,description=$4,earn_percent=$5,version=version+1,updated_at=now() WHERE store_id=$1 AND version=$6 RETURNING version',
               [...params, b.version],
             );
       if (!result.rowCount)
@@ -349,17 +342,23 @@ export class PosLoyaltyController {
 export async function prepareLoyalty(
   c: PoolClient,
   store: string,
-  code: string | undefined,
+  input: z.infer<typeof loyaltySaleSchema> | undefined,
   lines: Receipt['lines'],
 ) {
-  if (!code) return;
-  const member = await membership(c, store, code, true);
-  const calculation = applyLoyaltyDiscount(lines, member);
+  if (!input) return;
+  const member = await membership(c, store, input.code, true);
+  const mode = input.mode ?? (member.redemptionHash ? 'spend' : 'collect');
+  if (mode === 'spend' && toScaled(member.balance, 2) <= 0n)
+    throw new ConflictException(
+      'No bonuses are available. Scan the card again and choose Collect.',
+    );
+  const calculation = applyLoyaltyDiscount(lines, { ...member, mode });
   lines.splice(0, lines.length, ...calculation.lines);
   const earned = toScaled(calculation.earned, 2),
     spend = toScaled(calculation.spent, 2);
   return {
     membershipId: member.id,
+    mode,
     earned: fromScaled(earned, 2),
     spent: fromScaled(spend, 2),
     balanceAfter: fromScaled(toScaled(member.balance, 2) + earned - spend, 2),
