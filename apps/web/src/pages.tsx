@@ -11,6 +11,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   Activity,
   FileText,
+  Newspaper,
   Sparkles,
   Clock3,
   ArrowDownLeft,
@@ -77,6 +78,7 @@ const navGroups = [
         permission: 'analytics.view',
       },
       { to: '/loyalty', label: 'Loyalty program', icon: Users, permission: 'loyalty.manage' },
+      { to: '/shop-news', label: 'Shop news', icon: Newspaper, permission: 'promotions.manage' },
       { to: '/shifts', label: 'Shifts', icon: Clock3, permission: 'sales.read' },
     ],
   },

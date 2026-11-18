@@ -2661,5 +2661,16 @@
   "Campaign card preview": "Предпросмотр карточки акции",
   "Customer app campaign": "Акция в приложении покупателей",
   "Create a campaign card for the customer app": "Создать карточку акции для приложения покупателей",
-  "Create campaign card": "Создать карточку акции"
+  "Create campaign card": "Создать карточку акции",
+  "Shop news": "Новости магазина",
+  "Publish shop updates to the news feed in the customer app.": "Публикуйте новости магазина в ленте приложения покупателей.",
+  "New post": "Новая публикация",
+  "Edit post": "Редактировать публикацию",
+  "News title": "Заголовок новости",
+  "News text": "Текст новости",
+  "Save post": "Сохранить публикацию",
+  "Published posts appear in the customer app. Uncheck to return a post to drafts.": "Опубликованные новости появятся в приложении покупателей. Снимите флажок, чтобы вернуть публикацию в черновики.",
+  "No news posts yet. Create your first update for customers.": "Пока нет новостей. Создайте первую публикацию для покупателей.",
+  "News post not found.": "Публикация не найдена.",
+  "This news post changed. Reload and try again.": "Публикация была изменена. Обновите страницу и повторите попытку."
 }

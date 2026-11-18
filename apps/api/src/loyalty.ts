@@ -5,6 +5,7 @@ import {
   Post,
   Put,
   Param,
+  Query,
   ParseUUIDPipe,
   Req,
   UseGuards,
@@ -31,6 +32,7 @@ import {
   type LoyaltyMember,
 } from '@eliza/contracts';
 import { Database } from './database.js';
+import { ShopNewsController } from './shop-news.js';
 import { AuthModule } from './auth.js';
 import { RegisterModule, RegisterService } from './register.js';
 import { Operations, audit } from './operations.js';
@@ -165,6 +167,13 @@ export class CustomerIntegrationController {
     private database: Database,
     private operations: Operations,
   ) {}
+  @Get('shop-directory') async directory() {
+    return (
+      await this.database.pool.query(
+        `SELECT s.id,s.name,s.currency,COALESCE(p.name,'') AS "programName",COALESCE(p.description,'') AS description,COALESCE(p.enabled,false) AS "loyaltyEnabled",COALESCE(p.earn_percent,0)::text AS "earnPercent",COALESCE(p.redeem_percent,100)::text AS "redeemPercent" FROM stores s LEFT JOIN loyalty_programs p ON p.store_id=s.id ORDER BY s.name,s.id`,
+      )
+    ).rows;
+  }
   @Get('stores') async stores() {
     return (
       await this.database.pool.query(
@@ -203,15 +212,27 @@ export class CustomerIntegrationController {
   }
   @Get('customers/:customer/activity') async activity(
     @Param('customer', ParseUUIDPipe) customer: string,
+    @Query('storeId') input?: string,
   ) {
+    const store = input === undefined ? null : parse(z.string().uuid(), input);
     return (
       await this.database.pool.query(
-        `SELECT e.id,e.kind,e.amount::text,e.created_at AS "createdAt",e.store_id AS "storeId",s.name AS "storeName",s.currency FROM loyalty_entries e JOIN loyalty_memberships m ON m.id=e.membership_id JOIN stores s ON s.id=e.store_id WHERE m.customer_subject=$1 ORDER BY e.created_at DESC,e.id DESC LIMIT 100`,
-        [customer],
+        `SELECT e.id,e.kind,e.amount::text,e.created_at AS "createdAt",e.store_id AS "storeId",s.name AS "storeName",s.currency FROM loyalty_entries e JOIN loyalty_memberships m ON m.id=e.membership_id JOIN stores s ON s.id=e.store_id WHERE m.customer_subject=$1 AND ($2::uuid IS NULL OR e.store_id=$2) ORDER BY e.created_at DESC,e.id DESC LIMIT 100`,
+        [customer, store],
       )
     ).rows;
   }
-  @Get('campaigns') async campaigns() {
+  @Get('news') async news(@Query('storeId') input?: string) {
+    const store = input === undefined ? null : parse(z.string().uuid(), input);
+    return (
+      await this.database.pool.query(
+        `SELECT n.id,n.title,n.body,n.published_at AS "publishedAt",n.updated_at AS "updatedAt",s.id AS "storeId",s.name AS "storeName" FROM shop_news n JOIN stores s ON s.id=n.store_id WHERE n.published AND ($1::uuid IS NULL OR n.store_id=$1) ORDER BY n.published_at DESC,n.id DESC LIMIT 100`,
+        [store],
+      )
+    ).rows;
+  }
+  @Get('campaigns') async campaigns(@Query('storeId') input?: string) {
+    const store = input === undefined ? null : parse(z.string().uuid(), input);
     return (
       await this.database.pool.query(
         `SELECT c.id,c.title,c.description,r.id AS "promotionId",r.starts_at AS "startsAt",r.ends_at AS "endsAt",
@@ -225,9 +246,10 @@ export class CustomerIntegrationController {
          WHERE pc.promotion_id=r.id AND pc.store_id=r.store_id),'[]'::jsonb) AS categories
        FROM promotion_campaigns c JOIN promotions r ON r.id=c.promotion_id AND r.store_id=c.store_id
        JOIN stores s ON s.id=c.store_id
-       WHERE c.published AND r.enabled AND r.cancelled_at IS NULL
+       WHERE c.published AND r.enabled AND r.cancelled_at IS NULL AND ($1::uuid IS NULL OR c.store_id=$1)
          AND r.starts_at<=now() AND (r.ends_at IS NULL OR r.ends_at>now())
        ORDER BY c.created_at DESC,c.id DESC LIMIT 100`,
+        [store],
       )
     ).rows;
   }
@@ -374,6 +396,11 @@ export async function refundLoyalty(
 @Module({
   imports: [AuthModule, RegisterModule],
   providers: [CustomerServiceGuard, Operations],
-  controllers: [LoyaltyManagementController, CustomerIntegrationController, PosLoyaltyController],
+  controllers: [
+    LoyaltyManagementController,
+    CustomerIntegrationController,
+    PosLoyaltyController,
+    ShopNewsController,
+  ],
 })
 export class LoyaltyModule {}

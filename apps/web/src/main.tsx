@@ -1,3 +1,4 @@
+import { ShopNewsPage } from './shop-news';
 import { LoyaltyPage } from './loyalty';
 import { InventoryPage, InventoryAdjustmentPage } from './inventory-workspace';
 import { ProductDetailsPage } from './product-details';
@@ -145,6 +146,7 @@ const root = createRootRoute({
 });
 const routes = [
   createRoute({ getParentRoute: () => root, path: '/loyalty', component: LoyaltyPage }),
+  createRoute({ getParentRoute: () => root, path: '/shop-news', component: ShopNewsPage }),
   createRoute({
     getParentRoute: () => root,
     path: '/register',
