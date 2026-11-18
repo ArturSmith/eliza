@@ -1,3 +1,4 @@
+import { refundLoyalty } from './loyalty.js';
 import {
   Body,
   Controller,
@@ -206,6 +207,7 @@ class RefundController {
       let total = 0n,
         tax = 0n;
       const lines = [];
+      const loyaltyChanges = { earned: 0n, spent: 0n };
       const nextBalances = new Map<string, bigint>();
       for (const entry of [...b.lines].sort((x, y) => x.productId.localeCompare(y.productId))) {
         const line = original.lines.find((l) =>
@@ -235,6 +237,8 @@ class RefundController {
           const cents = toScaled(v, 2);
           return (cents * after + sold / 2n) / sold - (cents * before + sold / 2n) / sold;
         };
+        loyaltyChanges.earned += amount(line.loyaltyEarned ?? '0');
+        loyaltyChanges.spent += amount(line.loyaltyDiscount ?? '0');
         const value = amount(line.total),
           taxValue = amount(line.tax);
         total += value;
@@ -383,6 +387,7 @@ class RefundController {
             id,
           ],
         );
+      await refundLoyalty(c, a.storeId, b.saleId, id, original, loyaltyChanges);
       await audit(c, a, 'Refund completed', id, {
         saleId: b.saleId,
         shiftId: shift.id,

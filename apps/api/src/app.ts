@@ -1,3 +1,4 @@
+import { LoyaltyModule, customerServiceAuthorized } from './loyalty.js';
 import { ReplenishmentModule } from './replenishment.js';
 import { PurchaseDocumentError } from './purchase-document-error.js';
 import 'reflect-metadata';
@@ -120,6 +121,7 @@ class HealthController {
 }
 @Module({
   imports: [
+    LoyaltyModule,
     DatabaseModule,
     AuthModule,
     CatalogModule,
@@ -185,6 +187,7 @@ export async function createApp() {
     );
   app.setGlobalPrefix('api');
   app.use(helmet());
+  const appOrigin = process.env.APP_ORIGIN ?? 'http://localhost:5173';
   app.use((req: Request, res: Response, next: NextFunction) => {
     const started = Date.now();
     const requestId = randomUUID();
@@ -202,9 +205,17 @@ export async function createApp() {
         }),
       ),
     );
+    // Exempt only the dedicated integration namespace after authenticating its server credential.
+    if (req.path.startsWith('/api/integrations/customer/v1/')) {
+      if (!customerServiceAuthorized(req)) {
+        res.status(401).json({ message: 'Customer integration is not authorized.' });
+        return;
+      }
+      next();
+      return;
+    }
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
-      const origin = process.env.APP_ORIGIN ?? 'http://localhost:5173';
-      if (req.headers.origin !== origin || req.headers['x-eliza-request'] !== '1') {
+      if (req.headers.origin !== appOrigin || req.headers['x-eliza-request'] !== '1') {
         res.status(403).json({ message: 'This request must come from the Eliza application.' });
         return;
       }

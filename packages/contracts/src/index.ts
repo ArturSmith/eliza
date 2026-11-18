@@ -1,7 +1,10 @@
+export * from './loyalty.js';
+import { loyaltySaleSchema } from './loyalty.js';
 export * from './replenishment.js';
 import { z } from 'zod';
 export * from './store-layout.js';
 export const permissions = [
+  'loyalty.manage',
   'catalog.read',
   'costs.read',
   'catalog.write',
@@ -346,6 +349,7 @@ export const saleSchema = z.object({
     .default('0'),
   payment: z.object({ method: z.enum(['cash', 'card']), tendered: money }),
   approval: approvalSchema.optional(),
+  loyalty: loyaltySaleSchema.optional(),
 });
 export function calculateLine(
   price: string,
@@ -435,6 +439,7 @@ export type PosContext = {
   employees?: { name: string; employeeCode: string }[];
 };
 export type Receipt = {
+  loyalty?: { membershipId: string; earned: string; spent: string; balanceAfter: string };
   storeAddress?: string;
   storePhone?: string;
   businessNumber?: string;
@@ -449,6 +454,8 @@ export type Receipt = {
   deviceName: string;
   shiftId: string;
   lines: {
+    loyaltyDiscount?: string;
+    loyaltyEarned?: string;
     saleItemId?: string;
     productId: string;
     name: string;
@@ -1123,3 +1130,39 @@ export const onboardingProgressSchema = z.object({
   status: z.enum(['completed', 'skipped']),
 });
 export type OnboardingProgress = z.infer<typeof onboardingProgressSchema>;
+
+/** Allocate redeemed points cumulatively so cents reconcile exactly across lines and refunds. */
+export function applyLoyaltyDiscount<
+  T extends { total: string; discount: string; tax: string; taxRate: string },
+>(
+  lines: T[],
+  member: { balance: string; maxPoints?: string; redeemPercent: string; earnPercent: string },
+) {
+  const before = lines.reduce((sum, l) => sum + toScaled(l.total, 2), 0n);
+  const allowed = (before * toScaled(member.redeemPercent, 2)) / 10000n;
+  const balance = toScaled(member.balance, 2) > 0n ? toScaled(member.balance, 2) : 0n;
+  const requested = member.maxPoints ? toScaled(member.maxPoints, 2) : 0n;
+  const spent = [allowed, balance, requested].reduce((a, b) => (a < b ? a : b));
+  let allocated = 0n,
+    cumulative = 0n;
+  const result = lines.map((line) => {
+    const original = toScaled(line.total, 2);
+    cumulative += original;
+    const target = before ? (spent * cumulative) / before : 0n,
+      reduction = target - allocated;
+    allocated = target;
+    const total = original - reduction,
+      rate = toScaled(line.taxRate, 2),
+      divisor = 10000n + rate;
+    return {
+      ...line,
+      total: fromScaled(total, 2),
+      discount: fromScaled(toScaled(line.discount, 2) + reduction, 2),
+      tax: fromScaled((total * rate + divisor / 2n) / divisor, 2),
+      loyaltyDiscount: fromScaled(reduction, 2),
+      loyaltyEarned: fromScaled((total * toScaled(member.earnPercent, 2) + 5000n) / 10000n, 2),
+    };
+  });
+  const earned = result.reduce((sum, l) => sum + toScaled(l.loyaltyEarned, 2), 0n);
+  return { lines: result, earned: fromScaled(earned, 2), spent: fromScaled(spent, 2) };
+}

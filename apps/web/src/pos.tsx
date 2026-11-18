@@ -33,6 +33,8 @@ import {
   decodeScaleBarcode,
   scalePriceQuantity,
   type ScaleBarcodeSettings,
+  applyLoyaltyDiscount,
+  type LoyaltyMember,
   calculateLine,
   calculatePricedLine,
   fromScaled,
@@ -72,7 +74,18 @@ const draftLine = z.object({
   }),
   quantity: quantity.refine((v) => /^\d+(\.\d{1,3})?$/.test(v) && toScaled(v, 3) > 0n),
 });
+const loyaltyDraft = z.object({
+  id: z.uuid(),
+  code: z.string(),
+  balance: z.string().regex(/^-?\d{1,12}(\.\d{1,2})?$/),
+  maxPoints: money.optional(),
+  earnPercent: money,
+  redeemPercent: money,
+  programName: z.string(),
+  currency: z.string(),
+});
 const draftSchema = z.object({
+  loyalty: loyaltyDraft.optional(),
   lines: z.array(draftLine).max(100),
   discount: money.refine((v) => /^\d+(\.\d{1,2})?$/.test(v) && toScaled(v, 2) <= 10000n),
   requestId: z.uuid(),
@@ -587,9 +600,9 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     }
   }
 
-  const [modal, setModal] = useState<'payment' | 'close' | 'cash' | 'held' | 'history' | null>(
-    null,
-  );
+  const [modal, setModal] = useState<
+    'payment' | 'close' | 'cash' | 'held' | 'history' | 'loyalty' | null
+  >(null);
   const scaleProfile = useQuery({
     queryKey: ['pos-barcode-settings'],
     queryFn: () => api<{ scaleBarcode: ScaleBarcodeSettings }>('/pos/barcode-settings'),
@@ -637,24 +650,38 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       window.removeEventListener('keydown', reset);
     };
   }, []);
-  const totals = draft.lines.reduce(
-    (s, l) => {
-      const a = calculatePricedLine(
-        l.product.price,
-        l.product.regularPrice,
-        l.quantity,
-        l.product.taxRate,
-        draft.pending?.discountPercent ?? '0',
-      );
-      return {
-        subtotal: s.subtotal + toScaled(a.gross, 2),
-        discount: s.discount + toScaled(a.discount, 2),
-        tax: s.tax + toScaled(a.tax, 2),
-        total: s.total + toScaled(a.total, 2),
-      };
-    },
+  const pricedLines = draft.lines.map((l) => ({
+    ...calculatePricedLine(
+      l.product.price,
+      l.product.regularPrice,
+      l.quantity,
+      l.product.taxRate,
+      draft.pending?.discountPercent ?? '0',
+    ),
+    taxRate: l.product.taxRate,
+  }));
+  const loyaltyPreview = draft.loyalty
+    ? applyLoyaltyDiscount(pricedLines, draft.loyalty)
+    : undefined;
+  const totals = (loyaltyPreview?.lines ?? pricedLines).reduce(
+    (s, l) => ({
+      subtotal: s.subtotal + toScaled(l.gross, 2),
+      discount: s.discount + toScaled(l.discount, 2),
+      tax: s.tax + toScaled(l.tax, 2),
+      total: s.total + toScaled(l.total, 2),
+    }),
     { subtotal: 0n, discount: 0n, tax: 0n, total: 0n },
   );
+  const [loyaltyCode, setLoyaltyCode] = useState('');
+  const resolveLoyalty = useMutation({
+    mutationFn: (code: string) => api<LoyaltyMember>('/pos/loyalty/resolve', { code }),
+    onSuccess: (member) => {
+      setDraft((d) => ({ ...d, loyalty: member }));
+      setLoyaltyCode('');
+      setModal(null);
+    },
+    onError: (error) => setMessage(error instanceof Error ? error.message : String(error)),
+  });
   const currency = context.store!.currency;
   const total = fromScaled(totals.total, 2);
   const needsApproval =
@@ -674,6 +701,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         setDraft((d) => ({
           ...d,
           discount: '0',
+          loyalty: undefined,
           pending: undefined,
           requestId: crypto.randomUUID(),
         }));
@@ -769,6 +797,10 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       return;
     }
     if (frozen) return;
+    if (term.startsWith('ELIZA-LOYALTY:') || term.startsWith('ELIZA-REDEEM:')) {
+      resolveLoyalty.mutate(term);
+      return;
+    }
     if (scaleProfile.isPending || scaleProfile.error) {
       rejectScan('Store barcode settings are unavailable. Retry when connected.');
       return;
@@ -866,6 +898,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         ...(l.product.markdownUnitId ? { markdownUnitId: l.product.markdownUnitId } : {}),
       })),
       discountPercent: '0',
+      ...(draft.loyalty ? { loyalty: { code: draft.loyalty.code } } : {}),
       payment: { method, tendered: method === 'card' ? total : tendered },
     };
     const parsed = saleSchema.safeParse({ ...payload, approval: approvalFrom(data) });
@@ -1206,6 +1239,29 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
             )}
           </div>
           <div className="cart-bottom">
+            <div className="pos-loyalty">
+              {draft.loyalty ? (
+                <div>
+                  <strong>{draft.loyalty.programName}</strong>
+                  <small>
+                    {t('Bonuses earned')}: {loyaltyPreview?.earned ?? '0'} · {t('Bonuses used')}:{' '}
+                    {loyaltyPreview?.spent ?? '0'}
+                  </small>
+                </div>
+              ) : (
+                <span>{t('Customer loyalty')}</span>
+              )}
+              <Button
+                variant="outline"
+                disabled={frozen}
+                onClick={() => {
+                  if (draft.loyalty) setDraft((d) => ({ ...d, loyalty: undefined }));
+                  else setModal('loyalty');
+                }}
+              >
+                {draft.loyalty ? t('Remove') : t('Scan loyalty card')}
+              </Button>
+            </div>
             <div className="cart-tools">
               <Button
                 variant="outline"
@@ -1456,6 +1512,35 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
             </Button>
           </div>
         ))}
+      </Dialog>
+      <Dialog
+        open={modal === 'loyalty'}
+        title={t('Scan loyalty card')}
+        description={t('Scan the customer membership card or a single-use bonus authorization.')}
+        onOpenChange={(open) => {
+          if (!open) setModal(null);
+        }}
+      >
+        <form
+          className="pos-loyalty-input"
+          onSubmit={(e) => {
+            e.preventDefault();
+            resolveLoyalty.mutate(loyaltyCode.trim());
+          }}
+        >
+          <Field label={t('Membership or bonus authorization QR')}>
+            <input
+              autoFocus
+              value={loyaltyCode}
+              onChange={(e) => setLoyaltyCode(e.target.value)}
+              required
+              autoComplete="off"
+            />
+          </Field>
+          <CameraBarcodeScanner onScan={(code) => resolveLoyalty.mutate(code)} />
+          <ErrorMessage error={resolveLoyalty.error} />
+          <Button disabled={resolveLoyalty.isPending}>{t('Attach customer')}</Button>
+        </form>
       </Dialog>
       <Dialog
         open={!!receipt}

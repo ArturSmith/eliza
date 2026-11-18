@@ -116,6 +116,12 @@ export function ReceiptView({
             </div>
           )}
         </dl>
+        {receipt.loyalty && (
+          <p className="muted">
+            {t('Bonuses earned')}: {receipt.loyalty.earned} · {t('Bonuses used')}:{' '}
+            {receipt.loyalty.spent} · {t('Bonus balance')}: {receipt.loyalty.balanceAfter}
+          </p>
+        )}
         {receipt.approverName && (
           <p className="muted">
             {t('Approved by ')}

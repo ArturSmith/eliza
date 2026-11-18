@@ -1,3 +1,4 @@
+import { prepareLoyalty, commitLoyalty } from './loyalty.js';
 import { readOnboarding, saveOnboarding } from './onboarding.js';
 import { z } from 'zod';
 import {
@@ -580,6 +581,12 @@ export class CheckoutController {
         });
       }
       if (total > 99999999999n) throw new BadRequestException('Sale exceeds the supported total.');
+      const loyaltyPlan = await prepareLoyalty(client, actor.storeId, body.loyalty?.code, lines);
+      if (loyaltyPlan) {
+        discount = lines.reduce((sum, line) => sum + toScaled(line.discount, 2), 0n);
+        total = lines.reduce((sum, line) => sum + toScaled(line.total, 2), 0n);
+        tax = lines.reduce((sum, line) => sum + toScaled(line.tax, 2), 0n);
+      }
       const tendered = toScaled(body.payment.tendered, 2);
       if (tendered < total) throw new BadRequestException('Payment does not cover the sale total.');
       if (body.payment.method === 'card' && tendered !== total)
@@ -613,6 +620,16 @@ export class CheckoutController {
         )
       ).rows[0];
       const receipt: Receipt = {
+        ...(loyaltyPlan
+          ? {
+              loyalty: {
+                membershipId: loyaltyPlan.membershipId,
+                earned: loyaltyPlan.earned,
+                spent: loyaltyPlan.spent,
+                balanceAfter: loyaltyPlan.balanceAfter,
+              },
+            }
+          : {}),
         id: receiptId,
         receiptNumber: `E-${sequence.padStart(7, '0')}`,
         createdAt: new Date().toISOString(),
@@ -656,6 +673,7 @@ export class CheckoutController {
           JSON.stringify(receipt),
         ],
       );
+      await commitLoyalty(client, actor.storeId, receiptId, loyaltyPlan);
       const remainingStock = new Map<string, bigint>();
       for (const line of lines) {
         const product = products.find((p) => p.id === line.productId)!;
@@ -680,11 +698,13 @@ export class CheckoutController {
             product.id,
             line.quantity,
             line.price,
-            costTotal === null ? null : fromScaled(
-              (toScaled(costTotal, 2) * 1000n + toScaled(line.quantity, 3) / 2n) /
-                toScaled(line.quantity, 3),
-              2,
-            ),
+            costTotal === null
+              ? null
+              : fromScaled(
+                  (toScaled(costTotal, 2) * 1000n + toScaled(line.quantity, 3) / 2n) /
+                    toScaled(line.quantity, 3),
+                  2,
+                ),
             line.taxRate,
             line.total,
             costTotal,

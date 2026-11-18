@@ -1,3 +1,4 @@
+import { LoyaltyPage } from './loyalty';
 import { InventoryPage, InventoryAdjustmentPage } from './inventory-workspace';
 import { ProductDetailsPage } from './product-details';
 import { ReplenishmentPage } from './replenishment';
@@ -143,6 +144,7 @@ const root = createRootRoute({
   ),
 });
 const routes = [
+  createRoute({ getParentRoute: () => root, path: '/loyalty', component: LoyaltyPage }),
   createRoute({
     getParentRoute: () => root,
     path: '/register',
