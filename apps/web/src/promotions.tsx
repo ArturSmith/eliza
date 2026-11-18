@@ -1,3 +1,4 @@
+import { CampaignFields, PromotionCampaignEditor, type Campaign } from './promotion-campaign';
 import { UnitMarkdowns } from './unit-markdowns';
 import { canManageUnitMarkdowns } from './promotions-access';
 import { useState, type FormEvent } from 'react';
@@ -19,6 +20,7 @@ type Promotion = {
   enabled: boolean;
   productIds: string[];
   categoryIds: string[];
+  campaign: Campaign | null;
 };
 type Category = { id: string; name: string };
 type Scope = 'products' | 'categories';
@@ -46,6 +48,14 @@ export function PromotionsPage() {
   const [scope, setScope] = useState<Scope>('products');
   const [search, setSearch] = useState('');
   const [name, setName] = useState('');
+  const [hasCampaign, setHasCampaign] = useState(false);
+  const [campaign, setCampaign] = useState<Campaign>({
+    title: '',
+    description: '',
+    published: true,
+    version: 0,
+  });
+  const [editingCampaign, setEditingCampaign] = useState<string | null>(null);
   const [type, setType] = useState<'PERCENTAGE' | 'FIXED_PRICE'>('PERCENTAGE');
   const [value, setValue] = useState('');
   const [productIds, setProductIds] = useState<string[]>([]);
@@ -74,7 +84,8 @@ export function PromotionsPage() {
     name.trim() &&
     selectedCount > 0 &&
     validValue &&
-    (timing === 'now' || !!startsAt);
+    (timing === 'now' || !!startsAt) &&
+    (!hasCampaign || !!campaign.description.trim());
   const currency = session.data?.store.currency ?? 'NOK';
   const money = (amount: string | null) =>
     amount === null
@@ -92,6 +103,9 @@ export function PromotionsPage() {
         name: name.trim(),
         discountType: type,
         discountValue: value,
+        ...(hasCampaign
+          ? { campaign: { ...campaign, title: campaign.title.trim() || name.trim() } }
+          : {}),
         productIds: scope === 'products' ? productIds : [],
         categoryIds: scope === 'categories' ? categoryIds : [],
         ...(timing === 'later' ? { startsAtLocal: startsAt } : {}),
@@ -99,6 +113,8 @@ export function PromotionsPage() {
       }),
     onSuccess: () => {
       setName('');
+      setHasCampaign(false);
+      setCampaign({ title: '', description: '', published: true, version: 0 });
       setValue('');
       setProductIds([]);
       setCategoryIds([]);
@@ -378,6 +394,22 @@ export function PromotionsPage() {
                   placeholder={t('For example: Weekend dairy sale')}
                 />
               </label>
+              <div className="promotion-campaign-create">
+                <label className="promotion-campaign-toggle">
+                  <input
+                    type="checkbox"
+                    checked={hasCampaign}
+                    onChange={(e) => setHasCampaign(e.target.checked)}
+                  />
+                  {t('Create a campaign card for the customer app')}
+                </label>
+                {hasCampaign && (
+                  <CampaignFields
+                    value={{ ...campaign, title: campaign.title || name }}
+                    change={setCampaign}
+                  />
+                )}
+              </div>
               <p className="muted">
                 {t(
                   'The regular price stays unchanged. If several offers apply, checkout uses the lowest price.',
@@ -409,38 +441,72 @@ export function PromotionsPage() {
             {(list.data ?? []).map((promotion) => {
               const state = status(promotion);
               return (
-                <article key={promotion.id} className="promotion-record">
-                  <div className="promotion-record-main">
-                    <span className={'promotion-status promotion-status-' + state.toLowerCase()}>
-                      {t(state)}
-                    </span>
-                    <div>
-                      <h3>{promotion.name}</h3>
-                      <p>{targets(promotion)}</p>
+                <div key={promotion.id} className="promotion-record-wrapper">
+                  <article className="promotion-record">
+                    <div className="promotion-record-main">
+                      <span className={'promotion-status promotion-status-' + state.toLowerCase()}>
+                        {t(state)}
+                      </span>
+                      <div>
+                        <h3>{promotion.name}</h3>
+                        <p>{targets(promotion)}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="promotion-record-meta">
-                    <strong>
-                      {promotion.discountType === 'PERCENTAGE'
-                        ? promotion.discountValue + '% ' + t('off')
-                        : money(promotion.discountValue)}
-                    </strong>
-                    <small>
-                      {date(promotion.startsAt)}
-                      {promotion.endsAt ? ' – ' + date(promotion.endsAt) : ' · ' + t('No end date')}
-                    </small>
-                  </div>
-                  {state === 'Active' || state === 'Scheduled' ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={cancel.isPending}
-                      onClick={() => cancel.mutate(promotion.id)}
-                    >
-                      {t('Cancel promotion')}
-                    </Button>
-                  ) : null}
-                </article>
+                    <div className="promotion-record-meta">
+                      <strong>
+                        {promotion.discountType === 'PERCENTAGE'
+                          ? promotion.discountValue + '% ' + t('off')
+                          : money(promotion.discountValue)}
+                      </strong>
+                      <small>
+                        {date(promotion.startsAt)}
+                        {promotion.endsAt
+                          ? ' – ' + date(promotion.endsAt)
+                          : ' · ' + t('No end date')}
+                      </small>
+                    </div>
+                    <div className="promotion-record-actions">
+                      {(state === 'Active' || state === 'Scheduled' || promotion.campaign) && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() =>
+                            setEditingCampaign(
+                              editingCampaign === promotion.id ? null : promotion.id,
+                            )
+                          }
+                        >
+                          {promotion.campaign ? t('Edit campaign') : t('Create campaign card')}
+                        </Button>
+                      )}
+                      {promotion.campaign && (
+                        <small className="muted">
+                          {promotion.campaign.published ? t('Published') : t('Draft')}
+                        </small>
+                      )}
+                      {state === 'Active' || state === 'Scheduled' ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={cancel.isPending}
+                          onClick={() => cancel.mutate(promotion.id)}
+                        >
+                          {t('Cancel promotion')}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </article>
+                  {editingCampaign === promotion.id && (
+                    <PromotionCampaignEditor
+                      key={promotion.id}
+                      promotion={promotion}
+                      done={() => {
+                        setEditingCampaign(null);
+                        void list.refetch();
+                      }}
+                    />
+                  )}
+                </div>
               );
             })}
           </div>

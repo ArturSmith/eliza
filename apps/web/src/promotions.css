@@ -498,3 +498,63 @@
 .unit-markdown-picker {
   overflow: visible;
 }
+
+.promotion-campaign-create,
+.promotion-campaign-editor {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.promotion-campaign-fields {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+  min-width: 0;
+}
+.promotion-campaign-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.promotion-campaign-toggle input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  accent-color: var(--green);
+}
+.promotion-campaign-preview {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--page);
+  overflow-wrap: anywhere;
+}
+.promotion-record-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.promotion-record > .promotion-record-actions {
+  max-width: 300px;
+}
+.promotion-campaign-editor > .promotion-record-actions {
+  margin-top: 18px;
+}
+@media (max-width: 1100px) {
+  .promotion-record {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .promotion-record > .promotion-record-actions {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+}
+@media (max-width: 640px) {
+  .promotion-record {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

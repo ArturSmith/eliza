@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Body,
   Controller,
   Get,
@@ -8,6 +9,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -17,11 +19,19 @@ import { AuthModule } from './auth.js';
 import { Database } from './database.js';
 import { AccessGuard, parse, Require, type AuthRequest } from './security.js';
 
+const campaignInput = z.object({
+  title: z.string().trim().min(1).max(120),
+  description: z.string().trim().min(1).max(2000),
+  published: z.boolean(),
+  version: z.number().int().min(0).default(0),
+});
+
 const createInput = z
   .object({
     name: z.string().trim().min(1).max(120),
     discountType: z.enum(['PERCENTAGE', 'FIXED_PRICE']),
     discountValue: money,
+    campaign: campaignInput.optional(),
     productIds: z.array(z.uuid()).default([]),
     categoryIds: z.array(z.uuid()).default([]),
     startsAt: z.iso.datetime({ offset: true }).optional(),
@@ -65,6 +75,8 @@ export class PromotionsController {
       await this.database.pool.query(
         `SELECT r.id,r.name,r.discount_type AS "discountType",r.discount_value::text AS "discountValue",
         r.starts_at AS "startsAt",r.ends_at AS "endsAt",r.enabled,r.cancelled_at AS "cancelledAt",
+        (SELECT jsonb_build_object('id',c.id,'title',c.title,'description',c.description,'published',c.published,'version',c.version)
+         FROM promotion_campaigns c WHERE c.promotion_id=r.id AND c.store_id=r.store_id) AS campaign,
         COALESCE((SELECT jsonb_agg(pp.product_id) FROM promotion_products pp WHERE pp.promotion_id=r.id),'[]'::jsonb) AS "productIds",
         COALESCE((SELECT jsonb_agg(pc.category_id) FROM promotion_categories pc WHERE pc.promotion_id=r.id),'[]'::jsonb) AS "categoryIds"
        FROM promotions r WHERE r.store_id=$1 ORDER BY r.created_at DESC,r.id`,
@@ -136,6 +148,14 @@ export class PromotionsController {
           'INSERT INTO promotion_categories(store_id,promotion_id,category_id) VALUES($1,$2,$3)',
           [store, row.id, id],
         );
+      if (body.campaign) {
+        if (body.campaign.version !== 0)
+          throw new BadRequestException('A new campaign must use version zero.');
+        await client.query(
+          'INSERT INTO promotion_campaigns(store_id,promotion_id,title,description,published) VALUES($1,$2,$3,$4,$5)',
+          [store, row.id, body.campaign.title, body.campaign.description, body.campaign.published],
+        );
+      }
       await client.query(
         'INSERT INTO audits(store_id,employee_id,device_id,action,entity_id,details) VALUES($1,$2,$3,$4,$5,$6)',
         [
@@ -152,6 +172,65 @@ export class PromotionsController {
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
+    } finally {
+      client.release();
+    }
+  }
+  @Put(':id/campaign') @Require('promotions.manage') async saveCampaign(
+    @Req() req: AuthRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() input: unknown,
+  ) {
+    const body = parse(campaignInput, input);
+    const store = req.context.store.id;
+    const client = await this.database.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const promotion = (
+        await client.query(
+          'SELECT id,enabled,cancelled_at,ends_at FROM promotions WHERE id=$1 AND store_id=$2 FOR UPDATE',
+          [id, store],
+        )
+      ).rows[0];
+      if (!promotion) throw new NotFoundException('Promotion not found.');
+      if (
+        body.published &&
+        (!promotion.enabled ||
+          promotion.cancelled_at ||
+          (promotion.ends_at && new Date(promotion.ends_at) <= new Date()))
+      )
+        throw new BadRequestException('Only active or scheduled promotions can be published.');
+      const params = [store, id, body.title, body.description, body.published];
+      const result =
+        body.version === 0
+          ? await client.query(
+              `INSERT INTO promotion_campaigns(store_id,promotion_id,title,description,published)
+           VALUES($1,$2,$3,$4,$5) ON CONFLICT(promotion_id,store_id) DO NOTHING RETURNING id,version`,
+              params,
+            )
+          : await client.query(
+              `UPDATE promotion_campaigns SET title=$3,description=$4,published=$5,version=version+1,updated_at=now()
+           WHERE store_id=$1 AND promotion_id=$2 AND version=$6 RETURNING id,version`,
+              [...params, body.version],
+            );
+      if (!result.rowCount)
+        throw new ConflictException('The campaign changed. Reload and try again.');
+      await client.query(
+        'INSERT INTO audits(store_id,employee_id,device_id,action,entity_id,details) VALUES($1,$2,$3,$4,$5,$6)',
+        [
+          store,
+          req.context.user.id,
+          req.context.device.id,
+          'Promotion campaign saved',
+          id,
+          JSON.stringify({ title: body.title, published: body.published }),
+        ],
+      );
+      await client.query('COMMIT');
+      return result.rows[0];
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
     } finally {
       client.release();
     }

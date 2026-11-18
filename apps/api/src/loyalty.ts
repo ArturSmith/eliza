@@ -24,7 +24,6 @@ import { z } from 'zod';
 import {
   applyLoyaltyDiscount,
   loyaltyProgramSchema,
-  loyaltyCampaignSchema,
   loyaltySaleSchema,
   toScaled,
   fromScaled,
@@ -116,19 +115,13 @@ export class LoyaltyManagementController {
       redeemPercent: '100.00',
       version: 0,
     };
-    const campaigns = (
-      await this.database.pool.query(
-        'SELECT id,title,description,published,starts_at AS "startsAt",ends_at AS "endsAt",version FROM loyalty_campaigns WHERE store_id=$1 ORDER BY created_at DESC LIMIT 100',
-        [req.context.store.id],
-      )
-    ).rows;
     const members = (
       await this.database.pool.query(
         'SELECT count(*)::int AS total FROM loyalty_memberships WHERE store_id=$1',
         [req.context.store.id],
       )
     ).rows[0].total;
-    return { program, campaigns, members };
+    return { program, members };
   }
   @Put('program') @Require('loyalty.manage') async save(
     @Body() input: unknown,
@@ -161,57 +154,6 @@ export class LoyaltyManagementController {
         b,
       );
       return { ok: true };
-    });
-  }
-  @Post('campaigns') @Require('loyalty.manage') create(
-    @Body() input: unknown,
-    @Req() req: AuthRequest,
-  ) {
-    return this.saveCampaign(input, req);
-  }
-  @Put('campaigns/:id') @Require('loyalty.manage') update(
-    @Body() input: unknown,
-    @Req() req: AuthRequest,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
-    return this.saveCampaign(input, req, id);
-  }
-  private async saveCampaign(input: unknown, req: AuthRequest, id?: string) {
-    const b = parse(loyaltyCampaignSchema, input);
-    return this.operations.transaction(async (c) => {
-      const params = [
-        req.context.store.id,
-        b.title,
-        b.description,
-        b.published,
-        b.startsAt,
-        b.endsAt,
-      ];
-      const result = id
-        ? await c.query(
-            'UPDATE loyalty_campaigns SET title=$2,description=$3,published=$4,starts_at=$5,ends_at=$6,version=version+1 WHERE store_id=$1 AND id=$7 AND version=$8 RETURNING id',
-            [...params, id, b.version],
-          )
-        : await c.query(
-            'INSERT INTO loyalty_campaigns(store_id,title,description,published,starts_at,ends_at) VALUES($1,$2,$3,$4,$5,$6) RETURNING id',
-            params,
-          );
-      if (!result.rowCount)
-        throw new ConflictException(
-          'The campaign changed or is unavailable. Reload and try again.',
-        );
-      await audit(
-        c,
-        {
-          storeId: req.context.store.id,
-          employeeId: req.context.user.id,
-          deviceId: req.context.device.id,
-        },
-        'Loyalty campaign saved',
-        result.rows[0].id,
-        { published: b.published, title: b.title },
-      );
-      return result.rows[0];
     });
   }
 }
@@ -269,15 +211,31 @@ export class CustomerIntegrationController {
       )
     ).rows;
   }
-  @Get('customers/:customer/campaigns') async campaigns(
-    @Param('customer', ParseUUIDPipe) customer: string,
-  ) {
+  @Get('campaigns') async campaigns() {
     return (
       await this.database.pool.query(
-        `SELECT c.id,c.title,c.description,c.starts_at AS "startsAt",c.ends_at AS "endsAt",s.name AS "storeName",s.id AS "storeId" FROM loyalty_campaigns c JOIN stores s ON s.id=c.store_id JOIN loyalty_programs p ON p.store_id=c.store_id JOIN loyalty_memberships m ON m.store_id=c.store_id WHERE m.customer_subject=$1 AND p.enabled AND c.published AND c.starts_at<=now() AND c.ends_at>now() ORDER BY c.created_at DESC LIMIT 100`,
-        [customer],
+        `SELECT c.id,c.title,c.description,r.id AS "promotionId",r.starts_at AS "startsAt",r.ends_at AS "endsAt",
+       r.discount_type AS "discountType",r.discount_value::text AS "discountValue",s.currency,
+       s.name AS "storeName",s.id AS "storeId",
+       COALESCE((SELECT jsonb_agg(p.name ORDER BY p.name) FROM promotion_products pp
+         JOIN products p ON p.id=pp.product_id AND p.store_id=pp.store_id
+         WHERE pp.promotion_id=r.id AND pp.store_id=r.store_id),'[]'::jsonb) AS products,
+       COALESCE((SELECT jsonb_agg(cat.name ORDER BY cat.name) FROM promotion_categories pc
+         JOIN categories cat ON cat.id=pc.category_id AND cat.store_id=pc.store_id
+         WHERE pc.promotion_id=r.id AND pc.store_id=r.store_id),'[]'::jsonb) AS categories
+       FROM promotion_campaigns c JOIN promotions r ON r.id=c.promotion_id AND r.store_id=c.store_id
+       JOIN stores s ON s.id=c.store_id
+       WHERE c.published AND r.enabled AND r.cancelled_at IS NULL
+         AND r.starts_at<=now() AND (r.ends_at IS NULL OR r.ends_at>now())
+       ORDER BY c.created_at DESC,c.id DESC LIMIT 100`,
       )
     ).rows;
+  }
+  // Compatibility for customer servers deployed before promotion campaigns.
+  @Get('customers/:customer/campaigns') customerCampaigns(
+    @Param('customer', ParseUUIDPipe) _customer: string,
+  ) {
+    return this.campaigns();
   }
   @Post('customers/:customer/memberships/:id/redemptions') redeem(
     @Param('customer', ParseUUIDPipe) customer: string,

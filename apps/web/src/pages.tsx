@@ -76,7 +76,7 @@ const navGroups = [
         icon: ListChecks,
         permission: 'analytics.view',
       },
-      { to: '/loyalty', label: 'Loyalty & campaigns', icon: Users, permission: 'loyalty.manage' },
+      { to: '/loyalty', label: 'Loyalty program', icon: Users, permission: 'loyalty.manage' },
       { to: '/shifts', label: 'Shifts', icon: Clock3, permission: 'sales.read' },
     ],
   },
