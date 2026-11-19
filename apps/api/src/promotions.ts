@@ -23,6 +23,14 @@ const campaignInput = z.object({
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().min(1).max(2000),
   published: z.boolean(),
+  image: z
+    .string()
+    .max(60000)
+    .refine(
+      (value) => value === '' || /^data:image\/jpeg;base64,\/9j\/[A-Za-z0-9+/]*={0,2}$/.test(value),
+      'Choose a valid campaign image.',
+    )
+    .optional(),
   version: z.number().int().min(0).default(0),
 });
 
@@ -75,7 +83,7 @@ export class PromotionsController {
       await this.database.pool.query(
         `SELECT r.id,r.name,r.discount_type AS "discountType",r.discount_value::text AS "discountValue",
         r.starts_at AS "startsAt",r.ends_at AS "endsAt",r.enabled,r.cancelled_at AS "cancelledAt",
-        (SELECT jsonb_build_object('id',c.id,'title',c.title,'description',c.description,'published',c.published,'version',c.version)
+        (SELECT jsonb_build_object('id',c.id,'title',c.title,'description',c.description,'published',c.published,'version',c.version,'image',c.image)
          FROM promotion_campaigns c WHERE c.promotion_id=r.id AND c.store_id=r.store_id) AS campaign,
         COALESCE((SELECT jsonb_agg(pp.product_id) FROM promotion_products pp WHERE pp.promotion_id=r.id),'[]'::jsonb) AS "productIds",
         COALESCE((SELECT jsonb_agg(pc.category_id) FROM promotion_categories pc WHERE pc.promotion_id=r.id),'[]'::jsonb) AS "categoryIds"
@@ -152,8 +160,15 @@ export class PromotionsController {
         if (body.campaign.version !== 0)
           throw new BadRequestException('A new campaign must use version zero.');
         await client.query(
-          'INSERT INTO promotion_campaigns(store_id,promotion_id,title,description,published) VALUES($1,$2,$3,$4,$5)',
-          [store, row.id, body.campaign.title, body.campaign.description, body.campaign.published],
+          'INSERT INTO promotion_campaigns(store_id,promotion_id,title,description,published,image) VALUES($1,$2,$3,$4,$5,$6)',
+          [
+            store,
+            row.id,
+            body.campaign.title,
+            body.campaign.description,
+            body.campaign.published,
+            body.campaign.image ?? '',
+          ],
         );
       }
       await client.query(
@@ -204,14 +219,14 @@ export class PromotionsController {
       const result =
         body.version === 0
           ? await client.query(
-              `INSERT INTO promotion_campaigns(store_id,promotion_id,title,description,published)
-           VALUES($1,$2,$3,$4,$5) ON CONFLICT(promotion_id,store_id) DO NOTHING RETURNING id,version`,
-              params,
+              `INSERT INTO promotion_campaigns(store_id,promotion_id,title,description,published,image)
+           VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(promotion_id,store_id) DO NOTHING RETURNING id,version`,
+              [...params, body.image ?? ''],
             )
           : await client.query(
-              `UPDATE promotion_campaigns SET title=$3,description=$4,published=$5,version=version+1,updated_at=now()
+              `UPDATE promotion_campaigns SET title=$3,description=$4,published=$5,image=COALESCE($7,image),version=version+1,updated_at=now()
            WHERE store_id=$1 AND promotion_id=$2 AND version=$6 RETURNING id,version`,
-              [...params, body.version],
+              [...params, body.version, body.image ?? null],
             );
       if (!result.rowCount)
         throw new ConflictException('The campaign changed. Reload and try again.');

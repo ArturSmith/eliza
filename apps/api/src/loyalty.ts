@@ -17,6 +17,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  GoneException,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import type { PoolClient } from 'pg';
@@ -32,6 +33,8 @@ import {
   type LoyaltyMember,
 } from '@eliza/contracts';
 import { Database } from './database.js';
+import { issueLoyaltyQr, claimLoyaltyQr, expiredLoyaltyQr, type QrToken } from './loyalty-qr.js';
+import type { Actor } from './operations.js';
 import { ShopNewsController } from './shop-news.js';
 import { AuthModule } from './auth.js';
 import { RegisterModule, RegisterService } from './register.js';
@@ -61,43 +64,47 @@ export async function membership(
   store: string,
   code: string,
   lock = false,
-): Promise<LoyaltyMember & { redemptionHash?: string }> {
+  actor?: Actor,
+): Promise<LoyaltyMember & { qrToken: QrToken }> {
   const input = parse(loyaltySaleSchema, { code }).code;
-  const redeem = input.startsWith('ELIZA-REDEEM:');
+  if (!input.startsWith('ELIZA-LOYALTY:')) throw new ConflictException(expiredLoyaltyQr);
+  const digest = hash(input.slice(14));
+  const column = actor ? 'checkout_token_hash' : 'token_hash';
+  const reference = (
+    await c.query(
+      `SELECT membership_id,token_hash FROM loyalty_qr_tokens WHERE store_id=$1 AND ${column}=$2`,
+      [store, digest],
+    )
+  ).rows[0];
+  if (!reference) throw new ConflictException(expiredLoyaltyQr);
   const row = (
     await c.query(
-      `SELECT m.id,p.name AS "programName",p.earn_percent::text AS "earnPercent",p.redeem_percent::text AS "redeemPercent",s.currency
- FROM loyalty_memberships m JOIN loyalty_programs p ON p.store_id=m.store_id JOIN stores s ON s.id=m.store_id
- WHERE m.store_id=$1 AND p.enabled AND ${redeem ? 'm.id=(SELECT membership_id FROM loyalty_redemptions WHERE token_hash=$2 AND store_id=$1)' : 'm.card_token=$2'} ${lock ? 'FOR UPDATE OF m' : ''}`,
-      [store, redeem ? hash(input.slice(13)) : input.slice(14)],
+      `SELECT m.id,p.name AS "programName",p.earn_percent::text AS "earnPercent",p.redeem_percent::text AS "redeemPercent",s.currency FROM loyalty_memberships m JOIN loyalty_programs p ON p.store_id=m.store_id JOIN stores s ON s.id=m.store_id WHERE m.id=$1 AND m.store_id=$2 AND p.enabled ${lock ? 'FOR UPDATE OF m' : ''}`,
+      [reference.membership_id, store],
     )
   ).rows[0];
   if (!row) throw new NotFoundException('This loyalty card is not valid for this shop.');
-  let authorization;
-  if (redeem) {
-    authorization = (
-      await c.query(
-        `SELECT max_points::text,expires_at,sale_id FROM loyalty_redemptions WHERE token_hash=$1 AND store_id=$2 ${lock ? 'FOR UPDATE' : ''}`,
-        [hash(input.slice(13)), store],
-      )
-    ).rows[0];
-    if (!authorization || authorization.sale_id || new Date(authorization.expires_at) <= new Date())
-      throw new ConflictException('This bonus authorization has expired or was already used.');
-  }
+  const qr: QrToken = (
+    await c.query(
+      `SELECT *,expires_at>clock_timestamp() AS display_valid,checkout_expires_at>clock_timestamp() AS checkout_valid FROM loyalty_qr_tokens WHERE token_hash=$1 ${lock ? 'FOR UPDATE' : ''}`,
+      [reference.token_hash],
+    )
+  ).rows[0];
+  if (
+    !qr ||
+    qr.sale_id ||
+    (actor
+      ? !qr.checkout_valid || qr.device_id !== actor.deviceId || qr.employee_id !== actor.employeeId
+      : !qr.display_valid)
+  )
+    throw new ConflictException(expiredLoyaltyQr);
   const balance = (
     await c.query(
       'SELECT COALESCE(sum(amount),0)::numeric(14,2)::text AS value FROM loyalty_entries WHERE membership_id=$1 AND store_id=$2',
       [row.id, store],
     )
   ).rows[0].value;
-  return {
-    ...row,
-    code,
-    balance,
-    ...(authorization
-      ? { maxPoints: authorization.max_points, redemptionHash: hash(input.slice(13)) }
-      : {}),
-  };
+  return { ...row, code, balance, qrToken: qr };
 }
 
 @Controller('loyalty')
@@ -183,13 +190,29 @@ export class CustomerIntegrationController {
   }
   @Get('customers/:customer/memberships') async list(
     @Param('customer', ParseUUIDPipe) customer: string,
+    @Query('storeId') input?: string,
   ) {
-    return (
+    const store = input === undefined ? null : parse(z.string().uuid(), input);
+    const rows = (
       await this.database.pool.query(
-        `SELECT m.id,m.store_id AS "storeId",s.name AS "storeName",s.currency,p.name AS "programName",p.enabled,p.description,p.earn_percent::text AS "earnPercent",p.redeem_percent::text AS "redeemPercent",COALESCE((SELECT sum(e.amount) FROM loyalty_entries e WHERE e.membership_id=m.id),0)::numeric(14,2)::text AS balance,'ELIZA-LOYALTY:'||m.card_token AS "qrCode" FROM loyalty_memberships m JOIN stores s ON s.id=m.store_id JOIN loyalty_programs p ON p.store_id=m.store_id WHERE m.customer_subject=$1 ORDER BY m.created_at`,
-        [customer],
+        `SELECT m.id,m.store_id AS "storeId",s.name AS "storeName",s.currency,p.name AS "programName",p.enabled,p.description,p.earn_percent::text AS "earnPercent",p.redeem_percent::text AS "redeemPercent",COALESCE(wallet.balance,0)::numeric(14,2)::text AS balance,GREATEST(0,-COALESCE(wallet.used,0))::numeric(30,2)::text AS "totalSaved" FROM loyalty_memberships m JOIN stores s ON s.id=m.store_id JOIN loyalty_programs p ON p.store_id=m.store_id LEFT JOIN LATERAL (SELECT sum(e.amount) AS balance,sum(e.amount) FILTER (WHERE e.kind IN ('redeemed','refund_redeemed')) AS used FROM loyalty_entries e WHERE e.membership_id=m.id AND e.store_id=m.store_id) wallet ON true WHERE m.customer_subject=$1 AND ($2::uuid IS NULL OR m.store_id=$2) ORDER BY m.created_at`,
+        [customer, store],
       )
     ).rows;
+    return Promise.all(
+      rows.map(async (row) => ({
+        ...row,
+        ...(row.enabled
+          ? await issueLoyaltyQr(this.database.pool, customer, row.id)
+          : { qrCode: '', qrExpiresAt: null, qrServerTime: null }),
+      })),
+    );
+  }
+  @Post('customers/:customer/memberships/:id/qr') issueQr(
+    @Param('customer', ParseUUIDPipe) customer: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return issueLoyaltyQr(this.database.pool, customer, id);
   }
   @Post('customers/:customer/stores/:store/join') join(
     @Param('customer', ParseUUIDPipe) customer: string,
@@ -235,7 +258,7 @@ export class CustomerIntegrationController {
     const store = input === undefined ? null : parse(z.string().uuid(), input);
     return (
       await this.database.pool.query(
-        `SELECT c.id,c.title,c.description,r.id AS "promotionId",r.starts_at AS "startsAt",r.ends_at AS "endsAt",
+        `SELECT c.id,c.title,c.description,c.image,r.id AS "promotionId",r.starts_at AS "startsAt",r.ends_at AS "endsAt",
        r.discount_type AS "discountType",r.discount_value::text AS "discountValue",s.currency,
        s.name AS "storeName",s.id AS "storeId",
        COALESCE((SELECT jsonb_agg(p.name ORDER BY p.name) FROM promotion_products pp
@@ -259,50 +282,11 @@ export class CustomerIntegrationController {
   ) {
     return this.campaigns();
   }
-  @Post('customers/:customer/memberships/:id/redemptions') redeem(
-    @Param('customer', ParseUUIDPipe) customer: string,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() input: unknown,
-  ) {
-    const b = parse(
-      z.object({
-        points: z
-          .string()
-          .regex(/^\d{1,7}(\.\d{1,2})?$/)
-          .refine((v) => toScaled(v, 2) > 0n),
-      }),
-      input,
-    );
-    return this.operations.transaction(async (c) => {
-      const member = (
-        await c.query(
-          'SELECT m.* FROM loyalty_memberships m JOIN loyalty_programs p ON p.store_id=m.store_id WHERE m.id=$1 AND m.customer_subject=$2 AND p.enabled FOR UPDATE OF m',
-          [id, customer],
-        )
-      ).rows[0];
-      if (!member) throw new NotFoundException('Membership not found.');
-      const balance = (
-        await c.query(
-          'SELECT COALESCE(sum(amount),0)::text AS value FROM loyalty_entries WHERE membership_id=$1',
-          [id],
-        )
-      ).rows[0].value;
-      if (toScaled(b.points, 2) > toScaled(balance, 2))
-        throw new BadRequestException('Not enough available bonuses.');
-      const secret = token(),
-        expiresAt = new Date(Date.now() + 5 * 60_000);
-      await c.query(
-        'INSERT INTO loyalty_redemptions(token_hash,store_id,membership_id,max_points,expires_at) VALUES($1,$2,$3,$4,$5)',
-        [hash(secret), member.store_id, id, b.points, expiresAt],
-      );
-      return {
-        qrCode: 'ELIZA-REDEEM:' + secret,
-        points: b.points,
-        expiresAt: expiresAt.toISOString(),
-      };
-    });
+  @Post('customers/:customer/memberships/:id/redemptions') redeem() {
+    throw new GoneException('Use the refreshing membership QR code.');
   }
 }
+
 @Controller('pos/loyalty')
 export class PosLoyaltyController {
   constructor(
@@ -313,8 +297,8 @@ export class PosLoyaltyController {
     const b = parse(loyaltySaleSchema, input);
     return this.operations.transaction(async (c) => {
       const a = await this.registers.operator(c, req);
-      const { redemptionHash, ...member } = await membership(c, a.storeId, b.code);
-      return member;
+      const { qrToken, ...member } = await membership(c, a.storeId, b.code, true);
+      return { ...member, code: await claimLoyaltyQr(c, a, b.code, qrToken) };
     });
   }
 }
@@ -324,10 +308,11 @@ export async function prepareLoyalty(
   store: string,
   input: z.infer<typeof loyaltySaleSchema> | undefined,
   lines: Receipt['lines'],
+  actor: Actor,
 ) {
   if (!input) return;
-  const member = await membership(c, store, input.code, true);
-  const mode = input.mode ?? (member.redemptionHash ? 'spend' : 'collect');
+  const member = await membership(c, store, input.code, true, actor);
+  const mode = input.mode ?? 'collect';
   if (mode === 'spend' && toScaled(member.balance, 2) <= 0n)
     throw new ConflictException(
       'No bonuses are available. Scan the card again and choose Collect.',
@@ -342,7 +327,7 @@ export async function prepareLoyalty(
     earned: fromScaled(earned, 2),
     spent: fromScaled(spend, 2),
     balanceAfter: fromScaled(toScaled(member.balance, 2) + earned - spend, 2),
-    redemptionHash: member.redemptionHash,
+    qrHash: member.qrToken.token_hash,
   };
 }
 export async function commitLoyalty(
@@ -361,11 +346,11 @@ export async function commitLoyalty(
         'INSERT INTO loyalty_entries(store_id,membership_id,kind,amount,sale_id) VALUES($1,$2,$3,$4,$5)',
         [store, plan.membershipId, kind, amount, sale],
       );
-  if (plan.redemptionHash)
-    await c.query(
-      'UPDATE loyalty_redemptions SET sale_id=$2 WHERE token_hash=$1 AND sale_id IS NULL',
-      [plan.redemptionHash, sale],
-    );
+  const used = await c.query(
+    'UPDATE loyalty_qr_tokens SET sale_id=$2 WHERE token_hash=$1 AND sale_id IS NULL',
+    [plan.qrHash, sale],
+  );
+  if (used.rowCount !== 1) throw new ConflictException(expiredLoyaltyQr);
 }
 export async function refundLoyalty(
   c: PoolClient,

@@ -49,6 +49,7 @@ export function PromotionsPage() {
   const [search, setSearch] = useState('');
   const [name, setName] = useState('');
   const [hasCampaign, setHasCampaign] = useState(false);
+  const [campaignImageBusy, setCampaignImageBusy] = useState(false);
   const [campaign, setCampaign] = useState<Campaign>({
     title: '',
     description: '',
@@ -144,7 +145,7 @@ export function PromotionsPage() {
   }
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (canCreate && !create.isPending) create.mutate();
+    if (canCreate && !create.isPending && !campaignImageBusy) create.mutate();
   }
   function targets(promotion: Promotion) {
     const names = [
@@ -407,6 +408,8 @@ export function PromotionsPage() {
                   <CampaignFields
                     value={{ ...campaign, title: campaign.title || name }}
                     change={setCampaign}
+                    disabled={create.isPending}
+                    onImageBusyChange={setCampaignImageBusy}
                   />
                 )}
               </div>
@@ -416,7 +419,7 @@ export function PromotionsPage() {
                 )}
               </p>
               <ErrorMessage error={create.error} />
-              <Button disabled={!canCreate || create.isPending}>
+              <Button disabled={!canCreate || create.isPending || campaignImageBusy}>
                 {create.isPending ? t('Saving…') : t('Create promotion')}
               </Button>
             </section>
@@ -444,9 +447,18 @@ export function PromotionsPage() {
                 <div key={promotion.id} className="promotion-record-wrapper">
                   <article className="promotion-record">
                     <div className="promotion-record-main">
-                      <span className={'promotion-status promotion-status-' + state.toLowerCase()}>
-                        {t(state)}
-                      </span>
+                      <div className="promotion-record-statuses">
+                        <span
+                          className={'promotion-status promotion-status-' + state.toLowerCase()}
+                        >
+                          {t(state)}
+                        </span>
+                        {promotion.campaign && (
+                          <span className="promotion-publication-status">
+                            {promotion.campaign.published ? t('Published') : t('Draft')}
+                          </span>
+                        )}
+                      </div>
                       <div>
                         <h3>{promotion.name}</h3>
                         <p>{targets(promotion)}</p>
@@ -478,11 +490,6 @@ export function PromotionsPage() {
                         >
                           {promotion.campaign ? t('Edit campaign') : t('Create campaign card')}
                         </Button>
-                      )}
-                      {promotion.campaign && (
-                        <small className="muted">
-                          {promotion.campaign.published ? t('Published') : t('Draft')}
-                        </small>
                       )}
                       {state === 'Active' || state === 'Scheduled' ? (
                         <Button

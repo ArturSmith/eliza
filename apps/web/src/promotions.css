@@ -207,21 +207,35 @@
 }
 .promotion-record {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 0.65fr);
+  align-items: start;
   gap: 16px;
   padding: 14px 16px;
   border: 1px solid var(--border);
   border-radius: 12px;
 }
 .promotion-record-main {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
   gap: 12px;
   min-width: 0;
 }
+.promotion-record-main > div {
+  min-width: 0;
+}
+.promotion-record-statuses {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.promotion-publication-status {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
 .promotion-record-main h3 {
   font-size: 15px;
+  overflow-wrap: anywhere;
 }
 .promotion-record-main p {
   color: var(--muted);
@@ -230,11 +244,17 @@
 }
 .promotion-record-meta {
   display: grid;
-  gap: 4px;
+  gap: 8px;
+  min-width: 0;
   text-align: right;
+  overflow-wrap: anywhere;
+}
+.promotion-record-meta strong {
+  font-size: 17px;
 }
 .promotion-record-meta small {
   color: var(--muted);
+  line-height: 1.6;
 }
 .promotion-status {
   border-radius: 100px;
@@ -284,9 +304,6 @@
   }
   .promotion-record-meta {
     text-align: left;
-  }
-  .promotion-record-main {
-    flex-wrap: wrap;
   }
 }
 
@@ -539,22 +556,68 @@
   gap: 10px;
 }
 .promotion-record > .promotion-record-actions {
-  max-width: 300px;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.promotion-record > .promotion-record-actions:empty {
+  display: none;
+}
+.promotion-record > .promotion-record-actions .button {
+  min-height: 42px;
 }
 .promotion-campaign-editor > .promotion-record-actions {
   margin-top: 18px;
-}
-@media (max-width: 1100px) {
-  .promotion-record {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-  .promotion-record > .promotion-record-actions {
-    grid-column: 1 / -1;
-    max-width: none;
-  }
 }
 @media (max-width: 640px) {
   .promotion-record {
     grid-template-columns: minmax(0, 1fr);
   }
+  .promotion-record > .promotion-record-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .promotion-record > .promotion-record-actions:empty {
+    display: none;
+  }
+  .promotion-record > .promotion-record-actions .button {
+    width: 100%;
+    white-space: normal;
+  }
+}
+
+.promotion-campaign-image-field {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.promotion-campaign-image-field > label {
+  font-size: 14px;
+  font-weight: 600;
+}
+.promotion-campaign-image-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.promotion-campaign-image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.promotion-campaign-cover {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  max-width: 480px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: var(--surface);
 }

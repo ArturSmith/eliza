@@ -2672,5 +2672,17 @@
   "Published posts appear in the customer app. Uncheck to return a post to drafts.": "Опубликованные новости появятся в приложении покупателей. Снимите флажок, чтобы вернуть публикацию в черновики.",
   "No news posts yet. Create your first update for customers.": "Пока нет новостей. Создайте первую публикацию для покупателей.",
   "News post not found.": "Публикация не найдена.",
-  "This news post changed. Reload and try again.": "Публикация была изменена. Обновите страницу и повторите попытку."
+  "This news post changed. Reload and try again.": "Публикация была изменена. Обновите страницу и повторите попытку.",
+  "Campaign image (optional)": "Изображение акции (необязательно)",
+  "Upload image": "Загрузить изображение",
+  "Change image": "Заменить изображение",
+  "Remove image": "Удалить изображение",
+  "Campaign image preview": "Предпросмотр изображения акции",
+  "JPEG, PNG or WebP, up to 10 MB.": "JPEG, PNG или WebP, до 10 МБ.",
+  "Preparing image…": "Подготавливаем изображение…",
+  "Choose a valid campaign image.": "Выберите корректное изображение акции.",
+  "This QR code has expired or was already used. Ask the customer to refresh it.": "QR-код истёк или уже использован. Попросите покупателя обновить его.",
+  "This QR code was already scanned at another checkout. Ask the customer to refresh it.": "Этот QR-код уже отсканирован на другой кассе. Попросите покупателя обновить его.",
+  "The customer app connection is not configured.": "Связь с приложением покупателей не настроена.",
+  "Use the refreshing membership QR code.": "Используйте обновляемый QR-код карты лояльности."
 }

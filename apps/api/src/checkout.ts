@@ -581,7 +581,7 @@ export class CheckoutController {
         });
       }
       if (total > 99999999999n) throw new BadRequestException('Sale exceeds the supported total.');
-      const loyaltyPlan = await prepareLoyalty(client, actor.storeId, body.loyalty, lines);
+      const loyaltyPlan = await prepareLoyalty(client, actor.storeId, body.loyalty, lines, actor);
       if (loyaltyPlan) {
         discount = lines.reduce((sum, line) => sum + toScaled(line.discount, 2), 0n);
         total = lines.reduce((sum, line) => sum + toScaled(line.total, 2), 0n);
