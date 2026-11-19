@@ -33,6 +33,7 @@ import {
   type LoyaltyMember,
 } from '@eliza/contracts';
 import { Database } from './database.js';
+import { loyaltyMembers } from './loyalty-members.js';
 import { issueLoyaltyQr, claimLoyaltyQr, expiredLoyaltyQr, type QrToken } from './loyalty-qr.js';
 import type { Actor } from './operations.js';
 import { ShopNewsController } from './shop-news.js';
@@ -79,7 +80,7 @@ export async function membership(
   if (!reference) throw new ConflictException(expiredLoyaltyQr);
   const row = (
     await c.query(
-      `SELECT m.id,p.name AS "programName",p.earn_percent::text AS "earnPercent",p.redeem_percent::text AS "redeemPercent",s.currency FROM loyalty_memberships m JOIN loyalty_programs p ON p.store_id=m.store_id JOIN stores s ON s.id=m.store_id WHERE m.id=$1 AND m.store_id=$2 AND p.enabled ${lock ? 'FOR UPDATE OF m' : ''}`,
+      `SELECT m.id,p.name AS "programName",p.earn_percent::text AS "earnPercent",p.redeem_percent::text AS "redeemPercent",s.currency FROM loyalty_memberships m JOIN loyalty_programs p ON p.store_id=m.store_id JOIN stores s ON s.id=m.store_id WHERE m.id=$1 AND m.store_id=$2 AND p.enabled ${lock ? 'FOR UPDATE OF m FOR SHARE OF p' : ''}`,
       [reference.membership_id, store],
     )
   ).rows[0];
@@ -132,21 +133,44 @@ export class LoyaltyManagementController {
     ).rows[0].total;
     return { program, members };
   }
+  @Get('members') @Require('loyalty.manage') members(
+    @Query() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const b = parse(
+      z
+        .object({
+          from: z.iso.date(),
+          to: z.iso.date(),
+          page: z.coerce.number().int().min(1).max(1000000).default(1),
+        })
+        .refine((v) => v.from <= v.to, 'Start date must not follow end date'),
+      input,
+    );
+    return loyaltyMembers(this.database.pool, req.context.store.id, req.context.store.timezone, b);
+  }
   @Put('program') @Require('loyalty.manage') async save(
     @Body() input: unknown,
     @Req() req: AuthRequest,
   ) {
     const b = parse(loyaltyProgramSchema, input);
     return this.operations.transaction(async (c) => {
-      const params = [req.context.store.id, b.enabled, b.name, b.description, b.earnPercent];
+      const params = [
+        req.context.store.id,
+        b.enabled,
+        b.name,
+        b.description,
+        b.earnPercent,
+        b.redeemPercent ?? null,
+      ];
       const result =
         b.version === 0
           ? await c.query(
-              'INSERT INTO loyalty_programs(store_id,enabled,name,description,earn_percent) VALUES($1,$2,$3,$4,$5) ON CONFLICT(store_id) DO NOTHING RETURNING version',
+              'INSERT INTO loyalty_programs(store_id,enabled,name,description,earn_percent,redeem_percent) VALUES($1,$2,$3,$4,$5,COALESCE($6::numeric,100)) ON CONFLICT(store_id) DO NOTHING RETURNING version',
               params,
             )
           : await c.query(
-              'UPDATE loyalty_programs SET enabled=$2,name=$3,description=$4,earn_percent=$5,version=version+1,updated_at=now() WHERE store_id=$1 AND version=$6 RETURNING version',
+              'UPDATE loyalty_programs SET enabled=$2,name=$3,description=$4,earn_percent=$5,redeem_percent=COALESCE($6::numeric,redeem_percent),version=version+1,updated_at=now() WHERE store_id=$1 AND version=$7 RETURNING version',
               [...params, b.version],
             );
       if (!result.rowCount)
@@ -177,14 +201,14 @@ export class CustomerIntegrationController {
   @Get('shop-directory') async directory() {
     return (
       await this.database.pool.query(
-        `SELECT s.id,s.name,s.currency,COALESCE(p.name,'') AS "programName",COALESCE(p.description,'') AS description,COALESCE(p.enabled,false) AS "loyaltyEnabled",COALESCE(p.earn_percent,0)::text AS "earnPercent",COALESCE(p.redeem_percent,100)::text AS "redeemPercent" FROM stores s LEFT JOIN loyalty_programs p ON p.store_id=s.id ORDER BY s.name,s.id`,
+        `SELECT s.id,s.name,s.currency,s.address,s.phone,s.business_number AS "businessNumber",COALESCE(p.name,'') AS "programName",COALESCE(p.description,'') AS description,COALESCE(p.enabled,false) AS "loyaltyEnabled",COALESCE(p.earn_percent,0)::text AS "earnPercent",COALESCE(p.redeem_percent,100)::text AS "redeemPercent" FROM stores s LEFT JOIN loyalty_programs p ON p.store_id=s.id ORDER BY s.name,s.id`,
       )
     ).rows;
   }
   @Get('stores') async stores() {
     return (
       await this.database.pool.query(
-        `SELECT s.id,s.name,s.currency,p.name AS "programName",p.description,p.earn_percent::text AS "earnPercent",p.redeem_percent::text AS "redeemPercent" FROM stores s JOIN loyalty_programs p ON p.store_id=s.id WHERE p.enabled ORDER BY s.name,s.id`,
+        `SELECT s.id,s.name,s.currency,s.address,s.phone,s.business_number AS "businessNumber",p.name AS "programName",p.description,p.earn_percent::text AS "earnPercent",p.redeem_percent::text AS "redeemPercent" FROM stores s JOIN loyalty_programs p ON p.store_id=s.id WHERE p.enabled ORDER BY s.name,s.id`,
       )
     ).rows;
   }
@@ -318,6 +342,15 @@ export async function prepareLoyalty(
       'No bonuses are available. Scan the card again and choose Collect.',
     );
   const calculation = applyLoyaltyDiscount(lines, { ...member, mode });
+  if (mode === 'spend' && toScaled(calculation.spent, 2) === 0n)
+    throw new ConflictException('No points can be used for this purchase. Choose Collect.');
+  if (
+    input.expectedSpent !== undefined &&
+    toScaled(input.expectedSpent, 2) !== toScaled(calculation.spent, 2)
+  )
+    throw new ConflictException(
+      'The available points or redemption limit changed. Scan the card again before paying.',
+    );
   lines.splice(0, lines.length, ...calculation.lines);
   const earned = toScaled(calculation.earned, 2),
     spend = toScaled(calculation.spent, 2);

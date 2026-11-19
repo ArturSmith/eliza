@@ -182,3 +182,120 @@
   border-radius: 14px;
   background: var(--color-background-f6f8f1);
 }
+
+.loyalty-members {
+  padding: 28px;
+  min-width: 0;
+}
+.loyalty-members > p {
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.loyalty-member-filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 18px;
+  margin-top: 24px;
+}
+.loyalty-member-filters .field {
+  margin: 0;
+}
+.loyalty-member-filters > button {
+  min-height: 44px;
+}
+.loyalty-member-totals {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+.loyalty-member-totals > div {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  display: grid;
+  align-content: space-between;
+  gap: 14px;
+  min-width: 0;
+}
+.loyalty-member-totals span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.loyalty-member-totals strong {
+  font-size: 28px;
+  overflow-wrap: anywhere;
+}
+.loyalty-member-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
+}
+.loyalty-member {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  gap: 22px;
+}
+.loyalty-member-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-wrap: anywhere;
+}
+.loyalty-member small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.loyalty-member dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  margin: 0;
+}
+.loyalty-member dl > div {
+  min-width: 0;
+}
+.loyalty-member dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+.loyalty-member dd {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 10px 0 4px;
+  overflow-wrap: anywhere;
+}
+.loyalty-member-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+@media (max-width: 1000px) {
+  .loyalty-member-totals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .loyalty-member {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .loyalty-members {
+    padding: 20px;
+  }
+  .loyalty-member-filters,
+  .loyalty-member-totals,
+  .loyalty-member dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .loyalty-member-filters > button {
+    justify-self: start;
+  }
+}

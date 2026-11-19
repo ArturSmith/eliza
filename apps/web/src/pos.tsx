@@ -687,6 +687,10 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : String(error)),
   });
+  const candidateSpend =
+    loyaltyCandidate && pricedLines.length
+      ? applyLoyaltyDiscount(pricedLines, { ...loyaltyCandidate, mode: 'spend' }).spent
+      : undefined;
   const currency = context.store!.currency;
   const total = fromScaled(totals.total, 2);
   const needsApproval =
@@ -907,6 +911,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         ? {
             loyalty: {
               code: draft.loyalty.code,
+              expectedSpent: loyaltyPreview!.spent,
               ...(draft.loyalty.mode ? { mode: draft.loyalty.mode } : {}),
             },
           }
@@ -1597,9 +1602,21 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
             </div>
             <p className="muted">
               {t(
-                'Collect earns bonuses. Spend uses available bonuses up to the purchase total and earns no new bonuses.',
+                'Collect earns bonuses. Spending points follows the shop’s percentage limit and earns no new bonuses.',
               )}
             </p>
+            <p>
+              {t('Up to {percent}% of the purchase can be paid with points.', {
+                percent: formatQuantity(loyaltyCandidate.redeemPercent),
+              })}
+            </p>
+            {candidateSpend !== undefined && (
+              <p>
+                {t('Points usable for this basket: {points}', {
+                  points: formatQuantity(candidateSpend),
+                })}
+              </p>
+            )}
             <div className="pos-loyalty-options">
               <Button
                 onClick={() => {
@@ -1612,7 +1629,11 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
               </Button>
               <Button
                 variant="outline"
-                disabled={toScaled(loyaltyCandidate.balance, 2) <= 0n}
+                disabled={
+                  toScaled(loyaltyCandidate.balance, 2) <= 0n ||
+                  toScaled(loyaltyCandidate.redeemPercent, 2) === 0n ||
+                  (candidateSpend !== undefined && toScaled(candidateSpend, 2) === 0n)
+                }
                 onClick={() => {
                   setDraft((d) => ({ ...d, loyalty: { ...loyaltyCandidate, mode: 'spend' } }));
                   setLoyaltyCandidate(null);

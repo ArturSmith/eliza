@@ -2,7 +2,10 @@ import { t } from './i18n';
 
 // Shared explanations for Overview and Accounting; these describe the existing calculations.
 const formulas: Record<string, () => string> = {
-  Revenue: () => t('Revenue = completed sales after discounts − refunds.'),
+  Revenue: () =>
+    t(
+      'Revenue = completed sales after all discounts, including points − cash/card refunds. Amounts include tax. Point discounts are not subtracted twice.',
+    ),
   'Cost of goods sold': () =>
     t(
       'Cost of goods sold = cost recorded for sold goods − original cost of returned goods. Current product costs are not used.',

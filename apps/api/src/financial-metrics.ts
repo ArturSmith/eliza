@@ -1,3 +1,4 @@
+import { loyaltyFinancials } from './loyalty-financials.js';
 import { saleCostColumns, originalCostsCte, refundCostColumns } from './financial-facts.js';
 import {
   Controller,
@@ -26,6 +27,7 @@ export type FinancialFilters = {
   shiftId?: string;
   cutoffHour?: number;
   pricingSource?: string;
+  includeLoyalty?: boolean;
 };
 const cents = (value: unknown) => toScaled(String(value ?? '0'), 2);
 const money = (value: bigint) => fromScaled(value, 2);
@@ -162,6 +164,10 @@ SELECT
               [storeId, period.from, period.to],
             )
           ).rows as (ExpenseAllocation & { category: string })[]);
+      const loyalty =
+        filters.includeLoyalty && !filtered
+          ? await loyaltyFinancials(client, storeId, period)
+          : null;
       await client.query('COMMIT');
 
       const sales = cents(facts.sales);
@@ -206,6 +212,13 @@ SELECT
       return {
         period,
         revenue: money(revenue),
+        taxBasis: 'tax_inclusive_management' as const,
+        loyalty: loyalty
+          ? {
+              ...loyalty,
+              revenueBeforeLoyaltyDiscounts: money(revenue + cents(loyalty.netRedeemed)),
+            }
+          : null,
         cogs: cogs === null ? null : money(cogs),
         grossProfit: grossProfit === null ? null : money(grossProfit),
         grossMarginPercent: grossProfit === null ? null : percent(grossProfit, revenue),
@@ -281,7 +294,7 @@ class FinancialMetricsController {
         to: period.to,
         timezone: req.context.store.timezone,
       },
-      { productId: period.productId, shiftId: period.shiftId },
+      { productId: period.productId, shiftId: period.shiftId, includeLoyalty: true },
     );
   }
 }

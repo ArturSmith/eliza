@@ -1142,22 +1142,37 @@ export function applyLoyaltyDiscount<
   T extends { total: string; discount: string; tax: string; taxRate: string },
 >(
   lines: T[],
-  member: { balance: string; maxPoints?: string; mode?: 'collect' | 'spend'; earnPercent: string },
+  member: {
+    balance: string;
+    maxPoints?: string;
+    mode?: 'collect' | 'spend';
+    earnPercent: string;
+    redeemPercent?: string;
+  },
 ) {
   const before = lines.reduce((sum, l) => sum + toScaled(l.total, 2), 0n);
   const mode = member.mode ?? (member.maxPoints ? 'spend' : 'collect');
   const balance = toScaled(member.balance, 2) > 0n ? toScaled(member.balance, 2) : 0n;
   const requested = member.maxPoints ? toScaled(member.maxPoints, 2) : balance;
+  const percentLimit = (before * toScaled(member.redeemPercent ?? '100', 2)) / 10000n;
   const spent =
-    mode === 'spend' ? [before, balance, requested].reduce((a, b) => (a < b ? a : b)) : 0n;
+    mode === 'spend'
+      ? [before, balance, requested, percentLimit].reduce((a, b) => (a < b ? a : b))
+      : 0n;
+  const earnRate = toScaled(member.earnPercent, 2);
   let allocated = 0n,
-    cumulative = 0n;
+    cumulative = 0n,
+    earnedAllocated = 0n;
   const result = lines.map((line) => {
     const original = toScaled(line.total, 2);
     cumulative += original;
     const target = before ? (spent * cumulative) / before : 0n,
       reduction = target - allocated;
     allocated = target;
+    const earnedTarget =
+      mode === 'collect' ? ((cumulative - allocated) * earnRate + 5000n) / 10000n : 0n;
+    const lineEarned = earnedTarget - earnedAllocated;
+    earnedAllocated = earnedTarget;
     const total = original - reduction,
       rate = toScaled(line.taxRate, 2),
       divisor = 10000n + rate;
@@ -1167,10 +1182,7 @@ export function applyLoyaltyDiscount<
       discount: fromScaled(toScaled(line.discount, 2) + reduction, 2),
       tax: fromScaled((total * rate + divisor / 2n) / divisor, 2),
       loyaltyDiscount: fromScaled(reduction, 2),
-      loyaltyEarned:
-        mode === 'collect'
-          ? fromScaled((total * toScaled(member.earnPercent, 2) + 5000n) / 10000n, 2)
-          : '0.00',
+      loyaltyEarned: fromScaled(lineEarned, 2),
     };
   });
   const earned = result.reduce((sum, l) => sum + toScaled(l.loyaltyEarned, 2), 0n);

@@ -1,3 +1,4 @@
+import { LoyaltyFinancialsPanel, type LoyaltyFinancials } from './loyalty-financials';
 import { metricFormula } from './metric-formulas';
 import { t, useLanguage } from './i18n';
 import { useQuery } from '@tanstack/react-query';
@@ -17,6 +18,7 @@ type Profit = {
   currency: string;
 };
 type FinancialSummary = {
+  loyalty: LoyaltyFinancials | null;
   revenue: string;
   cogs: string | null;
   grossProfit: string | null;
@@ -106,6 +108,11 @@ function FinancialProfit({ from, to, productId = '', shiftId = '' }: Props) {
               'Revenue is sales less refunds. Gross profit subtracts the cost recorded at sale; store operating profit also subtracts inventory losses and operating expenses.',
             )}
       </p>
+      <p className="muted">
+        {t(
+          'Management figures include tax. Points reduce revenue when used; unused points are shown separately as future discounts.',
+        )}
+      </p>
       <ErrorMessage error={q.error} />
       {q.isPending ? <p className="muted">{t('Calculating gross profit…')}</p> : null}
       {summary && (
@@ -130,6 +137,13 @@ function FinancialProfit({ from, to, productId = '', shiftId = '' }: Props) {
               );
             })}
           </div>
+          {!filtered && summary.loyalty && (
+            <LoyaltyFinancialsPanel
+              data={summary.loyalty}
+              revenue={summary.revenue}
+              currency={session.store.currency}
+            />
+          )}
           {!filtered && Object.keys(summary.breakdown.expensesByCategory).length > 0 && (
             <section
               className="accounting-expense-categories"

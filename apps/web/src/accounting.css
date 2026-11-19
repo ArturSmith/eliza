@@ -99,3 +99,94 @@
 .accounting-expenses .expenses-summary > div {
   min-width: 0;
 }
+
+.accounting-loyalty {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  min-width: 0;
+}
+.accounting-loyalty > p {
+  margin: 10px 0 0;
+  line-height: 1.6;
+  font-size: 13px;
+}
+.accounting-loyalty h4 {
+  margin-top: 22px;
+  margin-bottom: 12px;
+  font-size: 15px;
+}
+.loyalty-financial-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+.loyalty-financial-stats > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-width: 0;
+}
+.loyalty-financial-stats span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.loyalty-financial-stats strong {
+  font-size: 23px;
+  overflow-wrap: anywhere;
+}
+.loyalty-financial-stats small {
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--muted);
+}
+.loyalty-financial-reconciliation {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+.loyalty-financial-reconciliation > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 20px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.loyalty-financial-reconciliation dt {
+  font-size: 13px;
+  min-width: 0;
+}
+.loyalty-financial-reconciliation dd {
+  margin: 0;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.loyalty-financial-total {
+  font-weight: 650;
+}
+@media (max-width: 1100px) {
+  .loyalty-financial-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 600px) {
+  .loyalty-financial-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .loyalty-financial-reconciliation > div {
+    flex-direction: column;
+    gap: 6px;
+  }
+  .loyalty-financial-reconciliation dd {
+    text-align: left;
+  }
+}

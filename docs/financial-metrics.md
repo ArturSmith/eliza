@@ -4,15 +4,15 @@
 
 All amounts are calculated in cents. The seven metrics are:
 
-| Metric | Definition |
-| --- | --- |
-| Revenue | Final completed POS sale totals minus completed refund totals |
-| COGS | Historical cost of sold units minus historical cost of returned units |
-| Gross profit | Revenue minus COGS |
-| Gross margin | Gross profit / Revenue × 100; unavailable when Revenue is zero or negative |
-| Inventory losses | Cost of explicit expired/damaged removals plus cost of returned units that cannot be resold |
-| Operating expenses | Recorded expense amount on its economic date, or evenly allocated over its economic period |
-| Store operating profit | Gross profit minus inventory losses minus operating expenses |
+| Metric                 | Definition                                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------------------- |
+| Revenue                | Final completed POS sale totals minus completed refund totals                               |
+| COGS                   | Historical cost of sold units minus historical cost of returned units                       |
+| Gross profit           | Revenue minus COGS                                                                          |
+| Gross margin           | Gross profit / Revenue × 100; unavailable when Revenue is zero or negative                  |
+| Inventory losses       | Cost of explicit expired/damaged removals plus cost of returned units that cannot be resold |
+| Operating expenses     | Recorded expense amount on its economic date, or evenly allocated over its economic period  |
+| Store operating profit | Gross profit minus inventory losses minus operating expenses                                |
 
 The POS final price already contains promotions and unit markdowns; discounts are not subtracted again. No tax or VAT is calculated or removed from these metrics. Purchases and supplier payments do not create COGS or operating expenses. Goods become COGS when sold.
 
@@ -34,3 +34,7 @@ A legacy-estimated layer cannot produce an exact profit in a dashboard breakdown
 The summary also withholds exact and estimated cost/profit when a sale/refund total
 does not reconcile to the included line facts, including missing lines. This does
 not reconstruct missing history. Existing tax and loss-classification policy is unchanged.
+
+## Loyalty
+
+Point redemptions are already included in final sale/refund amounts; there is no second expense deduction. Unfiltered `/reports/financial-summary` responses also expose exact period loyalty movements and opening/closing available points, with negative wallets separate. Accounting shows a revenue reconciliation and future discount exposure. Issuing points does not reduce the displayed management profit. See [Loyalty and management finances](loyalty-finance.md) for the model, corrected basket rounding, refund examples, and statutory-reporting boundary.

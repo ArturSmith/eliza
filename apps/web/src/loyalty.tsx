@@ -5,12 +5,14 @@ import { api, queryClient } from './api';
 import { Field, ErrorMessage } from './forms';
 import { Button } from './components/ui/button';
 import { t, useLanguage } from './i18n';
+import { LoyaltyMembers } from './loyalty-members';
 import './loyalty.css';
 type Program = {
   enabled: boolean;
   name: string;
   description: string;
   earnPercent: string;
+  redeemPercent: string;
   version: number;
 };
 export function LoyaltyPage() {
@@ -42,9 +44,6 @@ export function LoyaltyPage() {
                   <Gift />
                 </div>
                 <h2>{t('One shop, your own rewards')}</h2>
-                <strong>
-                  {t('Members')}: {q.data.members}
-                </strong>
                 <p>
                   {t(
                     'Customers join through the Eliza Customer app and show their QR code at checkout.',
@@ -52,7 +51,7 @@ export function LoyaltyPage() {
                 </p>
                 <p>
                   {t(
-                    'One point gives one unit of your shop currency as a discount. Scan the customer QR and choose Collect to earn bonuses or Spend to use them, up to the balance and purchase total. Spend purchases do not earn new bonuses.',
+                    'One point gives one unit of your shop currency as a discount. Scan the customer QR and choose Collect to earn bonuses or Spend to use them within the shop’s redemption limit and available balance. Spend purchases do not earn new bonuses.',
                   )}
                 </p>
                 <p className="muted">
@@ -62,6 +61,7 @@ export function LoyaltyPage() {
                 </p>
               </section>
             </div>
+            <LoyaltyMembers />
           </>
         )
       )}
@@ -81,6 +81,7 @@ function ProgramEditor({ program }: { program: Program }) {
   return (
     <form
       className="card loyalty-program"
+      onChange={() => setSaved(false)}
       onSubmit={(e) => {
         e.preventDefault();
         mutation.mutate();
@@ -124,6 +125,22 @@ function ProgramEditor({ program }: { program: Program }) {
             step="0.01"
             value={v.earnPercent}
             onChange={(e) => setV({ ...v, earnPercent: e.target.value })}
+          />
+        </Field>
+        <Field
+          label={t('Purchase payable with points, %')}
+          hint={t(
+            'For a basket of 1000 and a 20% limit, at most 200 points can be used. Set 0 to disable spending points.',
+          )}
+        >
+          <input
+            required
+            type="number"
+            min="0"
+            max="100"
+            step="0.01"
+            value={v.redeemPercent}
+            onChange={(e) => setV({ ...v, redeemPercent: e.target.value })}
           />
         </Field>
       </div>
