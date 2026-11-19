@@ -2742,5 +2742,18 @@
   "Spending points earns no new bonuses.": "При списании новые бонусы не начисляются.",
   "Add products to see the points for this purchase.": "Добавьте товары, чтобы увидеть бонусы за эту покупку.",
   "Up to": "До",
-  "Closing makes this shift’s totals permanent. The register must start a new shift before taking more sales.": "После закрытия итоги смены изменить нельзя. Для следующих продаж на кассе потребуется открыть новую смену."
+  "Closing makes this shift’s totals permanent. The register must start a new shift before taking more sales.": "После закрытия итоги смены изменить нельзя. Для следующих продаж на кассе потребуется открыть новую смену.",
+  "Bronze prize": "Бронзовый приз",
+  "Silver prize": "Серебряный приз",
+  "Gold prize": "Золотой приз",
+  "Diamond prize": "Бриллиантовый приз",
+  "Hand over a loyalty prize": "Выдать приз за лояльность",
+  "Confirm the prize only after handing it to the customer.": "Подтвердите выдачу только после передачи приза покупателю.",
+  "Prize handed over. Level progress has restarted; bonus points are unchanged.": "Приз выдан. Прогресс уровня начат заново, баланс бонусов сохранён.",
+  "Hand the customer their prize, then confirm. Only level progress will restart; bonus points stay on the account.": "Передайте покупателю приз и подтвердите выдачу. Обнулится только прогресс уровня, бонусные баллы останутся на счёте.",
+  "I have handed the prize to the customer.": "Я передал приз покупателю.",
+  "Confirm prize handed over": "Подтвердить выдачу приза",
+  "This prize code has expired or was already used. Ask the customer to refresh it.": "Код приза истёк или уже использован. Попросите покупателя обновить его.",
+  "This prize code was scanned at another checkout. Ask the customer to refresh it.": "Этот код приза отсканирован на другой кассе. Попросите покупателя обновить его.",
+  "Start your shift before handing out a prize.": "Откройте смену перед выдачей приза."
 }

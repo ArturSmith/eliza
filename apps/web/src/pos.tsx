@@ -1,6 +1,7 @@
 import { formatQuantity, quantityInputValue } from './quantity-format';
 import { PosLoyaltyChoice } from './pos-loyalty-choice';
 import { ShiftCloseFields } from './shift-close-fields';
+import { PosPrize, type PrizePreview } from './pos-prize';
 import { PageOnboarding } from './onboarding/PageOnboarding';
 import { BrandLogo } from './brand';
 import { t, useLanguage, translateError } from './i18n';
@@ -663,10 +664,18 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   );
   const [loyaltyCode, setLoyaltyCode] = useState('');
   const [loyaltyCandidate, setLoyaltyCandidate] = useState<LoyaltyMember | null>(null);
+  const [prizeCandidate, setPrizeCandidate] = useState<PrizePreview | null>(null);
   const resolveLoyalty = useMutation({
-    mutationFn: (code: string) => api<LoyaltyMember>('/pos/loyalty/resolve', { code }),
+    mutationFn: (code: string) =>
+      api<LoyaltyMember | PrizePreview>('/pos/loyalty/resolve', { code }),
     onSuccess: (member) => {
-      setLoyaltyCandidate(member);
+      if ('kind' in member && member.kind === 'prize') {
+        setPrizeCandidate({ ...member, requestId: crypto.randomUUID() });
+        setLoyaltyCandidate(null);
+      } else {
+        setLoyaltyCandidate(member as LoyaltyMember);
+        setPrizeCandidate(null);
+      }
       setLoyaltyCode('');
       setMessage('');
       setModal('loyalty');
@@ -788,7 +797,11 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       return;
     }
     if (frozen) return;
-    if (term.startsWith('ELIZA-LOYALTY:') || term.startsWith('ELIZA-REDEEM:')) {
+    if (
+      term.startsWith('ELIZA-LOYALTY:') ||
+      term.startsWith('ELIZA-REDEEM:') ||
+      term.startsWith('ELIZA-PRIZE:')
+    ) {
       resolveLoyalty.mutate(term);
       return;
     }
@@ -1301,6 +1314,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                     disabled={frozen}
                     onClick={() => {
                       setLoyaltyCandidate(null);
+                      setPrizeCandidate(null);
                       setModal('loyalty');
                     }}
                   >
@@ -1566,16 +1580,36 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
       </Dialog>
       <Dialog
         open={modal === 'loyalty'}
-        title={t(loyaltyCandidate ? 'Collect or spend bonuses?' : 'Scan loyalty card')}
-        description={t('Ask the customer whether to collect or spend bonuses.')}
+        title={t(
+          prizeCandidate
+            ? 'Hand over a loyalty prize'
+            : loyaltyCandidate
+              ? 'Collect or spend bonuses?'
+              : 'Scan loyalty card',
+        )}
+        description={t(
+          prizeCandidate
+            ? 'Confirm the prize only after handing it to the customer.'
+            : 'Ask the customer whether to collect or spend bonuses.',
+        )}
         onOpenChange={(open) => {
           if (!open) {
             setModal(null);
             setLoyaltyCandidate(null);
+            setPrizeCandidate(null);
           }
         }}
       >
-        {loyaltyCandidate ? (
+        {prizeCandidate ? (
+          <PosPrize
+            key={prizeCandidate.requestId}
+            prize={prizeCandidate}
+            onClose={() => {
+              setModal(null);
+              setPrizeCandidate(null);
+            }}
+          />
+        ) : loyaltyCandidate ? (
           <PosLoyaltyChoice
             member={loyaltyCandidate}
             lines={pricedLines}

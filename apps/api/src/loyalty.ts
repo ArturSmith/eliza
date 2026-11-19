@@ -33,6 +33,7 @@ import {
   type LoyaltyMember,
 } from '@eliza/contracts';
 import { Database } from './database.js';
+import { issuePrizeQr, prizeState, prizeTier, resolvePrize, claimPrize } from './loyalty-prizes.js';
 import { loyaltyMembers } from './loyalty-members.js';
 import { issueLoyaltyQr, claimLoyaltyQr, expiredLoyaltyQr, type QrToken } from './loyalty-qr.js';
 import type { Actor } from './operations.js';
@@ -219,18 +220,31 @@ export class CustomerIntegrationController {
     const store = input === undefined ? null : parse(z.string().uuid(), input);
     const rows = (
       await this.database.pool.query(
-        `SELECT m.id,m.store_id AS "storeId",s.name AS "storeName",s.currency,p.name AS "programName",p.enabled,p.description,p.earn_percent::text AS "earnPercent",p.redeem_percent::text AS "redeemPercent",COALESCE(wallet.balance,0)::numeric(14,2)::text AS balance,GREATEST(0,-COALESCE(wallet.used,0))::numeric(30,2)::text AS "totalSaved",GREATEST(0,COALESCE(wallet.earned,0))::numeric(30,2)::text AS "totalEarned" FROM loyalty_memberships m JOIN stores s ON s.id=m.store_id JOIN loyalty_programs p ON p.store_id=m.store_id LEFT JOIN LATERAL (SELECT sum(e.amount) AS balance,sum(e.amount) FILTER (WHERE e.kind IN ('redeemed','refund_redeemed')) AS used,sum(e.amount) FILTER (WHERE e.kind IN ('earned','refund_earned')) AS earned FROM loyalty_entries e WHERE e.membership_id=m.id AND e.store_id=m.store_id) wallet ON true WHERE m.customer_subject=$1 AND ($2::uuid IS NULL OR m.store_id=$2) ORDER BY m.created_at`,
+        `SELECT m.id,m.store_id AS "storeId",s.name AS "storeName",s.currency,p.name AS "programName",p.enabled,p.description,p.earn_percent::text AS "earnPercent",p.redeem_percent::text AS "redeemPercent",COALESCE(wallet.balance,0)::numeric(14,2)::text AS balance,GREATEST(0,-COALESCE(wallet.used,0))::numeric(30,2)::text AS "totalSaved",GREATEST(0,COALESCE(wallet.earned,0))::numeric(30,2)::text AS "totalEarned",m.reward_cycle AS "rewardCycle",GREATEST(0,COALESCE(wallet.earned,0)-m.reward_earned_baseline)::numeric(30,2)::text AS "levelProgress" FROM loyalty_memberships m JOIN stores s ON s.id=m.store_id JOIN loyalty_programs p ON p.store_id=m.store_id LEFT JOIN LATERAL (SELECT sum(e.amount) AS balance,sum(e.amount) FILTER (WHERE e.kind IN ('redeemed','refund_redeemed')) AS used,sum(e.amount) FILTER (WHERE e.kind IN ('earned','refund_earned')) AS earned FROM loyalty_entries e WHERE e.membership_id=m.id AND e.store_id=m.store_id) wallet ON true WHERE m.customer_subject=$1 AND ($2::uuid IS NULL OR m.store_id=$2) ORDER BY m.created_at`,
         [customer, store],
       )
     ).rows;
     return Promise.all(
       rows.map(async (row) => ({
         ...row,
+        rewardTier: prizeTier(row.levelProgress),
         ...(row.enabled
           ? await issueLoyaltyQr(this.database.pool, customer, row.id)
           : { qrCode: '', qrExpiresAt: null, qrServerTime: null }),
       })),
     );
+  }
+  @Get('customers/:customer/memberships/:id/prize-state') prizeState(
+    @Param('customer', ParseUUIDPipe) customer: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.operations.transaction((c) => prizeState(c, id, { customer }, true));
+  }
+  @Post('customers/:customer/memberships/:id/prize-qr') prizeQr(
+    @Param('customer', ParseUUIDPipe) customer: string,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.operations.transaction((c) => issuePrizeQr(c, customer, id));
   }
   @Post('customers/:customer/memberships/:id/qr') issueQr(
     @Param('customer', ParseUUIDPipe) customer: string,
@@ -318,12 +332,28 @@ export class PosLoyaltyController {
     private registers: RegisterService,
   ) {}
   @Post('resolve') resolve(@Body() input: unknown, @Req() req: Request) {
+    if (typeof input === 'object' && input !== null && 'code' in input && String(input.code).startsWith('ELIZA-PRIZE:')) {
+      const b = parse(z.object({ code: z.string().regex(/^ELIZA-PRIZE:[a-f0-9]{64}$/) }), input);
+      return this.operations.transaction(async (c) =>
+        resolvePrize(c, await this.registers.operator(c, req), b.code),
+      );
+    }
     const b = parse(loyaltySaleSchema, input);
     return this.operations.transaction(async (c) => {
       const a = await this.registers.operator(c, req);
       const { qrToken, ...member } = await membership(c, a.storeId, b.code, true);
       return { ...member, code: await claimLoyaltyQr(c, a, b.code, qrToken) };
     });
+  }
+  @Post('prizes/claim') claim(@Body() input: unknown, @Req() req: Request) {
+    const body = parse(z.object({
+      code: z.string().regex(/^ELIZA-PRIZE:[a-f0-9]{64}$/),
+      requestId: z.uuid(),
+      confirmed: z.literal(true),
+    }), input);
+    return this.operations.transaction(async (c) =>
+      claimPrize(c, await this.registers.operator(c, req), body),
+    );
   }
 }
 
