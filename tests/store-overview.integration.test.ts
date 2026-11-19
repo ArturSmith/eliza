@@ -145,6 +145,7 @@ describe.sequential('compact store overview', () => {
     const today = storeToday(new Date(), 'Europe/Oslo');
     expect(report.body.day).toBe(today);
     expect(report.body.totalSales).toBe('200.00');
+    expect(report.body.loyalty).toEqual({ redeemed: '0.00', restored: '0.00' });
     expect(report.body.transactions).toBe(1);
     expect(report.body.averageBasket).toBe('200.00');
     expect(report.body.comparisonDate).toBeNull();
@@ -247,6 +248,52 @@ describe.sequential('compact store overview', () => {
       storeOperatingProfit: null,
       estimated: null,
       permissions: { margin: false, expenses: false },
+    });
+  });
+  it('shows period-specific points used and restored from the same ledger as Accounting', async () => {
+    const today = storeToday(new Date(), 'Europe/Oslo');
+    const prior = addDays(today, -7);
+    const session = (await owner.request('/auth/session')).body;
+    const storeId = session.store.id;
+    const membership = (
+      await db.pool.query(
+        `INSERT INTO loyalty_memberships(store_id,customer_subject,card_token)
+       VALUES($1,$2,$3) RETURNING id`,
+        [storeId, crypto.randomUUID(), crypto.randomUUID()],
+      )
+    ).rows[0].id;
+    // Historical ledger fixtures: a prior purchase, today's spend and a restoration
+    // today. Earned points must not count as points spent.
+    await db.pool.query(
+      `INSERT INTO loyalty_entries(store_id,membership_id,sale_id,kind,amount,created_at)
+       SELECT store_id,$1,id,'redeemed',-70,($2::date+time '12:00') AT TIME ZONE 'Europe/Oslo'
+       FROM sales WHERE store_id=$3 AND receipt_number='OVERVIEW-PRIOR'`,
+      [membership, prior, storeId],
+    );
+    for (const [kind, amount] of [
+      ['redeemed', '-25.50'],
+      ['refund_redeemed', '5.25'],
+      ['earned', '10'],
+    ])
+      await db.pool.query(
+        `INSERT INTO loyalty_entries(store_id,membership_id,sale_id,kind,amount,created_at)
+         SELECT store_id,$1,id,$2,$3,now() FROM sales
+         WHERE store_id=$4 AND receipt_number<>'OVERVIEW-PRIOR' LIMIT 1`,
+        [membership, kind, amount, storeId],
+      );
+    const current = (await owner.request('/reports/store-overview?date=' + today)).body;
+    expect(current.loyalty).toEqual({ redeemed: '25.50', restored: '5.25' });
+    const canonical = (await owner.request(`/reports/financial-summary?from=${today}&to=${today}`))
+      .body;
+    expect(current.loyalty.redeemed).toBe(canonical.loyalty.redeemed);
+    expect(current.loyalty.restored).toBe(canonical.loyalty.restored);
+    expect((await owner.request('/reports/store-overview?date=' + prior)).body.loyalty).toEqual({
+      redeemed: '70.00',
+      restored: '0.00',
+    });
+    expect((await owner.request('/reports/store-overview?date=2000-01-01')).body.loyalty).toEqual({
+      redeemed: '0.00',
+      restored: '0.00',
     });
   });
 });

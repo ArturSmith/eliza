@@ -2730,5 +2730,8 @@
   "Up to {percent}% of the purchase can be paid with points.": "Бонусами можно оплатить до {percent}% покупки.",
   "Points usable for this basket: {points}": "Можно списать за эту покупку: {points}",
   "No points can be used for this purchase. Choose Collect.": "Для этой покупки нельзя списать бонусы. Выберите «Накопить».",
-  "The available points or redemption limit changed. Scan the card again before paying.": "Баланс бонусов или лимит списания изменился. Перед оплатой отсканируйте карту повторно."
+  "The available points or redemption limit changed. Scan the card again before paying.": "Баланс бонусов или лимит списания изменился. Перед оплатой отсканируйте карту повторно.",
+  "In selected period": "За выбранный период",
+  "In selected period · {points} points restored on returns": "За выбранный период · возвращено бонусов: {points}",
+  "Points used = points spent on completed purchases in the selected period. Points restored on returns are shown separately. These discounts are already included in sales totals.": "Потрачено бонусов = бонусы, списанные за завершённые покупки в выбранном периоде. Возвращённые бонусы показаны отдельно. Эти скидки уже учтены в сумме продаж."
 }

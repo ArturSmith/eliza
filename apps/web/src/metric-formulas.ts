@@ -2,6 +2,10 @@ import { t } from './i18n';
 
 // Shared explanations for Overview and Accounting; these describe the existing calculations.
 const formulas: Record<string, () => string> = {
+  'Points used': () =>
+    t(
+      'Points used = points spent on completed purchases in the selected period. Points restored on returns are shown separately. These discounts are already included in sales totals.',
+    ),
   Revenue: () =>
     t(
       'Revenue = completed sales after all discounts, including points − cash/card refunds. Amounts include tax. Point discounts are not subtracted twice.',

@@ -114,7 +114,7 @@ test('Accounting owns financial results while Overview and Analytics show operat
 
   await page.goto('/');
   const overview = page.locator('.overview-summary');
-  await expect(overview.locator('.overview-metric')).toHaveCount(3);
+  await expect(overview.locator('.overview-metric')).toHaveCount(4);
   await expect(overview).toContainText('300.00');
   await expect(overview).not.toContainText(/profit|margin|expenses/i);
   await page.getByRole('link', { name: 'Accounting', exact: true }).click();

@@ -120,7 +120,7 @@ export class OwnerDashboardController {
       purchases: req.context.user.permissions.includes('purchases.read'),
     };
     const [totals, hourly, shifts, comparison] = await Promise.all([
-      this.totals(store, range, cutoff, margin, finances),
+      this.totals(store, range, cutoff, margin, finances, true),
       this.hourly(store, range, [], cutoff),
       this.database.pool.query(
         `SELECT h.id,h.status,h.opened_at AS "openedAt",h.closed_at AS "closedAt",
@@ -152,6 +152,10 @@ export class OwnerDashboardController {
     return {
       day,today,timezone:store.timezone,currency:store.currency,
       totalSales:totals.grossSales,refunds:fromScaled(toScaled(String(totals.refunds),2),2),
+      loyalty: {
+        redeemed: totals.loyalty?.redeemed ?? '0.00',
+        restored: totals.loyalty?.restored ?? '0.00',
+      },
       transactions: totals.transactions,
       averageBasket: totals.averageBasket === null ? null : totals.averageBasket.toFixed(2),
       financialSummary:totals.financialSummary,
@@ -359,6 +363,7 @@ export class OwnerDashboardController {
     cutoff: string | null,
     margin: boolean,
     finances: { expenses: boolean; purchases: boolean },
+    includeLoyalty = false,
   ) {
     const row = (
       await this.database.pool.query(
@@ -390,7 +395,7 @@ SELECT (SELECT count(*) FROM sold)::text AS transactions,
     const canonical = await this.financialMetrics.getFinancialSummary(
       store.id,
       { from: range.from, to: range.to, timezone: store.timezone },
-      { cutoffHour: cutoff === null ? undefined : Number(cutoff) },
+      { cutoffHour: cutoff === null ? undefined : Number(cutoff), includeLoyalty },
     );
     const cents = (value: unknown) => toScaled(String(value ?? '0'), 2);
     const amount = (value: bigint) => Number(fromScaled(value, 2));
@@ -401,6 +406,7 @@ SELECT (SELECT count(*) FROM sold)::text AS transactions,
     const profit = margin && canonical.grossProfit !== null ? num(canonical.grossProfit) : null;
     const expenses = finances.expenses ? num(canonical.operatingExpenses) : null;
     return {
+      ...(includeLoyalty ? { loyalty: canonical.loyalty } : {}),
       transactions: num(row.transactions),
       grossSales: canonical.breakdown.completedSales,
       revenue,

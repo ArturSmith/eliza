@@ -84,11 +84,22 @@ test('a focused daily overview shows sales metrics, shifts, dates and a responsi
     amount: '30',
     paymentMethod: 'bank',
   });
+  await page.route('**/api/reports/store-overview?*', async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    if (new URL(route.request().url()).searchParams.get('date') === today)
+      body.loyalty = { redeemed: '1250.50', restored: '20.00' };
+    await route.fulfill({ response, json: body });
+  });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Store overview', exact: true })).toBeVisible();
   const cards = page.locator('.overview-metric');
-  await expect(cards).toHaveCount(3);
+  await expect(cards).toHaveCount(4);
   await expect(cards.filter({ hasText: 'Total sales' })).toContainText('360.00');
+  const points = cards.filter({ hasText: 'Points used' });
+  await expect(points.locator('strong')).toHaveText('1,250.5');
+  await expect(points).toContainText('20 points restored on returns');
+  await expect(points).not.toContainText('NOK');
   await expect(cards.filter({ hasText: 'Transactions' })).toContainText('3');
   await expect(cards.filter({ hasText: 'Average basket' })).toContainText('120.00');
   await expect(page.locator('.overview-summary')).not.toContainText(/margin|profit|expenses/i);
@@ -128,6 +139,8 @@ test('a focused daily overview shows sales metrics, shifts, dates and a responsi
   }
   await page.getByLabel('Overview day', { exact: true }).selectOption('yesterday');
   await expect(cards.filter({ hasText: 'Total sales' })).toContainText('0.00');
+  await expect(points.locator('strong')).toHaveText('0');
+  await expect(points).not.toContainText('restored');
   await expect(page.getByText('No shifts for this day.', { exact: true })).toBeVisible();
   await page.getByLabel('Overview day', { exact: true }).selectOption('custom');
   await page.getByLabel('Overview date', { exact: true }).fill(addDays(today, -2));
@@ -138,5 +151,6 @@ test('a focused daily overview shows sales metrics, shifts, dates and a responsi
   await expect(
     page.getByRole('heading', { name: 'Продажи в течение дня', exact: true }),
   ).toBeVisible();
+  await expect(cards.filter({ hasText: 'Списано бонусов' })).toContainText('За выбранный период');
   expect(errors).toEqual([]);
 });

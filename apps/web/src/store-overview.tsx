@@ -7,6 +7,7 @@ import { ErrorMessage } from './forms';
 import { HourlySales } from './owner-dashboard';
 import { metricFormula } from './metric-formulas';
 import { formatMoney } from './receipts';
+import { formatQuantity } from './quantity-format';
 import { getLocale, t, useLanguage } from './i18n';
 import './store-overview.css';
 
@@ -15,6 +16,7 @@ type OverviewData = {
   today: string;
   totalSales: string;
   refunds: string;
+  loyalty: { redeemed: string; restored: string };
   comparisonDate: string | null;
   transactions: number;
   averageBasket: string | null;
@@ -181,6 +183,20 @@ export function StoreOverview() {
                 currency={currency}
                 formula="Average basket"
                 note={t('Per completed receipt')}
+              />
+              <Metric
+                label="Points used"
+                value={formatQuantity(data.loyalty.redeemed)}
+                currency={currency}
+                formula="Points used"
+                count
+                note={
+                  Number(data.loyalty.restored) > 0
+                    ? t('In selected period · {points} points restored on returns', {
+                        points: formatQuantity(data.loyalty.restored),
+                      })
+                    : t('In selected period')
+                }
               />
             </section>
             <section className="panel overview-shifts" aria-labelledby="overview-shifts-heading">
