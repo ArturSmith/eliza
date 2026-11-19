@@ -2733,5 +2733,14 @@
   "The available points or redemption limit changed. Scan the card again before paying.": "Баланс бонусов или лимит списания изменился. Перед оплатой отсканируйте карту повторно.",
   "In selected period": "За выбранный период",
   "In selected period · {points} points restored on returns": "За выбранный период · возвращено бонусов: {points}",
-  "Points used = points spent on completed purchases in the selected period. Points restored on returns are shown separately. These discounts are already included in sales totals.": "Потрачено бонусов = бонусы, списанные за завершённые покупки в выбранном периоде. Возвращённые бонусы показаны отдельно. Эти скидки уже учтены в сумме продаж."
+  "Points used = points spent on completed purchases in the selected period. Points restored on returns are shown separately. These discounts are already included in sales totals.": "Потрачено бонусов = бонусы, списанные за завершённые покупки в выбранном периоде. Возвращённые бонусы показаны отдельно. Эти скидки уже учтены в сумме продаж.",
+  "Earn with Collect": "Начислится за покупку",
+  "{percent}% of this purchase": "{percent}% от суммы покупки",
+  "Pay with points": "Оплата бонусами",
+  "Purchase limit: {points} points": "Лимит покупки: {points} баллов",
+  "Can spend now": "Можно списать сейчас",
+  "Spending points earns no new bonuses.": "При списании новые бонусы не начисляются.",
+  "Add products to see the points for this purchase.": "Добавьте товары, чтобы увидеть бонусы за эту покупку.",
+  "Up to": "До",
+  "Closing makes this shift’s totals permanent. The register must start a new shift before taking more sales.": "После закрытия итоги смены изменить нельзя. Для следующих продаж на кассе потребуется открыть новую смену."
 }

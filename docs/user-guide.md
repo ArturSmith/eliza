@@ -123,7 +123,16 @@ Eliza compares the counted cash with the expected drawer total (float + cash sal
 cash in/out − cash refunds). A cashier needs a Manager/Owner PIN to close with a
 difference. Closed shifts cannot be edited afterwards.
 
-The cashier who opened a shift must close it before anyone else can use that register.
+A shift must be closed before another cashier can use that register. The cashier can
+close it at the till. An authorized manager can also use **Management → Shifts →
+Close shift** on an open row, enter the physically counted cash and optional closing
+notes, and confirm. The signed-in manager's `shift.approve` permission authorizes any
+cash difference; a second PIN is not requested. The original cashier remains attached
+to the shift, while the audit records the manager who closed it. Expected cash is
+recalculated from cash movements at closing. Repeated submissions do not close the
+shift twice. An online till checks its shift status every five seconds and stops
+accepting new sales when the shift is closed. Unfinished local carts are not completed
+or included in the closing totals.
 
 ---
 

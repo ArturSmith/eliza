@@ -1,4 +1,5 @@
 import { HistoryPagination, type HistoryPage } from './history-pagination';
+import { ManagementShiftClose } from './management-shift-close';
 import { t, useLanguage, getLocale } from './i18n';
 import { ReceiptSearch } from './refunds';
 import { useState } from 'react';
@@ -95,7 +96,12 @@ export function SalesHistorySection() {
 export function ShiftsPage() {
   useLanguage();
   const session = useSession().data!;
-  const query = useQuery({ queryKey: ['shifts'], queryFn: () => api<Shift[]>('/reports/shifts') });
+  const query = useQuery({
+    queryKey: ['shifts'],
+    queryFn: () => api<Shift[]>('/reports/shifts'),
+    refetchInterval: 30_000,
+  });
+  const [closingShift, setClosingShift] = useState<Shift | null>(null);
   const [shift, setShift] = useState<Shift | null>(null);
   const cash = useQuery({
     queryKey: ['shift-cash', shift?.id],
@@ -178,6 +184,12 @@ export function ShiftsPage() {
                         : formatMoney(s.difference, session.store.currency)}
                     </td>
                     <td>
+                      {s.status === 'open' &&
+                        session.user.permissions.includes('shift.approve') && (
+                          <Button variant="outline" onClick={() => setClosingShift(s)}>
+                            {t('Close shift')}
+                          </Button>
+                        )}
                       <Button variant="ghost" onClick={() => setShift(s)}>
                         {t('Cash history ')}
                       </Button>
@@ -194,6 +206,14 @@ export function ShiftsPage() {
           </div>
         )}
       </section>
+      {closingShift && (
+        <ManagementShiftClose
+          key={closingShift.id}
+          shift={closingShift}
+          currency={session.store.currency}
+          onClose={() => setClosingShift(null)}
+        />
+      )}
       <Dialog
         open={!!shift}
         onOpenChange={(v) => !v && setShift(null)}

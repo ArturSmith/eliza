@@ -1,4 +1,6 @@
 import { formatQuantity, quantityInputValue } from './quantity-format';
+import { PosLoyaltyChoice } from './pos-loyalty-choice';
+import { ShiftCloseFields } from './shift-close-fields';
 import { PageOnboarding } from './onboarding/PageOnboarding';
 import { BrandLogo } from './brand';
 import { t, useLanguage, translateError } from './i18n';
@@ -164,6 +166,7 @@ export function PosPage() {
     queryKey: ['pos-context'],
     queryFn: () => api<PosContext>('/pos/enter', {}),
     refetchOnWindowFocus: true,
+    refetchInterval: (query) => (query.state.data?.shift ? 5_000 : false),
   });
   const enroll = useMutation({
     mutationFn: (body: unknown) => api('/pos/enroll', body),
@@ -433,30 +436,13 @@ function ShiftForm({
           </Field>
         </>
       ) : (
-        <>
-          <p className="notice">
-            {t('Expected drawer cash:')}{' '}
-            <strong>{formatMoney(context.shift!.expectedCash, context.store!.currency)}</strong>
-          </p>
-          <Field label={t('Counted cash')}>
-            <input
-              name="countedCash"
-              inputMode="decimal"
-              value={counted}
-              onChange={(e) => setCounted(e.target.value)}
-              required
-            />
-          </Field>
-          <Field label={t('Closing notes')}>
-            <textarea name="notes" maxLength={500} rows={2} />
-          </Field>
-          <ApprovalFields active={needsApproval} />
-          <p className="muted">
-            {t(
-              'Closing makes this shift’s totals permanent. Finish or hold your cart before closing. ',
-            )}
-          </p>
-        </>
+        <ShiftCloseFields
+          expectedCash={context.shift!.expectedCash}
+          currency={context.store!.currency}
+          counted={counted}
+          onCounted={setCounted}
+          approval={<ApprovalFields active={needsApproval} />}
+        />
       )}
       <ErrorMessage error={mutation.error} />
       <div className="form-actions">
@@ -687,10 +673,6 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
     },
     onError: (error) => setMessage(error instanceof Error ? error.message : String(error)),
   });
-  const candidateSpend =
-    loyaltyCandidate && pricedLines.length
-      ? applyLoyaltyDiscount(pricedLines, { ...loyaltyCandidate, mode: 'spend' }).spent
-      : undefined;
   const currency = context.store!.currency;
   const total = fromScaled(totals.total, 2);
   const needsApproval =
@@ -1594,59 +1576,15 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
         }}
       >
         {loyaltyCandidate ? (
-          <div className="pos-loyalty-choice">
-            <p>{loyaltyCandidate.programName}</p>
-            <div className="pos-loyalty-balance">
-              <span>{t('Bonus balance')}</span>
-              <strong>{formatQuantity(loyaltyCandidate.balance)}</strong>
-            </div>
-            <p className="muted">
-              {t(
-                'Collect earns bonuses. Spending points follows the shop’s percentage limit and earns no new bonuses.',
-              )}
-            </p>
-            <p>
-              {t('Up to {percent}% of the purchase can be paid with points.', {
-                percent: formatQuantity(loyaltyCandidate.redeemPercent),
-              })}
-            </p>
-            {candidateSpend !== undefined && (
-              <p>
-                {t('Points usable for this basket: {points}', {
-                  points: formatQuantity(candidateSpend),
-                })}
-              </p>
-            )}
-            <div className="pos-loyalty-options">
-              <Button
-                onClick={() => {
-                  setDraft((d) => ({ ...d, loyalty: { ...loyaltyCandidate, mode: 'collect' } }));
-                  setLoyaltyCandidate(null);
-                  setModal(null);
-                }}
-              >
-                {t('Collect')}
-              </Button>
-              <Button
-                variant="outline"
-                disabled={
-                  toScaled(loyaltyCandidate.balance, 2) <= 0n ||
-                  toScaled(loyaltyCandidate.redeemPercent, 2) === 0n ||
-                  (candidateSpend !== undefined && toScaled(candidateSpend, 2) === 0n)
-                }
-                onClick={() => {
-                  setDraft((d) => ({ ...d, loyalty: { ...loyaltyCandidate, mode: 'spend' } }));
-                  setLoyaltyCandidate(null);
-                  setModal(null);
-                }}
-              >
-                {t('Spend')}
-              </Button>
-            </div>
-            <Button variant="ghost" onClick={() => setLoyaltyCandidate(null)}>
-              {t('Scan another card')}
-            </Button>
-          </div>
+          <PosLoyaltyChoice
+            member={loyaltyCandidate}
+            lines={pricedLines}
+            onSelect={(mode) => {
+              setDraft((d) => ({ ...d, loyalty: { ...loyaltyCandidate, mode } }));
+              setLoyaltyCandidate(null);
+              setModal(null);
+            }}
+          />
         ) : (
           <form
             className="pos-loyalty-input"

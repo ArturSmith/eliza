@@ -174,13 +174,119 @@
 }
 .pos-loyalty-choice {
   display: grid;
-  gap: 20px;
-  margin-top: 22px;
+  gap: 16px;
+  margin-top: 20px;
 }
-.pos-loyalty-choice .pos-loyalty-balance {
-  padding: 20px;
+.pos-loyalty-program-name {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.pos-loyalty-widgets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.pos-loyalty-widget,
+.pos-loyalty-widget.pos-loyalty-balance {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
   border-radius: 14px;
-  background: var(--color-background-f6f8f1);
+  background: var(--surface);
+}
+.pos-loyalty-widget h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.pos-loyalty-widget h3 svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.pos-loyalty-widget .pos-loyalty-stat-value {
+  display: block;
+  font-size: 28px;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.pos-loyalty-widget small {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.pos-loyalty-widget p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.pos-loyalty-widget.pos-loyalty-earn {
+  background: var(--color-background-f6f8f1, var(--surface));
+}
+.pos-loyalty-widget.pos-loyalty-spend {
+  grid-column: 1 / -1;
+}
+.pos-loyalty-spend-summary {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.pos-loyalty-spend-summary > div {
+  min-width: 0;
+}
+.pos-loyalty-spend-summary p {
+  margin-top: 6px;
+}
+.pos-loyalty-spend-available {
+  display: grid;
+  gap: 8px;
+  padding-left: 16px;
+  border-left: 1px solid var(--border);
+}
+.pos-loyalty-spend-available > span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.pos-loyalty-spend-available > strong {
+  font-size: 24px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.pos-loyalty-choice-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.pos-loyalty-choice .pos-loyalty-options > button {
+  min-height: 48px;
+}
+@media (max-width: 420px) {
+  .pos-loyalty-widget,
+  .pos-loyalty-widget.pos-loyalty-balance {
+    padding: 14px;
+  }
+  .pos-loyalty-widgets {
+    gap: 10px;
+  }
+  .pos-loyalty-spend-available {
+    padding-left: 0;
+    border-left: 0;
+  }
 }
 
 .loyalty-members {
@@ -298,4 +404,8 @@
   .loyalty-member-filters > button {
     justify-self: start;
   }
+}
+
+.pos-loyalty-widget:not(.pos-loyalty-spend) h3 {
+  min-height: 39px;
 }
