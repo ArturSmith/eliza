@@ -19,6 +19,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import {
   type ShoppingList,
+  productDisplayName,
   supplierSchema,
   supplierProductSchema,
   compareOffers,
@@ -546,7 +547,7 @@ export class PurchasingController {
   // manager can see whether a quote is still being honoured.
   private offerQuery(where: string, includeProductDetails = false) {
     return `SELECT sp.id,sp.supplier_id AS "supplierId",s.name AS "supplierName",
-      sp.product_id AS "productId",p.name AS "productName",p.sku,p.unit,
+      sp.product_id AS "productId",concat_ws(' · ',p.name,NULLIF(p.volume,'')) AS "productName",p.sku,p.unit,
       ${includeProductDetails ? 'p.image AS "productImage",p.description AS "productDescription",p.category AS "productCategory",p.active AS "productActive",' : ''}
       sp.supplier_sku AS "supplierSku",sp.pack_size::text AS "packSize",sp.pack_cost::text AS "packCost",
       sp.lead_time_days AS "leadTimeDays",sp.minimum_order::text AS "minimumOrder",
@@ -575,10 +576,10 @@ export class PurchasingController {
     @Req() req: AuthRequest,
   ) {
     const rows = (
-      await this.database.pool.query(this.offerQuery('sp.supplier_id=$2', true) + ' ORDER BY p.name', [
-        req.context.store.id,
-        id,
-      ])
+      await this.database.pool.query(
+        this.offerQuery('sp.supplier_id=$2', true) + ' ORDER BY p.name',
+        [req.context.store.id, id],
+      )
     ).rows;
     // Ranking across a supplier's own catalogue would be meaningless, but every
     // row still needs its per-unit price, so the client never has to derive it.
@@ -781,7 +782,17 @@ export class PurchasingController {
     const page = parse(z.coerce.number().int().min(1).max(1000000).default(1), pageInput);
     const status = parse(
       z
-        .enum(['all', 'draft', 'active', 'delivered', 'ordered', 'partially_received', 'received', 'closed', 'cancelled'])
+        .enum([
+          'all',
+          'draft',
+          'active',
+          'delivered',
+          'ordered',
+          'partially_received',
+          'received',
+          'closed',
+          'cancelled',
+        ])
         .default('all'),
       statusInput,
     );
@@ -1017,8 +1028,21 @@ export class PurchasingController {
     return this.run(req, b.requestId, 'draft', b, async (c) => {
       const order = await this.saveDraft(c, req, b);
       if (!b.placeOrder) return order;
-      await c.query("UPDATE purchases SET status='ordered',ordered_at=now(),version=version+1 WHERE id=$1 AND store_id=$2", [order.id, req.context.store.id]);
-      await audit(c, { storeId: req.context.store.id, employeeId: req.context.user.id, deviceId: req.context.device.id }, 'Purchase placed', order.id, {});
+      await c.query(
+        "UPDATE purchases SET status='ordered',ordered_at=now(),version=version+1 WHERE id=$1 AND store_id=$2",
+        [order.id, req.context.store.id],
+      );
+      await audit(
+        c,
+        {
+          storeId: req.context.store.id,
+          employeeId: req.context.user.id,
+          deviceId: req.context.device.id,
+        },
+        'Purchase placed',
+        order.id,
+        {},
+      );
       return this.details(c, order.id, req.context.store.id);
     });
   }
@@ -1053,7 +1077,10 @@ export class PurchasingController {
       ).rows[0];
       if (!p) throw new BadRequestException('Choose active products from this store.');
       this.whole(p.unit, line.quantity);
-      const totals = line.unitCost === null ? null : calculatePurchaseLine(line.unitCost, line.quantity, line.taxRate);
+      const totals =
+        line.unitCost === null
+          ? null
+          : calculatePurchaseLine(line.unitCost, line.quantity, line.taxRate);
       if (totals) {
         subtotal += toScaled(totals?.subtotal ?? null, 2);
         tax += toScaled(totals?.tax ?? null, 2);
@@ -1126,7 +1153,7 @@ export class PurchasingController {
           store,
           p.id,
           product.id,
-          product.name,
+          productDisplayName(product),
           product.sku,
           product.unit,
           line.quantity,
@@ -1263,11 +1290,14 @@ export class PurchasingController {
     });
   }
   private async finalizeUnpricedOrder(c: PoolClient, id: string, store: string) {
-    await c.query(`UPDATE purchases p SET subtotal=g.subtotal,tax=g.tax,total=g.total
+    await c.query(
+      `UPDATE purchases p SET subtotal=g.subtotal,tax=g.tax,total=g.total
       FROM (SELECT purchase_id,sum(subtotal) AS subtotal,sum(tax) AS tax,sum(total) AS total
             FROM goods_receipts WHERE purchase_id=$1 AND store_id=$2 GROUP BY purchase_id) g
       WHERE p.id=$1 AND p.store_id=$2 AND p.status IN ('received','closed') AND g.purchase_id=p.id
-        AND EXISTS(SELECT 1 FROM purchase_lines l WHERE l.purchase_id=p.id AND l.store_id=p.store_id AND l.unit_cost IS NULL)`, [id, store]);
+        AND EXISTS(SELECT 1 FROM purchase_lines l WHERE l.purchase_id=p.id AND l.store_id=p.store_id AND l.unit_cost IS NULL)`,
+      [id, store],
+    );
   }
   private async lock(c: PoolClient, id: string, store: string, version: number) {
     const p = (
@@ -1289,7 +1319,10 @@ export class PurchasingController {
         p = await this.lock(c, id, store, b.version);
       if (!['ordered', 'partially_received'].includes(p.status))
         throw new ConflictException('Only placed orders can be received.');
-      if ((b.paymentStatus !== undefined || b.paymentDueDate !== undefined) && !req.context.user.permissions.includes('purchases.write'))
+      if (
+        (b.paymentStatus !== undefined || b.paymentDueDate !== undefined) &&
+        !req.context.user.permissions.includes('purchases.write')
+      )
         throw new ForbiddenException('You cannot update payment status.');
       const orderLines = (
         await c.query('SELECT * FROM purchase_lines WHERE purchase_id=$1 ORDER BY product_id', [id])
@@ -1319,9 +1352,15 @@ export class PurchasingController {
         )
           throw new BadRequestException('Delivery exceeds the remaining order quantity.');
         const cost = entry.unitCost ?? line.unit_cost;
-        if (cost === null) throw new BadRequestException('Enter the actual purchase cost for every received product.');
+        if (cost === null)
+          throw new BadRequestException(
+            'Enter the actual purchase cost for every received product.',
+          );
         const taxRate = entry.taxRate ?? line.tax_rate;
-        if (toScaled(taxRate, 2) !== toScaled(line.tax_rate, 2) && !req.context.user.permissions.includes('purchases.cost'))
+        if (
+          toScaled(taxRate, 2) !== toScaled(line.tax_rate, 2) &&
+          !req.context.user.permissions.includes('purchases.cost')
+        )
           throw new ForbiddenException('You cannot change receiving costs.');
         if (entry.sellingPrice !== undefined) {
           if (!req.context.user.permissions.includes('catalog.write'))
@@ -1432,12 +1471,32 @@ export class PurchasingController {
       );
       await this.finalizeUnpricedOrder(c, id, store);
       if (b.paymentStatus !== undefined) {
-        const current = (await c.query('SELECT total,payment_status,payment_due_date,paid_at FROM purchases WHERE id=$1 AND store_id=$2', [id,store])).rows[0];
+        const current = (
+          await c.query(
+            'SELECT total,payment_status,payment_due_date,paid_at FROM purchases WHERE id=$1 AND store_id=$2',
+            [id, store],
+          )
+        ).rows[0];
         if (b.paymentStatus === 'paid' && current.total === null)
           throw new BadRequestException('Complete delivery costs before marking this order paid.');
-        await c.query("UPDATE purchases SET payment_status=$2,payment_due_date=$3,paid_at=CASE WHEN $2='paid' THEN COALESCE(paid_at,now()) ELSE NULL END WHERE id=$1 AND store_id=$4", [id,b.paymentStatus,b.paymentDueDate || null,store]);
-        await audit(c, {storeId:store,employeeId:req.context.user.id,deviceId:req.context.device.id}, 'Purchase payment updated', id,
-          {before:{status:current.payment_status,dueDate:current.payment_due_date,paidAt:current.paid_at},after:{status:b.paymentStatus,dueDate:b.paymentDueDate || null}});
+        await c.query(
+          "UPDATE purchases SET payment_status=$2,payment_due_date=$3,paid_at=CASE WHEN $2='paid' THEN COALESCE(paid_at,now()) ELSE NULL END WHERE id=$1 AND store_id=$4",
+          [id, b.paymentStatus, b.paymentDueDate || null, store],
+        );
+        await audit(
+          c,
+          { storeId: store, employeeId: req.context.user.id, deviceId: req.context.device.id },
+          'Purchase payment updated',
+          id,
+          {
+            before: {
+              status: current.payment_status,
+              dueDate: current.payment_due_date,
+              paidAt: current.paid_at,
+            },
+            after: { status: b.paymentStatus, dueDate: b.paymentDueDate || null },
+          },
+        );
       }
       await audit(
         c,

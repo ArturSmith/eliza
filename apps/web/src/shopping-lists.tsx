@@ -1,3 +1,4 @@
+import { productDisplayName } from '@eliza/contracts';
 import { formatQuantity, quantityInputValue } from './quantity-format';
 import { useState, useRef } from 'react';
 import { GripVertical } from 'lucide-react';
@@ -319,7 +320,9 @@ function ShoppingEditor({ list, onDeleted }: { list: ShoppingList; onDeleted: ()
     productId ? (offers.data?.filter((o) => o.productId === productId) ?? []) : [];
   const [name, setName] = useState(list.name),
     [notes, setNotes] = useState(list.notes),
-    [lines, setLines] = useState(() => list.lines.map((line) => ({ ...line, quantity: quantityInputValue(line.quantity) })));
+    [lines, setLines] = useState(() =>
+      list.lines.map((line) => ({ ...line, quantity: quantityInputValue(line.quantity) })),
+    );
   const [sections, setSections] = useState(list.sections ?? []);
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const pointerDrag = useRef<{ id: string; x: number; y: number; active: boolean } | null>(null);
@@ -418,7 +421,9 @@ function ShoppingEditor({ list, onDeleted }: { list: ShoppingList; onDeleted: ()
         sectionId,
         label: '',
         target,
-        quantity: quantityInputValue(suggestedOrderQuantity(target, p.stock, p.incoming, p.drafts, p.unit)),
+        quantity: quantityInputValue(
+          suggestedOrderQuantity(target, p.stock, p.incoming, p.drafts, p.unit),
+        ),
         supplierId: supplier?.active ? supplier.id : null,
         supplierName: supplier?.name ?? null,
         supplierActive: supplier?.active ?? null,
@@ -806,7 +811,7 @@ function ShoppingEditor({ list, onDeleted }: { list: ShoppingList; onDeleted: ()
                 .filter((p) => p.active && !lines.some((l) => l.productId === p.productId))
                 .map((p) => ({
                   id: p.productId,
-                  title: p.name,
+                  title: productDisplayName(p),
                   subtitle: p.sku,
                   keywords: [p.name, p.sku],
                 }))}

@@ -91,6 +91,8 @@ export const productImageSchema = z
     'Choose a valid product photo',
   );
 export const productSchema = z.object({
+  brand: z.string().trim().max(120).optional(),
+  volume: z.string().trim().max(120).optional(),
   description: z.string().trim().max(2000).optional(),
   source: z
     .object({
@@ -156,6 +158,36 @@ export const deviceSchema = z.object({
   name: short,
   type: z.enum(['management', 'pos', 'price_tags', 'price_check']),
 });
+/** One shared catalog draft; each size becomes an independent stocked product. */
+export const productVariantsSchema = productSchema
+  .omit({
+    volume: true,
+    barcodes: true,
+    sku: true,
+    plu: true,
+  })
+  .extend({
+    variants: z
+      .array(
+        z.object({
+          volume: z.string().trim().min(1).max(120),
+          barcode: z.string().trim().min(1).max(100),
+        }),
+      )
+      .min(2)
+      .max(50)
+      .refine(
+        (rows) => new Set(rows.map((row) => row.barcode)).size === rows.length,
+        'Each volume variant must have a unique barcode.',
+      )
+      .refine(
+        (rows) => new Set(rows.map((row) => row.volume.toLocaleLowerCase())).size === rows.length,
+        'Each volume variant must have a different volume.',
+      ),
+  });
+export function productDisplayName(product: { name: string; volume?: string | null }) {
+  return [product.name, product.volume?.trim()].filter(Boolean).join(' · ');
+}
 export type ProductInput = z.infer<typeof productSchema>;
 export type AdjustmentInput = z.infer<typeof adjustmentSchema>;
 export type Product = Omit<ProductInput, 'cost'> & {
@@ -411,6 +443,8 @@ export type Shift = {
   cashierId: string;
 };
 export type PosProduct = {
+  brand?: string;
+  volume?: string;
   source?: ProductInput['source'];
   image?: string;
   id: string;

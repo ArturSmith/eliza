@@ -1,3 +1,4 @@
+import { productDisplayName } from '@eliza/contracts';
 import {
   stockQuantity,
   stockReasons,
@@ -386,6 +387,8 @@ export function ProductForm({
             fillField('name', suggestion.name);
             fillField('description', suggestion.description ?? '');
             fillField('category', suggestion.category);
+            fillField('brand', suggestion.brand);
+            fillField('volume', suggestion.quantity);
             fillField('barcodes', suggestion.barcode, true);
             let imageImported = false;
             if (!image && suggestion.image) {
@@ -515,6 +518,26 @@ export function ProductForm({
             maxLength={120}
           />
         </Field>
+        <div className="form-grid">
+          <Field label={t('Brand (optional)')}>
+            <input
+              name="brand"
+              maxLength={120}
+              defaultValue={
+                initial?.brand ?? initial?.source?.brand ?? prefill?.source?.brand ?? ''
+              }
+            />
+          </Field>
+          <Field label={t('Volume / size (optional)')}>
+            <input
+              name="volume"
+              maxLength={120}
+              defaultValue={
+                initial?.volume ?? initial?.source?.quantity ?? prefill?.source?.quantity ?? ''
+              }
+            />
+          </Field>
+        </div>
         <Field label={t('Description (optional)')}>
           <textarea
             name="description"
@@ -935,9 +958,16 @@ export function AdjustmentForm({
               }
               options={eligible.map((p) => ({
                 id: p.id,
-                title: p.name,
+                title: productDisplayName(p),
                 subtitle: `${p.sku} · ${formatQuantity(p.stock)} ${t(p.unit ?? '')} ${t('on hand')}`,
-                keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
+                keywords: [
+                  p.name,
+                  p.brand ?? '',
+                  p.volume ?? '',
+                  p.sku,
+                  p.plu ?? '',
+                  ...p.barcodes,
+                ],
               }))}
               onSelect={(id) => {
                 setProductId(id);

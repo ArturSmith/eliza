@@ -25,7 +25,7 @@ test('owner setup, inventory, employee PINs, checkout recovery, and shift reconc
   await productForm.getByLabel('Selling price').fill('49.90');
   await productForm.getByLabel('Tax rate (%)').fill('15');
   await productForm.getByRole('button', { name: 'Add product', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Edit product', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Product name', { exact: true })).toHaveValue('');
   await page.getByRole('link', { name: 'Back to products', exact: true }).click();
   await expect(page.getByRole('article', { name: 'Sourdough bread', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /^04\d{11}$/ }).first()).toBeVisible();

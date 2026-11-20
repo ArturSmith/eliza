@@ -1,3 +1,4 @@
+import { productDisplayName } from '@eliza/contracts';
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Package, Plus, Trash2, WandSparkles } from 'lucide-react';
@@ -217,14 +218,23 @@ export function PurchaseOrderForm({ done, order, fixedSupplierId, onCancel }: Or
                     <SearchSelect
                       label={t('Product')}
                       placeholder={t('Select a product')}
-                      value={product && { title: product.name, subtitle: product.sku }}
+                      value={
+                        product && { title: productDisplayName(product), subtitle: product.sku }
+                      }
                       options={catalog
                         .filter((p) => p.active)
                         .map((p) => ({
                           id: p.id,
-                          title: p.name,
+                          title: productDisplayName(p),
                           subtitle: [p.sku, ...p.barcodes].join(' · '),
-                          keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
+                          keywords: [
+                            p.name,
+                            p.brand ?? '',
+                            p.volume ?? '',
+                            p.sku,
+                            p.plu ?? '',
+                            ...p.barcodes,
+                          ],
                         }))}
                       createLabel={
                         session.user.permissions.includes('catalog.write')

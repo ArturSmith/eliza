@@ -35,7 +35,7 @@ test('language persists, switches across tabs, and preserves forms and business 
   await expect(productForm.getByLabel('Категория', { exact: true })).toHaveValue('Sales');
   await expect(productForm.getByLabel('Единица измерения', { exact: true })).toHaveValue('piece');
   await productForm.getByRole('button', { name: 'Добавить товар', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Изменить товар', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Название товара', { exact: true })).toHaveValue('');
   await page.getByRole('link', { name: 'Назад к товарам', exact: true }).click();
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('lang', 'ru');
@@ -91,8 +91,11 @@ test('language persists, switches across tabs, and preserves forms and business 
   await page.getByLabel('PIN кассира').fill('654321');
   await page.getByRole('button', { name: 'Разблокировать кассу' }).click();
   await page.getByRole('button', { name: 'Открыть смену', exact: true }).click();
-  await dialog.getByLabel('Начальная сумма наличных').fill('100');
-  await dialog.getByRole('button', { name: 'Открыть смену', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Начальная сумма наличных', exact: true }).fill('100');
+  await page
+    .locator('.shift-start-form')
+    .getByRole('button', { name: 'Открыть смену', exact: true })
+    .click();
   await page.locator('.pos-product').filter({ hasText: 'Cash' }).click();
   await expect(page.locator('.cart-line')).toContainText('Cash');
   await page.getByLabel('Язык', { exact: true }).selectOption('en');

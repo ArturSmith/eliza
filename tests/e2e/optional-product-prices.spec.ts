@@ -21,11 +21,11 @@ test('creates and reopens a product with unknown prices, then saves real prices'
   await expect(form.getByLabel('Purchase cost (optional)', { exact: true })).toHaveCount(0);
   await expect(form.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('');
   await form.getByRole('button', { name: 'Add product', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Edit product', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Product name', { exact: true })).toHaveValue('');
   const products = await (await page.request.get('/api/products')).json();
   const product = products.find((p: any) => p.sku === 'UNKNOWN-YOG');
   expect(product).toMatchObject({ price: null, cost: null });
-  await page.reload();
+  await page.goto('/products/' + product.id);
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('button', { name: 'Edit product', exact: true }).click();
   await expect(page.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('');

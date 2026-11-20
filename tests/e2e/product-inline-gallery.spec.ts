@@ -67,7 +67,10 @@ test('creates a blank product, edits inline with dirty/cancel/save states, and p
   );
   await page.getByRole('button', { name: 'Add product', exact: true }).click();
   const product = await (await created).json();
-  await expect(page).toHaveURL('/products/' + product.id);
+  await expect(page).toHaveURL('/products/new');
+  await expect(page.getByLabel('Product name', { exact: true })).toHaveValue('');
+  await expect(page.locator('.product-photo-thumbnail')).toHaveCount(0);
+  await page.goto('/products/' + product.id);
   await expect(page.getByRole('button', { name: 'Edit product', exact: true })).toBeVisible();
   expect(product.images).toHaveLength(2);
   expect(product.image).toBe(product.images[0]);

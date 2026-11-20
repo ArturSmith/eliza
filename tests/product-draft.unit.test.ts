@@ -22,6 +22,8 @@ describe('inline product draft', () => {
     const draft = productDraft();
     for (const field of [
       'name',
+      'brand',
+      'volume',
       'description',
       'category',
       'unit',
@@ -61,6 +63,8 @@ describe('inline product draft', () => {
       }),
     ).toBe(key);
     expect(productDraftKey({ ...draft, name: 'New yogurt' })).not.toBe(key);
+    expect(productDraftKey({ ...draft, brand: 'New brand' })).not.toBe(key);
+    expect(productDraftKey({ ...draft, volume: '500 ml' })).not.toBe(key);
     expect(productDraftKey({ ...draft, price: '' })).not.toBe(key);
     expect(productDraftKey({ ...draft, images: [] })).not.toBe(key);
   });

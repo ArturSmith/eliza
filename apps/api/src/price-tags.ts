@@ -1,3 +1,4 @@
+import { productDisplayName } from '@eliza/contracts';
 import { readOnboarding, saveOnboarding } from './onboarding.js';
 import {
   BadRequestException,
@@ -27,7 +28,7 @@ export class PriceTagsController {
   private async availableMarkdownLabels(store: string, ids: string[] | null = null) {
     return (
       await this.database.pool.query(
-        `SELECT u.id,u.barcode,p.id AS "productId",p.name,p.sku,
+        `SELECT u.id,u.barcode,p.id AS "productId",p.name,p.volume,p.brand,p.sku,
           m.final_unit_price::text AS price,m.original_unit_price::text AS "regularPrice",
           b.expiry_date AS "expiryDate",m.valid_until AS "validUntil"
          FROM markdown_units u
@@ -216,7 +217,7 @@ export class PriceTagsController {
     const { device } = await this.operator(req);
     const rows = (
       await this.database.pool.query(
-        'SELECT p.id,p.name,p.sku,p.category_id AS "categoryId",p.price_kind AS "priceKind",p.price::text,p.regular_price::text AS "regularPrice",p.tag_last_printed_price::text AS "lastPrintedPrice",p.unit,p.plu,p.tag_price_version AS "priceVersion",(p.tag_price_version>p.tag_printed_version) AS "priceChanged",COALESCE((SELECT b.value FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id ORDER BY b.value LIMIT 1),\'\') AS barcode,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),\'[]\'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active AND p.price IS NOT NULL AND p.base_product_id IS NULL ORDER BY p.name',
+        'SELECT p.id,p.name,p.volume,p.brand,p.sku,p.category_id AS "categoryId",p.price_kind AS "priceKind",p.price::text,p.regular_price::text AS "regularPrice",p.tag_last_printed_price::text AS "lastPrintedPrice",p.unit,p.plu,p.tag_price_version AS "priceVersion",(p.tag_price_version>p.tag_printed_version) AS "priceChanged",COALESCE((SELECT b.value FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id ORDER BY b.value LIMIT 1),\'\') AS barcode,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),\'[]\'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active AND p.price IS NOT NULL AND p.base_product_id IS NULL ORDER BY p.name',
         [device.store_id],
       )
     ).rows;
@@ -250,7 +251,7 @@ export class PriceTagsController {
     const { device } = await this.operator(req);
     const product = (
       await this.database.pool.query(
-        'SELECT id,name,sku,price::text,category_id,price_kind,unit,plu FROM products WHERE store_id=$1 AND id=$2 AND active',
+        'SELECT id,name,volume,sku,price::text,category_id,price_kind,unit,plu FROM products WHERE store_id=$1 AND id=$2 AND active',
         [device.store_id, body.productId],
       )
     ).rows[0];
@@ -262,7 +263,7 @@ export class PriceTagsController {
       return {
         barcode: encodeScaleBarcode(product.plu ?? '', body.weight, profile),
         productId: product.id,
-        name: product.name,
+        name: productDisplayName(product),
         sku: product.sku,
         price: current.price,
         weight: body.weight,
@@ -277,7 +278,7 @@ export class PriceTagsController {
     const body = parse(z.object({ productIds: z.array(z.uuid()).min(1).max(100) }), input);
     const { device, employee } = await this.operator(req);
     const products = await this.database.pool.query(
-      'SELECT p.id,p.name,p.sku,p.category_id AS "categoryId",p.price_kind AS "priceKind",p.price::text,p.regular_price::text AS "regularPrice",p.tag_last_printed_price::text AS "lastPrintedPrice",p.unit,p.plu,p.tag_price_version AS "priceVersion",(p.tag_price_version>p.tag_printed_version) AS "priceChanged",COALESCE((SELECT b.value FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id ORDER BY b.value LIMIT 1),\'\') AS barcode,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),\'[]\'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active AND p.price IS NOT NULL AND p.base_product_id IS NULL AND p.id=ANY($2::uuid[])',
+      'SELECT p.id,p.name,p.volume,p.brand,p.sku,p.category_id AS "categoryId",p.price_kind AS "priceKind",p.price::text,p.regular_price::text AS "regularPrice",p.tag_last_printed_price::text AS "lastPrintedPrice",p.unit,p.plu,p.tag_price_version AS "priceVersion",(p.tag_price_version>p.tag_printed_version) AS "priceChanged",COALESCE((SELECT b.value FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id ORDER BY b.value LIMIT 1),\'\') AS barcode,COALESCE((SELECT jsonb_agg(b.value ORDER BY b.value) FROM barcodes b WHERE b.product_id=p.id AND b.store_id=p.store_id),\'[]\'::jsonb) AS barcodes FROM products p WHERE p.store_id=$1 AND p.active AND p.price IS NOT NULL AND p.base_product_id IS NULL AND p.id=ANY($2::uuid[])',
       [device.store_id, body.productIds],
     );
     if (products.rows.length !== new Set(body.productIds).size)

@@ -2,7 +2,14 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowLeft, Barcode, ChevronRight, Package, Pencil, Plus, Trash2 } from 'lucide-react';
-import { maxProductPhotos, productSchema, toScaled, units, type Product } from '@eliza/contracts';
+import {
+  maxProductPhotos,
+  productSchema,
+  productVariantsSchema,
+  toScaled,
+  units,
+  type Product,
+} from '@eliza/contracts';
 import { api, productCatalogUpdateKey, queryClient, refresh, useProducts, useSession } from './api';
 import { AdjustmentForm, ErrorMessage, Field } from './forms';
 import { Button } from './components/ui/button';
@@ -89,6 +96,11 @@ function ProductDetailsForm({
   const [adjustStock, setAdjustStock] = useState(false);
   const [confirmation, setConfirmation] = useState<'status' | 'delete' | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
+  const [variants, setVariants] = useState<{ id: string; volume: string; barcode: string }[]>([]);
+  const [created, setCreated] = useState<Product[]>([]);
+  const [resetVersion, setResetVersion] = useState(0);
+  const multiple = creating && variants.length > 1;
   const formId = useId();
   const profile = useQuery({
     queryKey: ['store-profile'],
@@ -105,22 +117,32 @@ function ProductDetailsForm({
   const dirty = productDraftKey(draft) !== baseline;
   const save = useMutation({
     mutationFn: (body: unknown) =>
-      api<Product>(
-        creating ? '/products' : '/products/' + product!.id,
+      api<Product | Product[]>(
+        creating ? (multiple ? '/products/variants' : '/products') : '/products/' + product!.id,
         body,
         creating ? 'POST' : 'PATCH',
       ),
-    onSuccess: async (saved) => {
+    onSuccess: async (result) => {
+      const savedProducts = Array.isArray(result) ? result : [result];
+      const saved = savedProducts[0];
       queryClient.setQueryData<Product[]>(['products'], (rows) =>
         rows
           ? creating
-            ? [...rows, saved]
+            ? [...rows, ...savedProducts]
             : rows.map((p) => (p.id === saved.id ? saved : p))
           : undefined,
       );
-      setDraft(productDraft(saved));
-      setBaseline(productDraftKey(productDraft(saved)));
-      setEditing(false);
+      const nextDraft = productDraft(creating ? undefined : saved);
+      setDraft(nextDraft);
+      setBaseline(productDraftKey(nextDraft));
+      setEditing(creating);
+      if (creating) {
+        setCreated(savedProducts);
+        setVariants([]);
+        setSelectedPhoto(0);
+        setBarcode(false);
+        setResetVersion((value) => value + 1);
+      }
       setError(undefined);
       try {
         localStorage.setItem(productCatalogUpdateKey, crypto.randomUUID());
@@ -128,7 +150,7 @@ function ProductDetailsForm({
         /* Device polling also refreshes checkout. */
       }
       void refresh();
-      if (creating || startEditing)
+      if (!creating && startEditing)
         await navigate({ to: '/products/$id', params: { id: saved.id }, replace: true });
     },
   });
@@ -144,6 +166,9 @@ function ProductDetailsForm({
     },
   });
   const busy = save.isPending || photoBusy || action.isPending;
+  useEffect(() => {
+    if (resetVersion && !busy) nameInput.current?.focus();
+  }, [resetVersion, busy]);
   const locked = !editing || !canEdit || busy || (creating && profile.isPending);
   function change<K extends keyof ProductDraft>(key: K, value: ProductDraft[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
@@ -166,9 +191,10 @@ function ProductDetailsForm({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editing || !canEdit || busy || (!creating && !dirty)) return;
-    const parsed = productSchema.safeParse(
-      productDraftInput(draft, creating ? (profile.data?.defaultTaxRate ?? '0') : ''),
-    );
+    const input = productDraftInput(draft, creating ? (profile.data?.defaultTaxRate ?? '0') : '');
+    const parsed = multiple
+      ? productVariantsSchema.safeParse({ ...input, variants })
+      : productSchema.safeParse(input);
     if (!parsed.success) {
       setError(
         parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('. '),
@@ -242,6 +268,16 @@ function ProductDetailsForm({
           <strong>{creating ? t('New product') : product!.name}</strong>
         </nav>
       </div>
+      {creating && created.length > 0 && (
+        <p role="status" className="notice">
+          {t('Created {count} products. The form is ready for the next product.', {
+            count: created.length,
+          })}{' '}
+          <Link to="/products/$id" params={{ id: created[0].id }}>
+            {t('View product')}
+          </Link>
+        </p>
+      )}
       <form id={formId} onSubmit={submit} hidden />
       <div className="product-details-columns">
         <div className="product-details-main">
@@ -252,6 +288,8 @@ function ProductDetailsForm({
             <h1 id="product-general-heading">{t('General information')}</h1>
             {creating && (
               <BarcodeLookup
+                key={resetVersion}
+                disabled={busy || multiple}
                 onBarcode={(code) =>
                   change(
                     'barcodes',
@@ -290,6 +328,8 @@ function ProductDetailsForm({
                     description: current.description || suggestion.description || '',
                     category: current.category || suggestion.category,
                     unit: current.unit || 'piece',
+                    brand: current.brand || suggestion.brand,
+                    volume: current.volume || suggestion.quantity,
                     barcodes: [
                       ...new Set([...productCodes(current.barcodes), suggestion.barcode]),
                     ].join('\n'),
@@ -310,6 +350,7 @@ function ProductDetailsForm({
                   <input
                     {...controls}
                     name="name"
+                    ref={nameInput}
                     value={draft.name}
                     required
                     maxLength={120}
@@ -384,92 +425,196 @@ function ProductDetailsForm({
                   {product ? (product.active ? t('Active') : t('Inactive')) : '—'}
                 </output>
               </Field>
-              <div className="product-detail-field-wide">
-                <Field
-                  label={t('Barcodes (optional)')}
-                  hint={
-                    editing
-                      ? t(
-                          'Add one per line, or separate with commas. Leave blank to generate a barcode.',
-                        )
-                      : undefined
-                  }
-                >
-                  <textarea
-                    {...controls}
-                    name="barcodes"
-                    rows={2}
-                    value={draft.barcodes}
-                    onChange={(event) => change('barcodes', event.target.value)}
-                  />
-                </Field>
-                <div className="product-details-barcode-actions">
-                  {editing ? (
-                    <CameraBarcodeScanner
-                      onScan={(code) =>
-                        change(
-                          'barcodes',
-                          [...new Set([...productCodes(draft.barcodes), code])].join('\n'),
-                        )
-                      }
-                    />
-                  ) : product?.barcodes.length ? (
-                    <Button variant="ghost" size="sm" onClick={() => setBarcode(true)}>
-                      <Barcode size={16} />
-                      {t('View barcode')}
-                    </Button>
-                  ) : null}
-                </div>
-              </div>
-              <Field
-                label={t('SKU')}
-                hint={editing ? t('Leave blank to generate a code.') : undefined}
-              >
-                <input
-                  {...controls}
-                  name="sku"
-                  value={draft.sku}
-                  maxLength={120}
-                  onChange={(event) => change('sku', event.target.value)}
-                />
-              </Field>
-              <Field
-                label={t('PLU / short code (optional)')}
-                hint={creating ? t('Leave blank to generate a code.') : undefined}
-              >
-                <input
-                  {...controls}
-                  name="plu"
-                  value={draft.plu}
-                  maxLength={20}
-                  onChange={(event) => change('plu', event.target.value)}
-                />
-              </Field>
-              {draft.source && (
+              {!multiple && (
                 <>
-                  <Field label={t('Brand')}>
+                  <div className="product-detail-field-wide">
+                    <Field
+                      label={t('Barcodes (optional)')}
+                      hint={
+                        editing
+                          ? t(
+                              'Add one per line, or separate with commas. Leave blank to generate a barcode.',
+                            )
+                          : undefined
+                      }
+                    >
+                      <textarea
+                        {...controls}
+                        name="barcodes"
+                        rows={2}
+                        value={draft.barcodes}
+                        onChange={(event) => change('barcodes', event.target.value)}
+                      />
+                    </Field>
+                    <div className="product-details-barcode-actions">
+                      {editing ? (
+                        <CameraBarcodeScanner
+                          onScan={(code) =>
+                            change(
+                              'barcodes',
+                              [...new Set([...productCodes(draft.barcodes), code])].join('\n'),
+                            )
+                          }
+                        />
+                      ) : product?.barcodes.length ? (
+                        <Button variant="ghost" size="sm" onClick={() => setBarcode(true)}>
+                          <Barcode size={16} />
+                          {t('View barcode')}
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                  <Field
+                    label={t('SKU')}
+                    hint={editing ? t('Leave blank to generate a code.') : undefined}
+                  >
                     <input
                       {...controls}
-                      value={draft.source.brand}
+                      name="sku"
+                      value={draft.sku}
                       maxLength={120}
-                      onChange={(event) =>
-                        change('source', { ...draft.source!, brand: event.target.value })
-                      }
+                      onChange={(event) => change('sku', event.target.value)}
                     />
                   </Field>
-                  <Field label={t('Package')}>
+                  <Field
+                    label={t('PLU / short code (optional)')}
+                    hint={creating ? t('Leave blank to generate a code.') : undefined}
+                  >
                     <input
                       {...controls}
-                      value={draft.source.quantity}
-                      maxLength={120}
-                      onChange={(event) =>
-                        change('source', { ...draft.source!, quantity: event.target.value })
-                      }
+                      name="plu"
+                      value={draft.plu}
+                      maxLength={20}
+                      onChange={(event) => change('plu', event.target.value)}
                     />
                   </Field>
                 </>
               )}
+              <Field label={t('Brand (optional)')}>
+                <input
+                  {...controls}
+                  name="brand"
+                  maxLength={120}
+                  value={draft.brand}
+                  onChange={(event) => change('brand', event.target.value)}
+                />
+              </Field>
+              {!multiple && (
+                <Field
+                  label={t('Volume / size (optional)')}
+                  hint={t('For example: 330 ml, 500 ml, 1 L.')}
+                >
+                  <input
+                    {...controls}
+                    name="volume"
+                    maxLength={120}
+                    value={draft.volume}
+                    onChange={(event) => change('volume', event.target.value)}
+                  />
+                </Field>
+              )}
             </div>
+            {creating && (
+              <div className="product-volume-variants">
+                {multiple && (
+                  <>
+                    <h2>{t('Volume variants')}</h2>
+                    <p className="product-details-hint">
+                      {t(
+                        'Each variant creates a separate product with the shared details above. SKU and PLU are generated for each product.',
+                      )}
+                    </p>
+                    {variants.map((variant, index) => (
+                      <div className="product-volume-row" key={variant.id}>
+                        <Field label={t('Volume {number}', { number: index + 1 })}>
+                          <input
+                            {...controls}
+                            required
+                            maxLength={120}
+                            placeholder={t('For example: 500 ml')}
+                            value={variant.volume}
+                            onChange={(event) =>
+                              setVariants((rows) =>
+                                rows.map((row) =>
+                                  row.id === variant.id
+                                    ? { ...row, volume: event.target.value }
+                                    : row,
+                                ),
+                              )
+                            }
+                          />
+                        </Field>
+                        <Field label={t('Barcode {number}', { number: index + 1 })}>
+                          <input
+                            {...controls}
+                            required
+                            maxLength={100}
+                            value={variant.barcode}
+                            onChange={(event) =>
+                              setVariants((rows) =>
+                                rows.map((row) =>
+                                  row.id === variant.id
+                                    ? { ...row, barcode: event.target.value }
+                                    : row,
+                                ),
+                              )
+                            }
+                          />
+                        </Field>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          disabled={busy}
+                          aria-label={t('Remove variant {number}', { number: index + 1 })}
+                          onClick={() => {
+                            const remaining = variants.filter((row) => row.id !== variant.id);
+                            if (remaining.length === 1) {
+                              setDraft((current) => ({
+                                ...current,
+                                volume: remaining[0].volume,
+                                barcodes: remaining[0].barcode,
+                              }));
+                              setVariants([]);
+                            } else setVariants(remaining);
+                            setError(undefined);
+                          }}
+                        >
+                          <Trash2 size={18} />
+                        </Button>
+                      </div>
+                    ))}
+                  </>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy || variants.length >= 50}
+                  onClick={() => {
+                    if (!multiple && productCodes(draft.barcodes).length > 1) {
+                      setError(t('Keep one barcode for the first volume before adding variants.'));
+                      return;
+                    }
+                    const next = { id: crypto.randomUUID(), volume: '', barcode: '' };
+                    setVariants((rows) =>
+                      multiple
+                        ? [...rows, next]
+                        : [
+                            {
+                              id: crypto.randomUUID(),
+                              volume: draft.volume,
+                              barcode: productCodes(draft.barcodes)[0] ?? '',
+                            },
+                            next,
+                          ],
+                    );
+                    setError(undefined);
+                  }}
+                >
+                  <Plus size={16} />
+                  {t('Add volume variant')}
+                </Button>
+              </div>
+            )}
           </section>
           <section
             className="panel product-details-section product-details-pricing"
@@ -680,7 +825,13 @@ function ProductDetailsForm({
                       form={formId}
                       disabled={busy || (creating && (profile.isPending || !!profile.error))}
                     >
-                      {save.isPending ? t('Saving…') : creating ? t('Add product') : t('Save')}
+                      {save.isPending
+                        ? t('Saving…')
+                        : creating
+                          ? multiple
+                            ? t('Create {count} products', { count: variants.length })
+                            : t('Add product')
+                          : t('Save')}
                     </Button>
                   ) : (
                     <Button className="full" variant="outline" disabled={busy} onClick={cancel}>

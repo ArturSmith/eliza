@@ -23,6 +23,7 @@ import type { Request } from 'express';
 import type { PoolClient } from 'pg';
 import { randomUUID } from 'node:crypto';
 import {
+  productDisplayName,
   startShiftSchema,
   closeShiftSchema,
   cashSchema,
@@ -61,7 +62,7 @@ async function openShift(client: PoolClient, actor: Operator, id?: string) {
     throw new ConflictException('Start your shift before using this register.');
   return shift;
 }
-const posCatalogSql = `SELECT p.id,p.image,p.source,p.name,p.sku,p.category,p.category_id AS "categoryId",p.unit,p.price::text,p.regular_price::text AS "regularPrice",p.price_kind AS "priceKind",p.base_product_id AS "baseProductId",p.tax_rate::text AS "taxRate",
+const posCatalogSql = `SELECT p.id,p.image,p.source,p.name,p.brand,p.volume,p.sku,p.category,p.category_id AS "categoryId",p.unit,p.price::text,p.regular_price::text AS "regularPrice",p.price_kind AS "priceKind",p.base_product_id AS "baseProductId",p.tax_rate::text AS "taxRate",
           COALESCE((SELECT sum(sb.quantity - COALESCE((SELECT count(*) FROM markdown_units u JOIN markdowns m ON m.id=u.markdown_id
              WHERE u.store_id=sb.store_id AND u.batch_id=sb.id AND u.status='AVAILABLE'
                AND m.cancelled_at IS NULL AND (m.valid_until IS NULL OR m.valid_until>now())),0)) FROM stock_batches sb
@@ -252,7 +253,7 @@ export class CheckoutController {
           AND (p."baseProductId" IS NULL OR $5<>'' )
       ), filtered AS (
         SELECT * FROM available WHERE ($3='' OR category=$3) AND (NOT $4::boolean OR favorite)
-        AND ($5='' OR name ILIKE '%'||$5||'%' OR sku ILIKE '%'||$5||'%' OR plu ILIKE '%'||$5||'%'
+        AND ($5='' OR name ILIKE '%'||$5||'%' OR brand ILIKE '%'||$5||'%' OR volume ILIKE '%'||$5||'%' OR sku ILIKE '%'||$5||'%' OR plu ILIKE '%'||$5||'%'
           OR EXISTS(SELECT 1 FROM jsonb_array_elements_text(barcodes) b WHERE b ILIKE '%'||$5||'%'))
       ) SELECT
         (SELECT count(*) FROM filtered)::integer AS total,
@@ -384,7 +385,11 @@ export class CheckoutController {
           if (actor.permissions.includes('shift.approve')) return null;
           if (!approval) throw new ForbiddenException('A manager must approve a cash difference.');
           const manager = await this.registers.checkPin(
-            client, actor.deviceId, actor.storeId, approval, 'shift.approve',
+            client,
+            actor.deviceId,
+            actor.storeId,
+            approval,
+            'shift.approve',
           );
           return manager instanceof HttpException ? manager : manager.id;
         },
@@ -529,7 +534,7 @@ export class CheckoutController {
         lines.push({
           saleItemId: randomUUID(),
           productId: product.id,
-          name: product.name,
+          name: productDisplayName(product),
           category: product.category,
           sku: product.sku,
           unit: product.unit,
@@ -835,7 +840,8 @@ export class SalesReportsController {
   ) {
     return this.operations.transaction(async (client) => {
       const found = await client.query('SELECT id FROM shifts WHERE id=$1 AND store_id=$2', [
-        id, req.context.store.id,
+        id,
+        req.context.store.id,
       ]);
       if (!found.rowCount) throw new NotFoundException('Shift not found.');
       return shiftRow(client, id);

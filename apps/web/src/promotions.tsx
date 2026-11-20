@@ -1,3 +1,4 @@
+import { productDisplayName } from '@eliza/contracts';
 import { CampaignFields, PromotionCampaignEditor, type Campaign } from './promotion-campaign';
 import { UnitMarkdowns } from './unit-markdowns';
 import { canManageUnitMarkdowns } from './promotions-access';
@@ -270,7 +271,7 @@ export function PromotionsPage() {
                         onChange={() => toggle(product.id, productIds, setProductIds)}
                       />
                       <span>
-                        <strong>{product.name}</strong>
+                        <strong>{productDisplayName(product)}</strong>
                         <small>
                           {product.sku} · {money(product.price)}
                         </small>

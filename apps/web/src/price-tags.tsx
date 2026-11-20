@@ -1,3 +1,4 @@
+import { productDisplayName } from '@eliza/contracts';
 import { formatQuantity } from './quantity-format';
 import { TagLayoutEditor, useStoredLabelLayout } from './printing/tag-layout-editor';
 import { labelLayoutStorageKey } from './printing/tag-layout';
@@ -48,6 +49,7 @@ type Context = {
 type Product = {
   id: string;
   name: string;
+  volume?: string;
   sku: string;
   price: string;
   regularPrice: string | null;
@@ -65,6 +67,7 @@ type MarkdownLabel = {
   id: string;
   productId: string;
   name: string;
+  volume?: string;
   sku: string;
   barcode: string;
   price: string;
@@ -265,7 +268,7 @@ export function PriceTagsPage() {
                     weight,
                     context.data!.store.scaleBarcode,
                   ),
-                  name: product.name,
+                  name: productDisplayName(product),
                   sku: product.sku,
                   price: product.price,
                   weight,
@@ -494,7 +497,7 @@ export function PriceTagsPage() {
     );
   const normalContents = (items: PrintItem[]): LabelContent[] =>
     items.map(({ product, weightLabel }) => ({
-      name: product.name,
+      name: productDisplayName(product),
       store:
         tagLayout.layout || context.data!.store.tagDesign.showStoreName
           ? context.data!.store.name
@@ -524,7 +527,7 @@ export function PriceTagsPage() {
     }));
   const markdownContents = (labels: MarkdownLabel[]): LabelContent[] =>
     labels.map((label) => ({
-      name: label.name,
+      name: productDisplayName(label),
       store:
         tagLayout.layout || context.data!.store.tagDesign.showStoreName
           ? context.data!.store.name
@@ -566,7 +569,7 @@ export function PriceTagsPage() {
                   Number((packageWeights[product.id] ?? '').replace(',', '.')) > 0
                     ? {
                         barcode: product.barcode,
-                        name: product.name,
+                        name: productDisplayName(product),
                         sku: product.sku,
                         price: product.price,
                         weight: packageWeights[product.id].replace(',', '.'),
@@ -791,7 +794,7 @@ export function PriceTagsPage() {
                         }
                       />
                       <span>
-                        <strong>{label.name}</strong>
+                        <strong>{productDisplayName(label)}</strong>
                         <small>{label.sku}</small>
                         <small className="price-tags-markdown-code">{label.barcode}</small>
                         {label.expiryDate && (
@@ -834,7 +837,7 @@ export function PriceTagsPage() {
                         }
                       />
                       <span>
-                        <strong>{product.name}</strong>
+                        <strong>{productDisplayName(product)}</strong>
                         <small>
                           {product.sku} ·{' '}
                           {product.unit === 'kilogram'
@@ -850,7 +853,7 @@ export function PriceTagsPage() {
                     {product.unit === 'kilogram' && selected.includes(product.id) && (
                       <div className="price-tags-weight-details">
                         <input
-                          aria-label={`${t('Enter package weight')} — ${product.name}`}
+                          aria-label={`${t('Enter package weight')} — ${productDisplayName(product)}`}
                           inputMode="decimal"
                           placeholder={t('Enter package weight')}
                           value={packageWeights[product.id] ?? ''}
@@ -1044,7 +1047,9 @@ export function PriceTagsPage() {
                 style={{ width: `${design.weightWidthMm}mm`, height: `${design.weightHeightMm}mm` }}
               >
                 {design.showStoreName && <small>{value.store.name}</small>}
-                <strong style={{ fontSize: `${design.nameFontPt}pt` }}>{label.name}</strong>
+                <strong style={{ fontSize: `${design.nameFontPt}pt` }}>
+                  {productDisplayName(label)}
+                </strong>
                 {design.showSku && <small>{label.sku}</small>}
                 <div className="price-tag-price" style={{ fontSize: `${design.priceFontPt}pt` }}>
                   {price(label.price)}
@@ -1100,7 +1105,9 @@ export function PriceTagsPage() {
                   }}
                 >
                   {design.showStoreName && <small>{value.store.name}</small>}
-                  <strong style={{ fontSize: `${design.nameFontPt}pt` }}>{product.name}</strong>
+                  <strong style={{ fontSize: `${design.nameFontPt}pt` }}>
+                    {productDisplayName(product)}
+                  </strong>
                   <div className="price-tag-price" style={{ fontSize: `${design.priceFontPt}pt` }}>
                     {price(product.price)}
                   </div>

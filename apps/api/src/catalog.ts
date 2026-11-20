@@ -17,7 +17,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { and, eq, asc, isNull, sql } from 'drizzle-orm';
-import { productSchema, productSku } from '@eliza/contracts';
+import { productSchema, productVariantsSchema, productSku } from '@eliza/contracts';
 import { z } from 'zod';
 import { Database } from './database.js';
 import { AccessGuard, type AuthRequest, parse, Require } from './security.js';
@@ -72,56 +72,97 @@ export class CatalogController {
           )
         ).rows
       : [];
-    const latest = canReadCosts ? (await this.database.pool.query(
-      `SELECT DISTINCT ON (b.product_id) b.product_id,b.unit_cost::text AS cost,
+    const latest = canReadCosts
+      ? (
+          await this.database.pool.query(
+            `SELECT DISTINCT ON (b.product_id) b.product_id,b.unit_cost::text AS cost,
         b.created_at AS date,s.name AS supplier
        FROM stock_batches b LEFT JOIN goods_receipt_lines l ON l.id=b.receipt_line_id AND l.store_id=b.store_id
        LEFT JOIN goods_receipts g ON g.id=l.receipt_id AND g.store_id=l.store_id
        LEFT JOIN purchases p ON p.id=g.purchase_id AND p.store_id=g.store_id
        LEFT JOIN suppliers s ON s.id=COALESCE(p.supplier_id,b.supplier_id) AND s.store_id=b.store_id
        WHERE b.store_id=$1 AND (b.receipt_line_id IS NOT NULL OR b.supplier_id IS NOT NULL)
-       ORDER BY b.product_id,b.created_at DESC,b.id DESC`, [req.context.store.id],
-    )).rows : [];
+       ORDER BY b.product_id,b.created_at DESC,b.id DESC`,
+            [req.context.store.id],
+          )
+        ).rows
+      : [];
     return rows.map((p) => ({
       ...p,
       cost: canReadCosts ? p.cost : null,
       stockValue: canReadCosts
-        ? (values.find((v) => v.product_id === p.id)?.value ?? (Number(p.stock) > 0 ? null : '0.00'))
+        ? (values.find((v) => v.product_id === p.id)?.value ??
+          (Number(p.stock) > 0 ? null : '0.00'))
         : null,
-      averageCost: canReadCosts ? values.find((v) => v.product_id === p.id)?.average ?? null : null,
-      unknownCostQuantity: canReadCosts ? values.find((v) => v.product_id === p.id)?.unknown ?? '0' : undefined,
-      stockCostEstimated: canReadCosts ? values.find((v) => v.product_id === p.id)?.estimated ?? false : undefined,
-      lastPurchaseCost: canReadCosts ? latest.find((v) => v.product_id === p.id)?.cost ?? null : null,
-      lastPurchaseAt: canReadCosts ? latest.find((v) => v.product_id === p.id)?.date ?? null : null,
-      lastPurchaseSupplier: canReadCosts && req.context.user.permissions.includes('suppliers.read') ? latest.find((v) => v.product_id === p.id)?.supplier ?? null : null,
+      averageCost: canReadCosts
+        ? (values.find((v) => v.product_id === p.id)?.average ?? null)
+        : null,
+      unknownCostQuantity: canReadCosts
+        ? (values.find((v) => v.product_id === p.id)?.unknown ?? '0')
+        : undefined,
+      stockCostEstimated: canReadCosts
+        ? (values.find((v) => v.product_id === p.id)?.estimated ?? false)
+        : undefined,
+      lastPurchaseCost: canReadCosts
+        ? (latest.find((v) => v.product_id === p.id)?.cost ?? null)
+        : null,
+      lastPurchaseAt: canReadCosts
+        ? (latest.find((v) => v.product_id === p.id)?.date ?? null)
+        : null,
+      lastPurchaseSupplier:
+        canReadCosts && req.context.user.permissions.includes('suppliers.read')
+          ? (latest.find((v) => v.product_id === p.id)?.supplier ?? null)
+          : null,
       plu: p.plu ?? '',
       barcodes: codes.filter((b) => b.productId === p.id).map((b) => b.value),
     }));
   }
   @Post() @Require('catalog.write') async create(@Body() input: unknown, @Req() req: AuthRequest) {
+    return (await this.createProducts(input, req, false))[0];
+  }
+  @Post('variants') @Require('catalog.write') async createVariants(
+    @Body() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    return this.createProducts(input, req, true);
+  }
+  private async createProducts(input: unknown, req: AuthRequest, multiple: boolean) {
     const defaults = (
       await this.database.pool.query('SELECT default_tax_rate FROM stores WHERE id=$1', [
         req.context.store.id,
       ])
     ).rows[0];
-    const {
-      barcodes: providedCodes,
-      plu: enteredPlu,
-      autoPlu,
-      autoSku,
-      supplierId,
-      ...body
-    } = parse(
-      productSchema.extend({
-        autoPlu: z.boolean().default(false),
-        autoSku: z.boolean().default(false),
-        supplierId: z.uuid().optional(),
-      }),
+    const candidate =
       typeof input === 'object' && input !== null
         ? { taxRate: defaults.default_tax_rate, ...input }
-        : input,
-    );
-    Object.assign(body, normalizeProductGallery(body));
+        : input;
+    const schema = productSchema.extend({
+      autoPlu: z.boolean().default(false),
+      autoSku: z.boolean().default(false),
+      supplierId: z.uuid().optional(),
+    });
+    const entries = multiple
+      ? (() => {
+          const { variants, ...common } = parse(
+            productVariantsSchema.extend({
+              supplierId: z.uuid().optional(),
+            }),
+            candidate,
+          );
+          return variants.map(({ volume, barcode }) =>
+            schema.parse({
+              ...common,
+              volume,
+              barcodes: [barcode],
+              sku: productSku(common.name, 'new'),
+              plu: '',
+              autoPlu: true,
+              autoSku: true,
+            }),
+          );
+        })()
+      : [parse(schema, candidate)];
+    const supplierId = entries[0].supplierId;
     const { store, user, device } = req.context;
     if (supplierId && !user.permissions.includes('suppliers.manage'))
       throw new ForbiddenException('You cannot add products to suppliers.');
@@ -134,71 +175,89 @@ export class CatalogController {
       await tx.execute(
         sql`SELECT pg_advisory_xact_lock(hashtextextended(${store.id} || ':product-codes',0))`,
       );
-      let plu = enteredPlu;
-      if (autoPlu) {
-        const rows = await tx.execute(
-          sql`SELECT (COALESCE(max(CASE WHEN plu ~ '^[0-9]+$' THEN plu::numeric END),0)+1)::text AS plu FROM products WHERE store_id=${store.id}`,
-        );
-        plu = String(rows.rows[0].plu);
-        const settings = await tx.execute(
-          sql`SELECT scale_barcode FROM stores WHERE id=${store.id}`,
-        );
-        const scale = settings.rows[0].scale_barcode as { enabled: boolean; productDigits: number };
-        if (plu.length > 20 || (scale.enabled && plu.length > scale.productDigits))
-          throw new BadRequestException(
-            'No automatic PLU fits the configured code length. Enter a PLU manually or review scale settings.',
+      const created = [];
+      for (const entry of entries) {
+        const {
+          barcodes: providedCodes,
+          plu: enteredPlu,
+          autoPlu,
+          autoSku,
+          supplierId: _supplier,
+          ...body
+        } = entry;
+        Object.assign(body, normalizeProductGallery(body));
+        body.brand ??= body.source?.brand ?? '';
+        body.volume ??= body.source?.quantity ?? '';
+        let plu = enteredPlu;
+        if (autoPlu) {
+          const rows = await tx.execute(
+            sql`SELECT (COALESCE(max(CASE WHEN plu ~ '^[0-9]+$' THEN plu::numeric END),0)+1)::text AS plu FROM products WHERE store_id=${store.id}`,
           );
-      }
-      if (autoSku) body.sku = productSku(body.name, plu);
-      const values = providedCodes.length
-        ? providedCodes
-        : [
-            String(
-              (await tx.execute(sql`SELECT next_internal_product_barcode(${store.id}) AS value`))
-                .rows[0].value,
-            ),
-          ];
-      const [product] = await tx
-        .insert(products)
-        .values({ ...body, plu: plu || null, storeId: store.id })
-        .returning();
-      if (values.length)
-        await tx
-          .insert(barcodes)
-          .values(values.map((value) => ({ value, productId: product.id, storeId: store.id })));
-      if (supplierId) {
-        const linked =
-          await tx.execute(sql`INSERT INTO supplier_products(store_id,supplier_id,product_id,pack_cost)
+          plu = String(rows.rows[0].plu);
+          const settings = await tx.execute(
+            sql`SELECT scale_barcode FROM stores WHERE id=${store.id}`,
+          );
+          const scale = settings.rows[0].scale_barcode as {
+            enabled: boolean;
+            productDigits: number;
+          };
+          if (plu.length > 20 || (scale.enabled && plu.length > scale.productDigits))
+            throw new BadRequestException(
+              'No automatic PLU fits the configured code length. Enter a PLU manually or review scale settings.',
+            );
+        }
+        if (autoSku) body.sku = productSku(body.name, plu);
+        const values = providedCodes.length
+          ? providedCodes
+          : [
+              String(
+                (await tx.execute(sql`SELECT next_internal_product_barcode(${store.id}) AS value`))
+                  .rows[0].value,
+              ),
+            ];
+        const [product] = await tx
+          .insert(products)
+          .values({ ...body, plu: plu || null, storeId: store.id })
+          .returning();
+        if (values.length)
+          await tx
+            .insert(barcodes)
+            .values(values.map((value) => ({ value, productId: product.id, storeId: store.id })));
+        if (supplierId) {
+          const linked =
+            await tx.execute(sql`INSERT INTO supplier_products(store_id,supplier_id,product_id,pack_cost)
           VALUES(${store.id},${supplierId},${product.id},NULL) RETURNING id`);
+          await tx.insert(audits).values({
+            storeId: store.id,
+            employeeId: user.id,
+            deviceId: device.id,
+            action: 'Supplier product linked',
+            entityId: String(linked.rows[0].id),
+            details: { supplierId, productId: product.id },
+          });
+        }
         await tx.insert(audits).values({
           storeId: store.id,
           employeeId: user.id,
           deviceId: device.id,
-          action: 'Supplier product linked',
-          entityId: String(linked.rows[0].id),
-          details: { supplierId, productId: product.id },
+          action: 'Product created',
+          entityId: product.id,
+          details: {
+            ...body,
+            image: body.image ? '[photo added]' : '',
+            images: `[${body.images?.length ?? 0} photos]`,
+            plu,
+            barcodes: values,
+          },
+        });
+        created.push({
+          ...product,
+          cost: req.context.user.permissions.includes('costs.read') ? product.cost : null,
+          plu: plu ?? '',
+          barcodes: values,
         });
       }
-      await tx.insert(audits).values({
-        storeId: store.id,
-        employeeId: user.id,
-        deviceId: device.id,
-        action: 'Product created',
-        entityId: product.id,
-        details: {
-          ...body,
-          image: body.image ? '[photo added]' : '',
-          images: `[${body.images?.length ?? 0} photos]`,
-          plu,
-          barcodes: values,
-        },
-      });
-      return {
-        ...product,
-        cost: req.context.user.permissions.includes('costs.read') ? product.cost : null,
-        plu: plu ?? '',
-        barcodes: values,
-      };
+      return created;
     });
   }
   @Patch(':id') @Require('catalog.write') async edit(
@@ -220,7 +279,11 @@ export class CatalogController {
       if (!old) throw new NotFoundException('Product not found.');
       Object.assign(body, normalizeProductGallery(body, old));
       // A catalog editor without cost access must not clear or overwrite a hidden cost.
-      if (!req.context.user.permissions.includes('costs.read') || !Object.prototype.hasOwnProperty.call(input, 'cost')) body.cost = old.cost;
+      if (
+        !req.context.user.permissions.includes('costs.read') ||
+        !Object.prototype.hasOwnProperty.call(input, 'cost')
+      )
+        body.cost = old.cost;
       if (old.baseProductId)
         throw new BadRequestException('Edit limited-price labels from the parent product.');
       if (old.unit !== body.unit)
@@ -284,7 +347,12 @@ export class CatalogController {
           },
         },
       });
-      return { ...product, cost: req.context.user.permissions.includes('costs.read') ? product.cost : null, plu: plu ?? '', barcodes: values };
+      return {
+        ...product,
+        cost: req.context.user.permissions.includes('costs.read') ? product.cost : null,
+        plu: plu ?? '',
+        barcodes: values,
+      };
     });
   }
   @Delete(':id') @Require('catalog.write') async remove(

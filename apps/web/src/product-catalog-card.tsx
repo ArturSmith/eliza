@@ -1,3 +1,4 @@
+import { productDisplayName } from '@eliza/contracts';
 import { Package } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { toScaled, type Product } from '@eliza/contracts';
@@ -21,12 +22,12 @@ export function ProductCatalogCard({ product: p, currency, onBarcode }: Props) {
         ? { label: t('Low stock'), tone: 'low' }
         : null;
   return (
-    <article className="catalog-card" aria-label={p.name}>
+    <article className="catalog-card" aria-label={productDisplayName(p)}>
       <Link
         to="/products/$id"
         params={{ id: p.id }}
         className="catalog-card-open"
-        aria-label={t('View {value0}', { value0: p.name })}
+        aria-label={t('View {value0}', { value0: productDisplayName(p) })}
       >
         <span className="catalog-card-photo product-icon">
           {p.image ? (
@@ -36,7 +37,8 @@ export function ProductCatalogCard({ product: p, currency, onBarcode }: Props) {
           )}
         </span>
         <span className="catalog-card-info">
-          <span className="catalog-card-name">{p.name}</span>
+          <span className="catalog-card-name">{productDisplayName(p)}</span>
+          {p.brand?.trim() && <span className="catalog-card-description">{p.brand}</span>}
           {p.description?.trim() && (
             <span className="catalog-card-description">{p.description}</span>
           )}

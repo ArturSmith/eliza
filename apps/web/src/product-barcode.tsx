@@ -1,3 +1,4 @@
+import { productDisplayName } from '@eliza/contracts';
 import { useEffect, useRef, useState } from 'react';
 import JsBarcode from 'jsbarcode';
 import type { Product } from '@eliza/contracts';
@@ -32,7 +33,7 @@ function BarcodeContent({ product }: { product: Product }) {
   return (
     <>
       <div className="product-barcode-print">
-        <strong>{product.name}</strong>
+        <strong>{productDisplayName(product)}</strong>
         <svg ref={svg} aria-label={t('Barcode {value0}', { value0: code ?? '' })} />
         {invalid && <p>{t('Barcode image unavailable for this code.')}</p>}
       </div>
@@ -55,7 +56,7 @@ export function ProductBarcode({
     <Dialog
       open={!!product}
       onOpenChange={(open) => !open && onClose()}
-      title={t('Barcode for {value0}', { value0: product?.name ?? '' })}
+      title={t('Barcode for {value0}', { value0: product ? productDisplayName(product) : '' })}
       description={t('Print this barcode and attach it to the product.')}
     >
       {product && <BarcodeContent key={product.id} product={product} />}

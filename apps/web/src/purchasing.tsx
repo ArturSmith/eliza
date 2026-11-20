@@ -1,3 +1,4 @@
+import { productDisplayName } from '@eliza/contracts';
 import { PurchaseOrderForm } from './purchase-order-form';
 import { PurchaseDeliveryForm } from './purchase-delivery-form';
 import { Link } from '@tanstack/react-router';
@@ -1253,7 +1254,12 @@ function PricedDraftForm({
                           <SearchSelect
                             label={t('Product')}
                             placeholder={t('Select a product')}
-                            value={product && { title: product.name, subtitle: product.sku }}
+                            value={
+                              product && {
+                                title: productDisplayName(product),
+                                subtitle: product.sku,
+                              }
+                            }
                             options={availableProducts
                               .filter((p) => p.active)
                               .sort(
@@ -1271,7 +1277,7 @@ function PricedDraftForm({
                               )
                               .map((p) => ({
                                 id: p.id,
-                                title: p.name,
+                                title: productDisplayName(p),
                                 subtitle: p.sku,
                                 keywords: [p.name, p.sku, p.plu ?? '', ...p.barcodes],
                               }))}

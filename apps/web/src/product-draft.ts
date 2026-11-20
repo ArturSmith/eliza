@@ -3,6 +3,8 @@ import { quantityInputValue } from './quantity-format';
 
 export type ProductDraft = {
   name: string;
+  brand: string;
+  volume: string;
   description: string;
   category: string;
   unit: string;
@@ -18,6 +20,8 @@ export type ProductDraft = {
 export function productDraft(product?: Product): ProductDraft {
   return {
     name: product?.name ?? '',
+    brand: product?.brand ?? product?.source?.brand ?? '',
+    volume: product?.volume ?? product?.source?.quantity ?? '',
     description: product?.description ?? '',
     category: product?.category ?? '',
     unit: product?.unit ?? '',
@@ -42,6 +46,8 @@ export function productDraftKey(draft: ProductDraft) {
   return JSON.stringify({
     ...draft,
     name: draft.name.trim(),
+    brand: draft.brand.trim(),
+    volume: draft.volume.trim(),
     description: draft.description.trim(),
     category: draft.category.trim(),
     sku: draft.sku.trim(),

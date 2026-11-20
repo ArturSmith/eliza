@@ -19,7 +19,9 @@ export function BarcodeLookup({
   onBarcode,
   onUse,
   onExisting,
+  disabled = false,
 }: {
+  disabled?: boolean;
   onBarcode: (value: string) => void;
   onUse: (value: Suggestion) => Promise<void>;
   onExisting: (product: Product) => void;
@@ -30,7 +32,7 @@ export function BarcodeLookup({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
   async function lookup(value = barcode) {
-    if (busy || !value.trim()) return;
+    if (disabled || busy || !value.trim()) return;
     setBusy(true);
     setResult(undefined);
     setError(undefined);
@@ -51,7 +53,11 @@ export function BarcodeLookup({
       <p id="barcode-lookup-title" className="barcode-lookup-title">
         {t('Find product by barcode')}
       </p>
-      <fieldset disabled={busy} className="barcode-lookup" aria-labelledby="barcode-lookup-title">
+      <fieldset
+        disabled={busy || disabled}
+        className="barcode-lookup"
+        aria-labelledby="barcode-lookup-title"
+      >
         <Field
           label={t('Scan or enter barcode')}
           hint={t(

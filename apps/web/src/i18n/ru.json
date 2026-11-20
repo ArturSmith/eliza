@@ -2757,5 +2757,22 @@
   "This prize code was scanned at another checkout. Ask the customer to refresh it.": "Этот код приза отсканирован на другой кассе. Попросите покупателя обновить его.",
   "Start your shift before handing out a prize.": "Откройте смену перед выдачей приза.",
   "Change bonus action": "Изменить действие с бонусами",
-  "Remove loyalty card": "Убрать карту лояльности"
+  "Remove loyalty card": "Убрать карту лояльности",
+  "Brand (optional)": "Бренд (необязательно)",
+  "Volume / size (optional)": "Объём / размер (необязательно)",
+  "For example: 330 ml, 500 ml, 1 L.": "Например: 330 мл, 500 мл, 1 л.",
+  "For example: 500 ml": "Например: 500 мл",
+  "Volume variants": "Варианты объёма",
+  "Each variant creates a separate product with the shared details above. SKU and PLU are generated for each product.": "Для каждого варианта создаётся отдельный товар с общими данными выше. SKU и PLU генерируются для каждого товара.",
+  "Volume {number}": "Объём {number}",
+  "Barcode {number}": "Штрихкод {number}",
+  "Remove variant {number}": "Удалить вариант {number}",
+  "Add volume variant": "Добавить вариант объёма",
+  "Keep one barcode for the first volume before adding variants.": "Оставьте один штрихкод для первого объёма перед добавлением вариантов.",
+  "Created {count} products. The form is ready for the next product.": "Создано товаров: {count}. Можно заполнять следующий товар.",
+  "View product": "Открыть товар",
+  "Create {count} products": "Создать товары ({count})",
+  "Done": "Готово",
+  "Each volume variant must have a unique barcode.": "У каждого варианта объёма должен быть уникальный штрихкод.",
+  "Each volume variant must have a different volume.": "Укажите разные объёмы для вариантов."
 }

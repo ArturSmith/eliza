@@ -1,3 +1,4 @@
+import { productDisplayName } from '@eliza/contracts';
 import { formatQuantity, quantityInputValue } from './quantity-format';
 import { PosLoyaltyChoice } from './pos-loyalty-choice';
 import { ShiftCloseFields } from './shift-close-fields';
@@ -1118,7 +1119,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                       )}
                     </span>
                     <small>{p.category}</small>
-                    <strong>{p.name}</strong>
+                    <strong>{productDisplayName(p)}</strong>
                     {p.priceKind === 'limited_discount' && (
                       <small className="pos-discount-price">
                         {t('Discounted label')} · {p.barcodes[0]}
@@ -1532,7 +1533,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                   {t('Cart ')}
                   {i + 1} · {d.lines.length} {t(' products ')}
                 </strong>
-                <small>{d.lines.map((l) => l.product.name).join(', ')}</small>
+                <small>{d.lines.map((l) => productDisplayName(l.product)).join(', ')}</small>
               </div>
               <Button variant="outline" onClick={() => resume(i)}>
                 {t('Resume ')}
@@ -1695,7 +1696,7 @@ function CartLine({
   return (
     <div className="cart-line">
       <div className="cart-line-top">
-        <strong>{line.product.name}</strong>
+        <strong>{productDisplayName(line.product)}</strong>
         <Button
           variant="ghost"
           size="icon"

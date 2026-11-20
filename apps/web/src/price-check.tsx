@@ -1,3 +1,4 @@
+import { productDisplayName } from '@eliza/contracts';
 import { formatQuantity } from './quantity-format';
 import { PageOnboarding } from './onboarding/PageOnboarding';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
@@ -187,7 +188,7 @@ export function PriceCheckPage() {
                 <div className="price-check-product">
                   <div className="price-check-photo">
                     {product.image ? (
-                      <img src={product.image} alt={product.name} />
+                      <img src={product.image} alt={productDisplayName(product)} />
                     ) : (
                       <Package size={56} aria-hidden="true" />
                     )}
@@ -199,7 +200,7 @@ export function PriceCheckPage() {
                       </span>
                     )}
                     {product.brand && <p className="price-check-brand">{product.brand}</p>}
-                    <h2>{product.name}</h2>
+                    <h2>{productDisplayName(product)}</h2>
                     {product.description && (
                       <p className="price-check-description">{product.description}</p>
                     )}

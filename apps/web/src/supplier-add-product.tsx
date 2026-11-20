@@ -1,3 +1,4 @@
+import { productDisplayName } from '@eliza/contracts';
 import { useId, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, Package, Plus } from 'lucide-react';
@@ -48,9 +49,14 @@ export function SupplierAddProduct({
   });
   const term = query.trim().toLocaleLowerCase();
   const matches = (products.data ?? []).filter((product) =>
-    [product.name, product.sku, product.plu ?? '', ...product.barcodes].some((value) =>
-      value.toLocaleLowerCase().includes(term),
-    ),
+    [
+      product.name,
+      product.brand ?? '',
+      product.volume ?? '',
+      product.sku,
+      product.plu ?? '',
+      ...product.barcodes,
+    ].some((value) => value.toLocaleLowerCase().includes(term)),
   );
   const isLinked = (id: string) =>
     catalog.data?.some((offer) => offer.productId === id && offer.active);
@@ -173,7 +179,7 @@ export function SupplierAddProduct({
                   )}
                 </span>
                 <span className="supplier-product-search-info">
-                  <strong>{product.name}</strong>
+                  <strong>{productDisplayName(product)}</strong>
                   <small>{[product.sku, ...product.barcodes].filter(Boolean).join(' · ')}</small>
                   {isLinked(product.id) ? (
                     <small>{t('Already added to this supplier')}</small>

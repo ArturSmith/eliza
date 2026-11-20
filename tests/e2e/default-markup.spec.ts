@@ -30,7 +30,7 @@ test('keeps optional catalog selling prices independent of purchase costs and sa
   await add.getByLabel('Tax rate (%)', { exact: true }).fill('25');
   await add.getByLabel('Selling price (optional)', { exact: true }).fill('115.00');
   await add.getByRole('button', { name: 'Add product', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Edit product', exact: true })).toBeVisible();
+  await expect(page.getByLabel('Product name', { exact: true })).toHaveValue('');
 
   await page.goto('/settings');
   const setting = page.getByLabel('Default selling markup (%)', { exact: true });

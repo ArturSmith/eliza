@@ -1,3 +1,4 @@
+import { productDisplayName } from '@eliza/contracts';
 import { useEffect, useId, useRef, useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
 import type { Product } from '@eliza/contracts';
@@ -170,7 +171,7 @@ export function UnitMarkdowns({
                       onClick={() => choose(product)}
                     >
                       <span>
-                        <strong>{product.name}</strong>
+                        <strong>{productDisplayName(product)}</strong>
                         <small>
                           {product.sku} ·{' '}
                           {product.price === null

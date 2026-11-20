@@ -1,3 +1,4 @@
+import { productDisplayName } from '@eliza/contracts';
 import { ProductCatalogCard } from './product-catalog-card';
 import { formatQuantity } from './quantity-format';
 import { isFeatureVisible } from './advanced-features';
@@ -486,7 +487,7 @@ export function ProductsPage() {
           (stockFilter === 'in_stock' && stock > 0n) ||
           (stockFilter === 'low' && stock > 0n && stock <= toScaled(p.minStock, 3)) ||
           (stockFilter === 'out' && stock <= 0n)) &&
-        [p.name, p.sku, p.plu, ...p.barcodes].some((v) =>
+        [p.name, p.brand ?? '', p.volume ?? '', p.sku, p.plu, ...p.barcodes].some((v) =>
           v.toLowerCase().includes(search.trim().toLowerCase()),
         )
       );
@@ -732,7 +733,7 @@ export function InventoryHistoryPage() {
             >
               {(products.data ?? []).map((product) => (
                 <option key={product.id} value={product.id}>
-                  {product.name}
+                  {productDisplayName(product)}
                 </option>
               ))}
             </select>
@@ -802,7 +803,7 @@ export function InventoryHistoryPage() {
               <option value="">{t('All products')}</option>
               {(products.data ?? []).map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} · {p.sku}
+                  {productDisplayName(p)} · {p.sku}
                 </option>
               ))}
             </select>

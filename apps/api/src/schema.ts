@@ -104,6 +104,8 @@ export const products = pgTable(
       .notNull()
       .references(() => stores.id),
     name: text('name').notNull(),
+    brand: text('brand').notNull().default(''),
+    volume: text('volume').notNull().default(''),
     sku: text('sku').notNull(),
     category: text('category').notNull(),
     unit: text('unit').notNull(),
