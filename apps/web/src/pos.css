@@ -356,6 +356,31 @@ body:has(.pos-shell) #root > .language-bar {
   color: var(--color-text-5c7150);
   font-variant-numeric: tabular-nums;
 }
+.cart-loyalty-scan {
+  margin-bottom: 12px;
+}
+.cart-summary .cart-loyalty-row {
+  align-items: center;
+  gap: 12px;
+}
+.cart-loyalty-row dt,
+.cart-loyalty-row dd {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.cart-loyalty-row dd > span {
+  overflow-wrap: anywhere;
+}
+.cart-summary .cart-loyalty-action {
+  padding: 4px;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  flex-shrink: 0;
+  color: var(--muted);
+}
 .cart-summary .cart-total {
   font-size: 22px;
   font-weight: 600;

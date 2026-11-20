@@ -2755,5 +2755,7 @@
   "Confirm prize handed over": "Подтвердить выдачу приза",
   "This prize code has expired or was already used. Ask the customer to refresh it.": "Код приза истёк или уже использован. Попросите покупателя обновить его.",
   "This prize code was scanned at another checkout. Ask the customer to refresh it.": "Этот код приза отсканирован на другой кассе. Попросите покупателя обновить его.",
-  "Start your shift before handing out a prize.": "Откройте смену перед выдачей приза."
+  "Start your shift before handing out a prize.": "Откройте смену перед выдачей приза.",
+  "Change bonus action": "Изменить действие с бонусами",
+  "Remove loyalty card": "Убрать карту лояльности"
 }

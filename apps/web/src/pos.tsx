@@ -31,6 +31,8 @@ import {
   Clock3,
   RefreshCw,
   Star,
+  Pencil,
+  X,
 } from 'lucide-react';
 import {
   decodeScaleBarcode,
@@ -1251,78 +1253,20 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
             )}
           </div>
           <div className="cart-bottom">
-            <div className="pos-loyalty">
-              {draft.loyalty ? (
-                <div className="pos-loyalty-member">
-                  <div className="pos-loyalty-heading">
-                    <strong>{draft.loyalty.programName}</strong>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={frozen}
-                      onClick={() => setDraft((d) => ({ ...d, loyalty: undefined }))}
-                    >
-                      {t('Remove')}
-                    </Button>
-                  </div>
-                  <div className="pos-loyalty-balance">
-                    <span>{t('Bonus balance')}</span>
-                    <strong>{formatQuantity(draft.loyalty.balance)}</strong>
-                  </div>
-                  <div className="pos-loyalty-options" role="group" aria-label={t('Bonus action')}>
-                    <Button
-                      variant={selectedLoyaltyMode !== 'spend' ? 'default' : 'outline'}
-                      aria-pressed={selectedLoyaltyMode !== 'spend'}
-                      disabled={frozen}
-                      onClick={() =>
-                        setDraft((d) => ({
-                          ...d,
-                          loyalty: d.loyalty ? { ...d.loyalty, mode: 'collect' } : undefined,
-                        }))
-                      }
-                    >
-                      {t('Collect')}
-                    </Button>
-                    <Button
-                      variant={selectedLoyaltyMode === 'spend' ? 'default' : 'outline'}
-                      aria-pressed={selectedLoyaltyMode === 'spend'}
-                      disabled={frozen || toScaled(draft.loyalty.balance, 2) <= 0n}
-                      onClick={() =>
-                        setDraft((d) => ({
-                          ...d,
-                          loyalty: d.loyalty ? { ...d.loyalty, mode: 'spend' } : undefined,
-                        }))
-                      }
-                    >
-                      {t('Spend')}
-                    </Button>
-                  </div>
-                  <small>
-                    {selectedLoyaltyMode === 'spend' ? t('Bonuses used') : t('Bonuses earned')}:{' '}
-                    {formatQuantity(
-                      selectedLoyaltyMode === 'spend'
-                        ? (loyaltyPreview?.spent ?? '0')
-                        : (loyaltyPreview?.earned ?? '0'),
-                    )}
-                  </small>
-                </div>
-              ) : (
-                <>
-                  <span>{t('Customer loyalty')}</span>
-                  <Button
-                    variant="outline"
-                    disabled={frozen}
-                    onClick={() => {
-                      setLoyaltyCandidate(null);
-                      setPrizeCandidate(null);
-                      setModal('loyalty');
-                    }}
-                  >
-                    {t('Scan loyalty card')}
-                  </Button>
-                </>
-              )}
-            </div>
+            {!draft.loyalty && (
+              <Button
+                className="full cart-loyalty-scan"
+                variant="outline"
+                disabled={frozen}
+                onClick={() => {
+                  setLoyaltyCandidate(null);
+                  setPrizeCandidate(null);
+                  setModal('loyalty');
+                }}
+              >
+                {t('Scan loyalty card')}
+              </Button>
+            )}
             <div className="cart-tools">
               <Button
                 variant="outline"
@@ -1346,6 +1290,49 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
                 <div>
                   <dt>{t('Discount')}</dt>
                   <dd>−{formatMoney(fromScaled(totals.discount, 2), currency)}</dd>
+                </div>
+              )}
+              {draft.loyalty && (
+                <div className="cart-loyalty-row">
+                  <dt>
+                    {selectedLoyaltyMode === 'spend' ? t('Bonuses used') : t('Bonuses earned')}
+                    <Button
+                      className="cart-loyalty-action"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={t('Change bonus action')}
+                      title={t('Change bonus action')}
+                      disabled={frozen}
+                      onClick={() => {
+                        setLoyaltyCandidate(draft.loyalty!);
+                        setPrizeCandidate(null);
+                        setModal('loyalty');
+                      }}
+                    >
+                      <Pencil size={13} aria-hidden="true" />
+                    </Button>
+                    <Button
+                      className="cart-loyalty-action"
+                      variant="ghost"
+                      size="icon"
+                      aria-label={t('Remove loyalty card')}
+                      title={t('Remove loyalty card')}
+                      disabled={frozen}
+                      onClick={() => setDraft((d) => ({ ...d, loyalty: undefined }))}
+                    >
+                      <X size={13} aria-hidden="true" />
+                    </Button>
+                  </dt>
+                  <dd>
+                    <span>
+                      {formatQuantity(
+                        selectedLoyaltyMode === 'spend'
+                          ? (loyaltyPreview?.spent ?? '0')
+                          : (loyaltyPreview?.earned ?? '0'),
+                      )}{' '}
+                      {t('points')}
+                    </span>
+                  </dd>
                 </div>
               )}
               <div>

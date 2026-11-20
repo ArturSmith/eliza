@@ -109,20 +109,6 @@
   gap: 12px;
   flex-wrap: wrap;
 }
-.pos-loyalty {
-  padding: 12px 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.pos-loyalty strong {
-  display: block;
-}
-.pos-loyalty small {
-  display: block;
-  margin-top: 4px;
-}
 .pos-loyalty-input {
   display: grid;
   gap: 16px;
@@ -147,17 +133,6 @@
   }
 }
 
-.pos-loyalty-member {
-  width: 100%;
-  display: grid;
-  gap: 12px;
-}
-.pos-loyalty-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
 .pos-loyalty-balance {
   display: flex;
   justify-content: space-between;
@@ -235,36 +210,36 @@
 .pos-loyalty-widget.pos-loyalty-earn {
   background: var(--color-background-f6f8f1, var(--surface));
 }
-.pos-loyalty-widget.pos-loyalty-spend {
+.pos-loyalty-widget.pos-loyalty-balance {
   grid-column: 1 / -1;
-}
-.pos-loyalty-spend-summary {
-  display: flex;
-  align-items: end;
+  flex-direction: row;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
   flex-wrap: wrap;
-}
-.pos-loyalty-spend-summary > div {
-  min-width: 0;
-}
-.pos-loyalty-spend-summary p {
-  margin-top: 6px;
 }
 .pos-loyalty-spend-available {
   display: grid;
   gap: 8px;
-  padding-left: 16px;
-  border-left: 1px solid var(--border);
 }
 .pos-loyalty-spend-available > span {
   font-size: 12px;
   color: var(--muted);
 }
-.pos-loyalty-spend-available > strong {
-  font-size: 24px;
-  font-variant-numeric: tabular-nums;
+.pos-loyalty-spend-rate strong {
+  font-size: 20px;
+  color: var(--text);
+}
+.pos-loyalty-calculation {
   overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.pos-loyalty-widget .pos-loyalty-action {
+  width: 100%;
+  min-height: 48px;
+  margin-top: auto;
+  white-space: normal;
+  padding-left: 10px;
+  padding-right: 10px;
 }
 .pos-loyalty-choice-note {
   margin: 0;
@@ -282,10 +257,6 @@
   }
   .pos-loyalty-widgets {
     gap: 10px;
-  }
-  .pos-loyalty-spend-available {
-    padding-left: 0;
-    border-left: 0;
   }
 }
 
@@ -406,7 +377,7 @@
   }
 }
 
-.pos-loyalty-widget:not(.pos-loyalty-spend) h3 {
+.pos-loyalty-widget:not(.pos-loyalty-balance) h3 {
   min-height: 39px;
 }
 
