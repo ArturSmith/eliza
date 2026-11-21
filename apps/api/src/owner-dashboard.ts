@@ -1,3 +1,5 @@
+import { ActionQuestionsService } from './action-questions.js';
+import { ReplenishmentModule } from './replenishment.js';
 import { originalCostsCte, refundCostColumns } from './financial-facts.js';
 import {
   Controller,
@@ -19,6 +21,7 @@ import { AccessGuard, Require, parse, type AuthRequest } from './security.js';
 import { Database } from './database.js';
 import type { Insight } from '@eliza/contracts';
 import {
+  actionQuestionRanges,
   toScaled,
   fromScaled,
   type DateRange,
@@ -101,6 +104,7 @@ export class OwnerDashboardController {
   constructor(
     private database: Database,
     private readonly financialMetrics: FinancialMetricsService,
+    private readonly actionQuestions: ActionQuestionsService,
   ) {}
 
   /** Read-only Overview projection; all money uses the canonical financial summary. */
@@ -136,34 +140,44 @@ export class OwnerDashboardController {
          JOIN device_records d ON d.id=h.device_id AND d.store_id=h.store_id
          WHERE h.store_id=$1 AND h.opened_at<(($2::date+1)::timestamp AT TIME ZONE $3)
            AND (h.closed_at IS NULL OR h.closed_at>($2::date::timestamp AT TIME ZONE $3))
-         ORDER BY h.opened_at,h.id LIMIT 200`, [store.id,day,store.timezone]),
+         ORDER BY h.opened_at,h.id LIMIT 200`,
+        [store.id, day, store.timezone],
+      ),
       this.database.pool.query(
         `SELECT (s.created_at AT TIME ZONE $3)::date::text AS day FROM sales s
          WHERE s.store_id=$1 AND s.created_at<($2::date::timestamp AT TIME ZONE $3)
            AND s.created_at>=(($2::date-56)::timestamp AT TIME ZONE $3)
            AND extract(isodow FROM s.created_at AT TIME ZONE $3)=extract(isodow FROM $2::date)
-         ORDER BY s.created_at DESC LIMIT 1`, [store.id,day,store.timezone]),
+         ORDER BY s.created_at DESC LIMIT 1`,
+        [store.id, day, store.timezone],
+      ),
     ]);
     const comparisonDate: string | null = comparison.rows[0]?.day ?? null;
     const previous = comparisonDate
-      ? await this.hourly(store, {from:comparisonDate,to:comparisonDate}, [], null)
+      ? await this.hourly(store, { from: comparisonDate, to: comparisonDate }, [], null)
       : null;
     const counts = shifts.rows[0];
     return {
-      day,today,timezone:store.timezone,currency:store.currency,
-      totalSales:totals.grossSales,refunds:fromScaled(toScaled(String(totals.refunds),2),2),
+      day,
+      today,
+      timezone: store.timezone,
+      currency: store.currency,
+      totalSales: totals.grossSales,
+      refunds: fromScaled(toScaled(String(totals.refunds), 2), 2),
       loyalty: {
         redeemed: totals.loyalty?.redeemed ?? '0.00',
         restored: totals.loyalty?.restored ?? '0.00',
       },
       transactions: totals.transactions,
       averageBasket: totals.averageBasket === null ? null : totals.averageBasket.toFixed(2),
-      financialSummary:totals.financialSummary,
+      financialSummary: totals.financialSummary,
       comparisonDate,
-      hourly:hourly.map((row,index)=>({...row,comparison:previous?.[index].total ?? null})),
-      shifts:{
-        total:counts?.totalShifts ?? 0,open:counts?.openShifts ?? 0,closed:counts?.closedShifts ?? 0,
-        rows:shifts.rows.map(({totalShifts,closedShifts,openShifts,...row})=>row),
+      hourly: hourly.map((row, index) => ({ ...row, comparison: previous?.[index].total ?? null })),
+      shifts: {
+        total: counts?.totalShifts ?? 0,
+        open: counts?.openShifts ?? 0,
+        closed: counts?.closedShifts ?? 0,
+        rows: shifts.rows.map(({ totalShifts, closedShifts, openShifts, ...row }) => row),
       },
     };
   }
@@ -673,7 +687,7 @@ SELECT phase,category,sum(revenue)::text AS revenue,sum(quantity)::text AS units
  JOIN products p ON p.id=i.product_id AND p.store_id=i.store_id
  WHERE i.store_id=$1 AND s.created_at>=now()-interval '7 days' GROUP BY 1
 )
-SELECT p.id,p.name,p.sku,p.category,p.unit,(p.stock+COALESCE((SELECT sum(child.stock) FROM products child WHERE child.store_id=p.store_id AND child.base_product_id=p.id),0))::text AS stock,p.min_stock::text AS "minStock",
+SELECT p.id,p.name,p.volume,p.sku,p.category,p.unit,(p.stock+COALESCE((SELECT sum(child.stock) FROM products child WHERE child.store_id=p.store_id AND child.base_product_id=p.id),0))::text AS stock,p.min_stock::text AS "minStock",
  p.price::text,p.tax_rate::text AS "taxRate",p.active,
  ((now() AT TIME ZONE $4)::date-(p.created_at AT TIME ZONE $4)::date)::int AS "productAgeDays",
  CASE WHEN $5 THEN p.cost::text END AS cost,
@@ -709,6 +723,7 @@ SELECT p.id,p.name,p.sku,p.category,p.unit,(p.stock+COALESCE((SELECT sum(child.s
       return {
         id: r.id,
         name: r.name,
+        volume: r.volume,
         sku: r.sku,
         category: r.category ?? 'Uncategorised',
         unit: r.unit,
@@ -766,6 +781,14 @@ SELECT p.id,p.name,p.sku,p.category,p.unit,(p.stock+COALESCE((SELECT sum(child.s
 
     return {
       days,
+      actionProfitCandidates: [...enriched]
+        .filter((p) => num(p.units) > 0 || num(p.refunds) > 0)
+        .filter((p) => p.grossProfit !== null)
+        .sort((a, b) => (b.grossProfit ?? 0) - (a.grossProfit ?? 0))
+        .slice(0, 10),
+      actionMissingProfit: enriched.filter(
+        (p) => (num(p.units) > 0 || num(p.refunds) > 0) && p.grossProfit === null,
+      ).length,
       byRevenue: top('revenue'),
       byUnits: top('units'),
       byProfit: margin
@@ -1444,6 +1467,27 @@ SELECT m.month,COALESCE(sold.revenue,0)::text AS revenue,
     };
   }
 
+  @Get('action-center/questions') @Require('analytics.view') async questions(
+    @Query() input: unknown,
+    @Req() req: AuthRequest,
+  ) {
+    const { period } = parse(
+      z.object({ period: z.enum(['today', 'week', 'month']).default('week') }).strict(),
+      input,
+    );
+    const range = actionQuestionRanges(
+      period,
+      storeToday(new Date(), req.context.store.timezone),
+    ).current;
+    const data = await this.dashboard({ period: 'custom', ...range }, req);
+    return this.actionQuestions.report(
+      req,
+      period,
+      data.products.actionProfitCandidates,
+      data.products.actionMissingProfit,
+    );
+  }
+
   @Post('action-center/:id/state') @Require('analytics.view') async insightState(
     @Param('id') id: string,
     @Body() input: unknown,
@@ -1700,5 +1744,9 @@ function scaleTotals(totals: any, divisor: number) {
   };
 }
 
-@Module({ imports: [AuthModule, FinancialMetricsModule], controllers: [OwnerDashboardController] })
+@Module({
+  imports: [AuthModule, FinancialMetricsModule, ReplenishmentModule],
+  controllers: [OwnerDashboardController],
+  providers: [ActionQuestionsService],
+})
 export class OwnerDashboardModule {}

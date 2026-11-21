@@ -28,12 +28,14 @@ test('manager can open the Action Center, review an alert, and inspect no-sales 
   });
   expect(response.status()).toBe(201);
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /Manager Action Center/ })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'View all actions' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Store overview', exact: true })).toBeVisible();
   await page.goto('/analytics');
   await expect(page.getByRole('heading', { name: /Manager Action Center/ })).toHaveCount(0);
   await page.goto('/action-center');
   await expect(page.getByRole('heading', { name: 'Manager Action Center' })).toBeVisible();
+  await page
+    .getByText('Other alerts, review status and no-sales analysis', { exact: true })
+    .click();
   await expect(page.getByRole('button', { name: /Setup/ })).toBeVisible();
   await page.getByRole('button', { name: 'Mark seen' }).first().click();
   await expect(page.getByText('SEEN', { exact: true })).toBeVisible();

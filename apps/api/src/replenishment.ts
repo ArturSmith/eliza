@@ -51,7 +51,7 @@ export type ReplenishmentQuery = z.infer<typeof replenishmentQuery>;
 @Injectable()
 export class ReplenishmentService {
   constructor(private readonly database: Database) {}
-  async report(req: AuthRequest, input: unknown) {
+  async report(req: AuthRequest, input: unknown, unpaged = false) {
     if (!replenishmentPermissions.every((p) => req.context.user.permissions.includes(p)))
       throw new ForbiddenException(
         'Sales, inventory, purchasing and supplier access are required.',
@@ -104,7 +104,7 @@ export class ReplenishmentService {
       FROM purchase_lines l JOIN purchases o ON o.id=l.purchase_id AND o.store_id=l.store_id CROSS JOIN dates d
       WHERE l.store_id=$1 AND o.status IN ('draft','ordered','partially_received') GROUP BY l.product_id
     )
-    SELECT p.id AS "productId",p.name,p.sku,p.unit,p.category,
+    SELECT p.id AS "productId",p.name,p.volume,p.sku,p.unit,p.category,
       (p.stock+COALESCE((SELECT sum(child.stock) FROM products child WHERE child.store_id=$1 AND child.base_product_id=p.id),0))::text AS stock,
       COALESCE(b.total,0)::text AS "batchStock",COALESCE(b.available,0)::text AS available,
       COALESCE(b.lots,'[]'::jsonb) AS lots,COALESCE(b.expired,0)::text AS expired,COALESCE(b.unknown_expiry,0)::text AS "unknownExpiry",
@@ -202,7 +202,7 @@ export class ReplenishmentService {
       page: filters.page,
       pageSize: 50,
       truncated: rows.length > 5000,
-      rows: planned.slice((filters.page - 1) * 50, filters.page * 50),
+      rows: unpaged ? planned : planned.slice((filters.page - 1) * 50, filters.page * 50),
     };
   }
 }
