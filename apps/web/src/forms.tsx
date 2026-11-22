@@ -1,3 +1,6 @@
+import { ProductTermField } from './product-term-field';
+import { ProductSizeField } from './product-size-field';
+import { useProductOptions } from './product-options';
 import { productDisplayName } from '@eliza/contracts';
 import {
   stockQuantity,
@@ -285,6 +288,15 @@ export function ProductForm({
 }) {
   useLanguage();
   const formRef = useRef<HTMLFormElement>(null);
+  const options = useProductOptions();
+  const [brand, setBrand] = useState(
+    initial?.brand ?? initial?.source?.brand ?? prefill?.source?.brand ?? '',
+  );
+  const [category, setCategory] = useState(initial?.category ?? prefill?.category ?? '');
+  const [volume, setVolume] = useState(
+    initial?.volume ?? initial?.source?.quantity ?? prefill?.source?.quantity ?? '',
+  );
+
   const [price, setPrice] = useState(
     initial?.regularPrice ?? initial?.price ?? prefill?.price ?? '',
   );
@@ -305,6 +317,19 @@ export function ProductForm({
   const [source, setSource] = useState(initial?.source ?? prefill?.source ?? null);
   const [existingProduct, setExistingProduct] = useState<Product>();
   function fillField(name: string, value: string, append = false) {
+    if (name === 'brand') {
+      setBrand((before) => (before.trim() ? before : value));
+      return;
+    }
+    if (name === 'category') {
+      setCategory((before) => (before.trim() ? before : value));
+      return;
+    }
+    if (name === 'volume') {
+      setVolume((before) => (before.trim() ? before : value));
+      return;
+    }
+
     const field = formRef.current?.elements.namedItem(name) as
       HTMLInputElement | HTMLTextAreaElement | null;
     if (!field) return;
@@ -519,24 +544,21 @@ export function ProductForm({
           />
         </Field>
         <div className="form-grid">
-          <Field label={t('Brand (optional)')}>
-            <input
-              name="brand"
-              maxLength={120}
-              defaultValue={
-                initial?.brand ?? initial?.source?.brand ?? prefill?.source?.brand ?? ''
-              }
-            />
-          </Field>
-          <Field label={t('Volume / size (optional)')}>
-            <input
-              name="volume"
-              maxLength={120}
-              defaultValue={
-                initial?.volume ?? initial?.source?.quantity ?? prefill?.source?.quantity ?? ''
-              }
-            />
-          </Field>
+          <ProductTermField
+            label={t('Brand (optional)')}
+            name="brand"
+            value={brand}
+            onChange={setBrand}
+            options={options.brands}
+            loading={options.isFetching}
+            disabled={mutation.isPending}
+          />
+          <ProductSizeField
+            label={t('Volume / size (optional)')}
+            value={volume}
+            onChange={setVolume}
+            disabled={mutation.isPending}
+          />
         </div>
         <Field label={t('Description (optional)')}>
           <textarea
@@ -561,21 +583,16 @@ export function ProductForm({
               maxLength={120}
             />
           </Field>
-          <Field label={t('Category')}>
-            <input
-              name="category"
-              list="categories"
-              placeholder={t('e.g. Dairy')}
-              defaultValue={initial?.category ?? prefill?.category}
-              required
-              maxLength={120}
-            />
-            <datalist id="categories">
-              {['Produce', 'Dairy', 'Bakery', 'Pantry', 'Drinks', 'Household'].map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </datalist>
-          </Field>
+          <ProductTermField
+            label={t('Category')}
+            name="category"
+            value={category}
+            onChange={setCategory}
+            options={options.categories}
+            loading={options.isFetching}
+            required
+            disabled={mutation.isPending}
+          />
         </div>
         <div className="form-grid">
           <Field label={t('Selling price (optional)')}>

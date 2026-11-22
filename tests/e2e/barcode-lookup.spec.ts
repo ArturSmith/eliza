@@ -49,7 +49,8 @@ test('barcode creation reviews suggestions, saves attribution, and falls back to
   await page.getByRole('link', { name: 'View product', exact: true }).click();
   await page.reload();
   await page.getByRole('button', { name: 'Edit product', exact: true }).click();
-  await expect(page.getByLabel('Volume / size (optional)', { exact: true })).toHaveValue('500 g');
+  await expect(page.getByLabel('Volume / size (optional)', { exact: true })).toHaveValue('500');
+  await expect(page.getByLabel('Size unit', { exact: true })).toHaveValue('g');
   await expect(page.getByLabel('Description (optional)')).toHaveValue('Hazelnut spread with cocoa');
   await expect(page.getByLabel('Scan or enter barcode')).toHaveCount(0);
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();

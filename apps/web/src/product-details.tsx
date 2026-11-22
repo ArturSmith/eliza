@@ -1,3 +1,6 @@
+import { ProductTermField } from './product-term-field';
+import { ProductSizeField } from './product-size-field';
+import { useProductOptions } from './product-options';
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from '@tanstack/react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -87,6 +90,7 @@ function ProductDetailsForm({
   const canReadSuppliers = session.user.permissions.includes('suppliers.read');
   const canAdjustStock = session.user.permissions.includes('inventory.adjust');
   const [editing, setEditing] = useState(creating || startEditing);
+  const options = useProductOptions(editing);
   const [draft, setDraft] = useState(() => productDraft(product));
   const [baseline, setBaseline] = useState(() => productDraftKey(productDraft(product)));
   const [selectedPhoto, setSelectedPhoto] = useState(0);
@@ -371,28 +375,18 @@ function ProductDetailsForm({
                 </Field>
               </div>
               <div className="product-detail-field-wide">
-                <Field label={t('Category')}>
-                  <input
-                    {...controls}
-                    name="category"
-                    list="product-detail-categories"
-                    value={draft.category}
-                    required
-                    maxLength={120}
-                    onChange={(event) => change('category', event.target.value)}
-                  />
-                </Field>
-                <datalist id="product-detail-categories">
-                  {[
-                    ...new Set(
-                      queryClient.getQueryData<Product[]>(['products'])?.map((p) => p.category),
-                    ),
-                  ]
-                    .sort()
-                    .map((category) => (
-                      <option key={category} value={category} />
-                    ))}
-                </datalist>
+                <ProductTermField
+                  label={t('Category')}
+                  name="category"
+                  value={draft.category}
+                  onChange={(value) => change('category', value)}
+                  options={options.categories}
+                  loading={options.isFetching}
+                  form={formId}
+                  required
+                  readOnly={locked}
+                  disabled={busy}
+                />
               </div>
               <Field
                 label={t('Unit')}
@@ -490,28 +484,26 @@ function ProductDetailsForm({
                   </Field>
                 </>
               )}
-              <Field label={t('Brand (optional)')}>
-                <input
-                  {...controls}
-                  name="brand"
-                  maxLength={120}
-                  value={draft.brand}
-                  onChange={(event) => change('brand', event.target.value)}
-                />
-              </Field>
+              <ProductTermField
+                label={t('Brand (optional)')}
+                name="brand"
+                value={draft.brand}
+                onChange={(value) => change('brand', value)}
+                options={options.brands}
+                loading={options.isFetching}
+                form={formId}
+                readOnly={locked}
+                disabled={busy}
+              />
               {!multiple && (
-                <Field
+                <ProductSizeField
                   label={t('Volume / size (optional)')}
-                  hint={t('For example: 330 ml, 500 ml, 1 L.')}
-                >
-                  <input
-                    {...controls}
-                    name="volume"
-                    maxLength={120}
-                    value={draft.volume}
-                    onChange={(event) => change('volume', event.target.value)}
-                  />
-                </Field>
+                  value={draft.volume}
+                  onChange={(value) => change('volume', value)}
+                  form={formId}
+                  readOnly={locked}
+                  disabled={busy}
+                />
               )}
             </div>
             {creating && (
@@ -526,24 +518,23 @@ function ProductDetailsForm({
                     </p>
                     {variants.map((variant, index) => (
                       <div className="product-volume-row" key={variant.id}>
-                        <Field label={t('Volume {number}', { number: index + 1 })}>
-                          <input
-                            {...controls}
-                            required
-                            maxLength={120}
-                            placeholder={t('For example: 500 ml')}
-                            value={variant.volume}
-                            onChange={(event) =>
-                              setVariants((rows) =>
-                                rows.map((row) =>
-                                  row.id === variant.id
-                                    ? { ...row, volume: event.target.value }
-                                    : row,
-                                ),
-                              )
-                            }
-                          />
-                        </Field>
+                        <ProductSizeField
+                          label={t('Volume {number}', { number: index + 1 })}
+                          unitLabel={t('Size unit {number}', { number: index + 1 })}
+                          name={'variant-' + variant.id}
+                          value={variant.volume}
+                          form={formId}
+                          required
+                          readOnly={locked}
+                          disabled={busy}
+                          onChange={(value) =>
+                            setVariants((rows) =>
+                              rows.map((row) =>
+                                row.id === variant.id ? { ...row, volume: value } : row,
+                              ),
+                            )
+                          }
+                        />
                         <Field label={t('Barcode {number}', { number: index + 1 })}>
                           <input
                             {...controls}

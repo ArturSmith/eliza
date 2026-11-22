@@ -28,6 +28,23 @@ import { lookupBarcode } from './barcode-lookup.js';
 @UseGuards(AccessGuard)
 export class CatalogController {
   constructor(private database: Database) {}
+  @Get('options') @Require('catalog.read') async options(@Req() req: AuthRequest) {
+    const { rows } = await this.database.pool.query(
+      `SELECT
+      COALESCE((SELECT jsonb_agg(name ORDER BY name) FROM (
+        SELECT DISTINCT ON (lower(btrim(brand))) btrim(brand) AS name
+        FROM products WHERE store_id=$1 AND btrim(brand)<>'' ORDER BY lower(btrim(brand)),btrim(brand)
+      ) brands),'[]'::jsonb) AS brands,
+      COALESCE((SELECT jsonb_agg(name ORDER BY name) FROM (
+        SELECT DISTINCT ON (lower(btrim(name))) btrim(name) AS name FROM (
+          SELECT category AS name FROM products WHERE store_id=$1
+          UNION ALL SELECT name FROM categories WHERE store_id=$1
+        ) names WHERE btrim(name)<>'' ORDER BY lower(btrim(name)),btrim(name)
+      ) categories),'[]'::jsonb) AS categories`,
+      [req.context.store.id],
+    );
+    return rows[0];
+  }
   @Get('next-plu') @Require('catalog.write') async nextPlu(@Req() req: AuthRequest) {
     return (
       await this.database.pool.query(

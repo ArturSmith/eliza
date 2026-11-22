@@ -21,12 +21,14 @@ test('creates volume variants together, keeps an invalid draft, then resets for 
   await page.getByLabel('Brand (optional)', { exact: true }).fill('Brand Cola');
   await page.getByLabel('Category', { exact: true }).fill('Drinks');
   await page.getByLabel('Unit', { exact: true }).selectOption('piece');
-  await page.getByLabel('Volume / size (optional)', { exact: true }).fill('330 ml');
+  await page.getByLabel('Volume / size (optional)', { exact: true }).fill('330');
+  await page.getByLabel('Size unit', { exact: true }).selectOption('ml');
   await page.getByLabel('Barcodes (optional)', { exact: true }).fill('5901234123457');
   await page.getByRole('button', { name: 'Add volume variant', exact: true }).click();
-  await expect(page.getByLabel('Volume 1', { exact: true })).toHaveValue('330 ml');
+  await expect(page.getByLabel('Volume 1', { exact: true })).toHaveValue('330');
   await expect(page.getByLabel('Barcode 1', { exact: true })).toHaveValue('5901234123457');
-  await page.getByLabel('Volume 2', { exact: true }).fill('500 ml');
+  await page.getByLabel('Volume 2', { exact: true }).fill('500');
+  await page.getByLabel('Size unit 2', { exact: true }).selectOption('ml');
   await page.getByLabel('Barcode 2', { exact: true }).fill('5901234123457');
   await page.getByRole('button', { name: 'Create 2 products', exact: true }).click();
   await expect(
@@ -35,7 +37,8 @@ test('creates volume variants together, keeps an invalid draft, then resets for 
   await expect(page.getByLabel('Product name', { exact: true })).toHaveValue('Cola');
   await page.getByLabel('Barcode 2', { exact: true }).fill('5901234123464');
   await page.getByRole('button', { name: 'Add volume variant', exact: true }).click();
-  await page.getByLabel('Volume 3', { exact: true }).fill('1 L');
+  await page.getByLabel('Volume 3', { exact: true }).fill('1');
+  await page.getByLabel('Size unit 3', { exact: true }).selectOption('L');
   await page.getByLabel('Barcode 3', { exact: true }).fill('5901234123471');
   await page.getByRole('button', { name: 'Remove variant 3', exact: true }).click();
   await page.screenshot({ path: '/private/tmp/eliza-volume-form-desktop.png', fullPage: true });
@@ -81,7 +84,7 @@ test('creates volume variants together, keeps an invalid draft, then resets for 
     await card.getByRole('link').click();
     await expect(page.getByLabel('Brand (optional)', { exact: true })).toHaveValue('Brand Cola');
     await expect(page.getByLabel('Volume / size (optional)', { exact: true })).toHaveValue(
-      product.volume,
+      product.volume.split(' ')[0],
     );
     await page.goto('/products');
   }
