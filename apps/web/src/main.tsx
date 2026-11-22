@@ -1,3 +1,4 @@
+import { QuickReceiptPage, QuickShortcutEditor } from './quick-receipts';
 import { ShopNewsPage } from './shop-news';
 import { LoyaltyPage } from './loyalty';
 import { InventoryPage, InventoryAdjustmentPage } from './inventory-workspace';
@@ -162,6 +163,21 @@ const routes = [
   createRoute({ getParentRoute: () => root, path: '/stock-counts', component: StockCountsPage }),
   createRoute({ getParentRoute: () => root, path: '/suppliers', component: SuppliersRedirect }),
   createRoute({ getParentRoute: () => root, path: '/purchases', component: PurchasingEntry }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/purchases/quick-receive/new',
+    component: () => <QuickShortcutEditor create />,
+  }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/purchases/quick-receive/$id/edit',
+    component: QuickShortcutEditor,
+  }),
+  createRoute({
+    getParentRoute: () => root,
+    path: '/purchases/quick-receive/$id',
+    component: QuickReceiptPage,
+  }),
   createRoute({
     getParentRoute: () => root,
     path: '/purchases/history',

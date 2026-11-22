@@ -1,3 +1,4 @@
+import { QuickReceivingPanel } from './quick-receipts';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from '@tanstack/react-router';
 import { useMutation, useQuery } from '@tanstack/react-query';
@@ -112,10 +113,11 @@ export function PurchasingPage() {
           </div>
         }
       />
+      <QuickReceivingPanel />
       {!canRead ? (
         canReadPurchases ? (
           <PurchaseHistory />
-        ) : (
+        ) : session.user.permissions.includes('purchases.quick_receive') ? null : (
           <Restricted />
         )
       ) : (

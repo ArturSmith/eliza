@@ -98,6 +98,7 @@ export class AuthService {
             permissions: permissions.filter((p) => !['settings.manage', 'team.manage'].includes(p)),
           },
           { storeId: store.id, name: 'Cashier', permissions: cashierPermissions },
+          { storeId: store.id, name: 'Receiving clerk', permissions: ['purchases.quick_receive'] },
         ]);
         const [owner] = await tx
           .insert(employees)

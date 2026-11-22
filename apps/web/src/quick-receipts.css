@@ -1,0 +1,225 @@
+.quick-panel {
+  padding: 28px;
+  display: grid;
+  gap: 20px;
+}
+.quick-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+.quick-heading h2,
+.quick-heading h1 {
+  margin: 0 0 8px;
+}
+.quick-heading p {
+  margin: 0;
+}
+.quick-shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 16px;
+}
+.quick-shortcut {
+  border: 1px solid var(--border, #dfe5dc);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.quick-shortcut-product {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+.quick-shortcut-product img {
+  width: 64px;
+  height: 64px;
+  object-fit: contain;
+  border-radius: 12px;
+  background: white;
+  padding: 6px;
+}
+.quick-shortcut-product h3 {
+  margin: 0 0 6px;
+}
+.quick-shortcut-product p {
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+.quick-shortcut-product small {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted, #778377);
+}
+.quick-shortcut-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: auto;
+}
+.quick-shortcut-actions > .button:first-child {
+  flex: 1;
+}
+.quick-permission-note {
+  font-size: 13px;
+  margin: 0;
+}
+.quick-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.quick-receipt-page {
+  display: grid;
+  gap: 24px;
+  width: 100%;
+}
+.quick-receipt-form {
+  padding: 28px;
+  overflow: visible;
+  width: 100%;
+  max-width: 860px;
+  margin-inline: auto;
+  display: grid;
+  gap: 24px;
+}
+.quick-receipt-form h1 {
+  margin: 0;
+}
+.quick-receipt-form form {
+  display: grid;
+  gap: 24px;
+}
+.quick-receipt-form fieldset {
+  display: grid;
+  gap: 24px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.quick-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+  align-items: start;
+}
+.quick-form-grid .field {
+  margin: 0;
+}
+.quick-form-grid .field > span:first-child {
+  min-height: 1.5em;
+}
+.quick-extra {
+  border-top: 1px solid var(--border, #dfe5dc);
+  padding-top: 20px;
+}
+.quick-extra summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.quick-extra[open] summary {
+  margin-bottom: 24px;
+}
+.quick-receipt-summary {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  background: var(--background, #f5f7f0);
+  border-radius: 14px;
+}
+.quick-receipt-summary > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+}
+.quick-receipt-summary > div:last-child {
+  border-top: 1px solid var(--border, #dfe5dc);
+  padding-top: 16px;
+  font-size: 18px;
+}
+.quick-checkbox {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.quick-checkbox input {
+  width: 18px;
+  height: 18px;
+}
+.quick-success {
+  text-align: center;
+  justify-items: center;
+}
+.pos-quick-receiving {
+  align-content: start;
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 24px;
+  display: grid;
+  gap: 24px;
+  overflow: auto;
+  flex: 1;
+}
+.pos-quick-receiving > .button {
+  justify-self: start;
+}
+@media (max-width: 640px) {
+  .quick-heading {
+    flex-direction: column;
+  }
+  .quick-form-grid {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .quick-receipt-form {
+    padding: 20px;
+  }
+  .pos-quick-receiving {
+    padding: 16px;
+  }
+  .quick-shortcut-actions {
+    width: 100%;
+  }
+  .quick-receipt-summary {
+    padding: 16px;
+  }
+  .quick-receipt-summary > div {
+    gap: 12px;
+  }
+}
+
+.quick-supplier {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px !important;
+}
+@media (max-width: 640px) {
+  .quick-panel {
+    padding: 20px;
+  }
+}
+
+@media (min-width: 641px) {
+  .quick-required-fields {
+    grid-template-rows: auto auto auto;
+    row-gap: 8px;
+  }
+  .quick-required-fields > .field {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: span 3;
+    gap: 8px;
+  }
+}
+
+.quick-receipt-page > .button,
+.quick-receipt-page > .text-link {
+  justify-self: start;
+}

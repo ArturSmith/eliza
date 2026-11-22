@@ -1,3 +1,4 @@
+import { PosQuickReceiving } from './quick-receipts';
 import { productDisplayName } from '@eliza/contracts';
 import { formatQuantity, quantityInputValue } from './quantity-format';
 import { PosLoyaltyChoice } from './pos-loyalty-choice';
@@ -477,6 +478,7 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   useLanguage();
   const storageKey = `eliza-cart:${context.store!.id}:${context.device!.id}:${context.operator!.id}:${context.shift?.id ?? 'unopened'}`;
   const [draft, setDraft] = useState(() => loadDraft(storageKey));
+  const [quickReceiving, setQuickReceiving] = useState(false);
   const draftRef = useRef(draft);
   draftRef.current = draft;
   const [storageError, setStorageError] = useState<unknown>(null);
@@ -967,6 +969,17 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
   useEffect(() => {
     productScroll.current?.scrollTo({ top: 0 });
   }, [search, page, category, favorites, popular]);
+  if (quickReceiving && context.operator!.permissions.includes('purchases.quick_receive'))
+    return (
+      <div className="pos-shell">
+        <PosQuickReceiving
+          storeId={context.store!.id}
+          employeeId={context.operator!.id}
+          currency={context.store!.currency}
+          onBack={() => setQuickReceiving(false)}
+        />
+      </div>
+    );
   return (
     <div className="pos-shell" data-tour-scope="pos">
       <header className="pos-topbar">
@@ -1381,6 +1394,17 @@ function RegisterWorkspace({ context }: { context: PosContext }) {
           {t('Online checkout · drafts saved on this tab ')}
         </div>
         <div>
+          {context.operator!.permissions.includes('purchases.quick_receive') && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={frozen}
+              onClick={() => setQuickReceiving(true)}
+            >
+              <Package size={16} />
+              {t('Quick receiving')}
+            </Button>
+          )}
           <ReceiptSearch context={context} />
           <Button variant="ghost" size="sm" onClick={() => setModal('history')}>
             <Clock3 size={14} />

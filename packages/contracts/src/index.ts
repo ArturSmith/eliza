@@ -28,6 +28,7 @@ export const permissions = [
   'purchases.read',
   'purchases.write',
   'purchases.receive',
+  'purchases.quick_receive',
   'purchases.cost',
   'analytics.view',
   'analytics.margin',
@@ -1224,3 +1225,42 @@ export function applyLoyaltyDiscount<
 }
 
 export * from './action-questions.js';
+
+// Quick receipts deliberately have no saved or suggested procurement cost.
+export const quickReceiptShortcutSchema = z
+  .object({
+    name: short,
+    supplierId: z.uuid(),
+    productId: z.uuid(),
+    taxRate: purchaseTax.default('0'),
+    active: z.boolean().default(true),
+  })
+  .strict();
+export const quickReceiptInputSchema = z
+  .object({
+    requestId: z.uuid(),
+    version: z.number().int().positive(),
+    quantity: positiveQuantity,
+    unitCost: money,
+    expiryDate: optionalDate.default(''),
+    deliveryReference: z.string().trim().max(120).default(''),
+    notes: z.string().trim().max(2000).default(''),
+  })
+  .strict();
+export type QuickReceiptShortcut = z.infer<typeof quickReceiptShortcutSchema> & {
+  id: string;
+  version: number;
+  supplierName: string;
+  productName: string;
+  sku: string;
+  unit: string;
+  image: string | null;
+  available: boolean;
+};
+export type QuickReceiptResult = {
+  purchaseId: string;
+  receiptId: string;
+  receiptNumber: string;
+  quantity: string;
+  total: string;
+};

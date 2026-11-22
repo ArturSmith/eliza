@@ -41,6 +41,7 @@ import { AnalyticsModule } from './analytics.js';
 import { OwnerDashboardModule } from './owner-dashboard.js';
 import { SalesSummaryModule } from './sales-summary.js';
 import { PurchasingModule } from './purchasing.js';
+import { QuickReceiptsModule } from './quick-receipts.js';
 import { ScannedDocumentsModule } from './scanned-documents.js';
 import { AiAgentModule } from './ai-agent.js';
 import { CheckoutModule } from './checkout.js';
@@ -139,6 +140,7 @@ class HealthController {
     PriceCheckModule,
     ExpensesModule,
     PurchasingModule,
+    QuickReceiptsModule,
     ScannedDocumentsModule,
     AiAgentModule,
     SalesSummaryModule,

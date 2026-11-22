@@ -288,7 +288,8 @@ export function Shell() {
         ? canOpenPromotions(user.permissions)
         : item.to === '/purchases'
           ? user.permissions.includes('purchases.read') ||
-            user.permissions.includes('suppliers.read')
+            user.permissions.includes('suppliers.read') ||
+            user.permissions.includes('purchases.quick_receive')
           : user.permissions.includes(item.permission));
   const current = nav.find(
     (n) =>
