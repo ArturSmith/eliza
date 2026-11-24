@@ -1,5 +1,6 @@
+import { PhoneScannerControl } from './phone-scanner';
 import { t, useLanguage } from './i18n';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Product } from '@eliza/contracts';
 import { api } from './api';
 import { Button } from './components/ui/button';
@@ -20,8 +21,10 @@ export function BarcodeLookup({
   onUse,
   onExisting,
   disabled = false,
+  onBusyChange,
 }: {
   disabled?: boolean;
+  onBusyChange?: (busy: boolean) => void;
   onBarcode: (value: string) => void;
   onUse: (value: Suggestion) => Promise<void>;
   onExisting: (product: Product) => void;
@@ -30,9 +33,15 @@ export function BarcodeLookup({
   const [barcode, setBarcode] = useState('');
   const [result, setResult] = useState<Result>();
   const [busy, setBusy] = useState(false);
+  const lookingUp = useRef(false);
+  useEffect(() => {
+    onBusyChange?.(busy);
+    return () => onBusyChange?.(false);
+  }, [busy, onBusyChange]);
   const [error, setError] = useState<unknown>();
   async function lookup(value = barcode) {
-    if (disabled || busy || !value.trim()) return;
+    if (disabled || busy || lookingUp.current || !value.trim()) return false;
+    lookingUp.current = true;
     setBusy(true);
     setResult(undefined);
     setError(undefined);
@@ -45,8 +54,10 @@ export function BarcodeLookup({
       setError(e);
       if (/^\d{8,14}$/.test(code)) onBarcode(code);
     } finally {
+      lookingUp.current = false;
       setBusy(false);
     }
+    return true;
   }
   return (
     <div className="barcode-lookup-wrap">
@@ -180,6 +191,15 @@ export function BarcodeLookup({
           </div>
         )}
       </fieldset>
+      <PhoneScannerControl
+        label={t('Find product by barcode')}
+        disabled={disabled || busy}
+        onScan={(code) => {
+          if (disabled || busy || lookingUp.current) return false;
+          setBarcode(code);
+          return lookup(code);
+        }}
+      />
     </div>
   );
 }

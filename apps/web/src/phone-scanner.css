@@ -1,0 +1,145 @@
+.phone-scanner-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.phone-scanner-control small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.phone-pairing {
+  display: grid;
+  gap: 18px;
+}
+.phone-pairing p {
+  margin: 0;
+  line-height: 1.6;
+}
+.phone-pairing-qr {
+  display: grid;
+  place-items: center;
+  background: white;
+  border-radius: 16px;
+  padding: 16px;
+  justify-self: center;
+  max-width: 100%;
+}
+.phone-pairing-qr svg {
+  width: min(240px, 65vw);
+  height: auto;
+}
+.phone-connection-state,
+.phone-mobile-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--page);
+}
+.phone-connection-state svg,
+.phone-mobile-status svg {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.phone-mobile-status p,
+.phone-connection-state p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.phone-mobile-status.is-ready {
+  background: var(--page);
+  background: color-mix(in srgb, var(--accent) 10%, var(--page));
+  border-color: var(--accent);
+}
+.phone-scanner-mobile {
+  min-height: 100dvh;
+  background: var(--page);
+  padding: 24px max(20px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom))
+    max(20px, env(safe-area-inset-left));
+}
+.phone-scanner-mobile > header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  max-width: 560px;
+  margin: 0 auto 32px;
+}
+.phone-scanner-mobile > main {
+  max-width: 560px;
+  margin: auto;
+  display: grid;
+  gap: 20px;
+}
+.phone-scanner-mobile h1 {
+  margin: 0;
+  font-size: 28px;
+  line-height: 1.2;
+}
+.phone-scanner-mobile .camera-scan-inline {
+  margin: 0;
+}
+.phone-last-scan {
+  display: grid;
+  gap: 8px;
+  padding: 18px;
+  background: var(--color-background-fff, #fff);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow-wrap: anywhere;
+}
+.phone-last-scan small {
+  color: var(--muted);
+}
+.phone-last-scan strong {
+  font-size: 22px;
+}
+.phone-manual summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 12px 0;
+}
+.phone-manual form {
+  display: grid;
+  gap: 14px;
+  padding: 12px 0;
+}
+.phone-manual label {
+  display: grid;
+  gap: 8px;
+}
+.phone-scanner-mobile > .muted,
+.phone-scanner-mobile main > .muted {
+  font-size: 12px;
+  line-height: 1.6;
+}
+@media (max-width: 600px) {
+  .phone-scanner-header span {
+    display: none;
+  }
+  .phone-scanner-mobile {
+    padding-top: max(20px, env(safe-area-inset-top));
+  }
+}
+
+.phone-scanner-mobile > header .eliza-logo {
+  font-size: 28px;
+  flex-shrink: 0;
+}
+.phone-scanner-mobile > header .language-bar {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.phone-scanner-mobile > header .language-switcher > span {
+  display: none;
+}
+.phone-scanner-mobile .camera-scan-inline > p {
+  display: none;
+}

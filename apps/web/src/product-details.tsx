@@ -1,3 +1,4 @@
+import { PhoneScannerControl } from './phone-scanner';
 import { ProductAdditionalInformation } from './product-information';
 import { ProductTermField } from './product-term-field';
 import { ProductSizeField } from './product-size-field';
@@ -96,6 +97,7 @@ function ProductDetailsForm({
   const [baseline, setBaseline] = useState(() => productDraftKey(productDraft(product)));
   const [selectedPhoto, setSelectedPhoto] = useState(0);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [lookupBusy, setLookupBusy] = useState(false);
   const [error, setError] = useState<unknown>();
   const [barcode, setBarcode] = useState(false);
   const [adjustStock, setAdjustStock] = useState(false);
@@ -104,6 +106,8 @@ function ProductDetailsForm({
   const nameInput = useRef<HTMLInputElement>(null);
   const additionalRef = useRef<HTMLDetailsElement>(null);
   const [variants, setVariants] = useState<{ id: string; volume: string; barcode: string }[]>([]);
+  const [activeScanVariant, setActiveScanVariant] = useState<string | null>(null);
+  const scanVariant = variants.find((row) => row.id === activeScanVariant) ?? variants[0];
   const [created, setCreated] = useState<Product[]>([]);
   const [resetVersion, setResetVersion] = useState(0);
   const multiple = creating && variants.length > 1;
@@ -171,7 +175,7 @@ function ProductDetailsForm({
       if (kind === 'delete') await navigate({ to: '/products' });
     },
   });
-  const busy = save.isPending || photoBusy || action.isPending;
+  const busy = save.isPending || photoBusy || lookupBusy || action.isPending;
   useEffect(() => {
     if (resetVersion && !busy) nameInput.current?.focus();
   }, [resetVersion, busy]);
@@ -382,6 +386,19 @@ function ProductDetailsForm({
                 </Button>
               ) : null}
             </div>
+            {editing && !creating && (
+              <PhoneScannerControl
+                label={t('Product barcodes')}
+                disabled={locked}
+                onScan={(code) => {
+                  change(
+                    'barcodes',
+                    [...new Set([...productCodes(draft.barcodes), code])].join('\n'),
+                  );
+                  return true;
+                }}
+              />
+            )}
           </div>
           <Field label={t('SKU')} hint={editing ? t('Leave blank to generate a code.') : undefined}>
             <input
@@ -442,7 +459,11 @@ function ProductDetailsForm({
                 )}
               </p>
               {variants.map((variant, index) => (
-                <div className="product-volume-row" key={variant.id}>
+                <div
+                  className="product-volume-row"
+                  key={variant.id}
+                  onFocusCapture={() => setActiveScanVariant(variant.id)}
+                >
                   <ProductSizeField
                     label={t('Volume {number}', { number: index + 1 })}
                     unitLabel={t('Size unit {number}', { number: index + 1 })}
@@ -497,6 +518,27 @@ function ProductDetailsForm({
                   </Button>
                 </div>
               ))}
+              {scanVariant && (
+                <div className="product-variant-phone">
+                  <p className="product-details-hint">
+                    {t('Select a variant barcode field, then scan it with your phone.')}
+                  </p>
+                  <PhoneScannerControl
+                    key={scanVariant.id}
+                    label={t('Barcode {number}', { number: variants.indexOf(scanVariant) + 1 })}
+                    disabled={locked}
+                    onScan={(code) => {
+                      if (locked) return false;
+                      setVariants((rows) =>
+                        rows.map((row) =>
+                          row.id === scanVariant.id ? { ...row, barcode: code } : row,
+                        ),
+                      );
+                      return true;
+                    }}
+                  />
+                </div>
+              )}
             </>
           )}
           <Button
@@ -535,6 +577,7 @@ function ProductDetailsForm({
     <>
       {creating && (
         <BarcodeLookup
+          onBusyChange={setLookupBusy}
           key={resetVersion}
           disabled={busy || multiple}
           onBarcode={(code) =>

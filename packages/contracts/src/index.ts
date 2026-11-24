@@ -1,3 +1,4 @@
+export * from './phone-scanner.js';
 export * from './loyalty.js';
 import { loyaltySaleSchema } from './loyalty.js';
 export * from './replenishment.js';

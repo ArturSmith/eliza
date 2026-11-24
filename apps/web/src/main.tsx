@@ -1,3 +1,5 @@
+import { PhoneScannerProvider } from './phone-scanner';
+import { PhoneScannerPage } from './phone-scanner-mobile';
 import { QuickReceiptPage, QuickShortcutEditor } from './quick-receipts';
 import { ShopNewsPage } from './shop-news';
 import { LoyaltyPage } from './loyalty';
@@ -89,7 +91,10 @@ function LegacyDocumentsRedirect() {
 function Root() {
   useLanguage();
   const location = useLocation();
-  const publicAuth = location.pathname === '/register' || location.pathname === '/login';
+  const publicAuth =
+    location.pathname === '/register' ||
+    location.pathname === '/login' ||
+    location.pathname === '/phone-scanner';
   const environment = useQuery({
     queryKey: ['device-environment'],
     queryFn: () => api<{ type: string }>('/auth/device-environment'),
@@ -131,7 +136,9 @@ function Root() {
       location.pathname === '/management-access' ? (
         <Outlet />
       ) : (
-        <Shell />
+        <PhoneScannerProvider>
+          <Shell />
+        </PhoneScannerProvider>
       )}
     </>
   );
@@ -146,6 +153,7 @@ const root = createRootRoute({
   ),
 });
 const routes = [
+  createRoute({ getParentRoute: () => root, path: '/phone-scanner', component: PhoneScannerPage }),
   createRoute({ getParentRoute: () => root, path: '/loyalty', component: LoyaltyPage }),
   createRoute({ getParentRoute: () => root, path: '/shop-news', component: ShopNewsPage }),
   createRoute({

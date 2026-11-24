@@ -11,6 +11,7 @@ export function CameraBarcodeScanner({
   inline = false,
   alwaysOn = false,
   onOpen,
+  paused = false,
 }: {
   onScan: (barcode: string) => void;
   disabled?: boolean;
@@ -18,12 +19,15 @@ export function CameraBarcodeScanner({
   inline?: boolean;
   alwaysOn?: boolean;
   onOpen?: () => void;
+  paused?: boolean;
 }) {
   useLanguage();
   const [open, setOpen] = useState(alwaysOn);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
   const onScanRef = useRef(onScan);
   onScanRef.current = onScan;
 
@@ -51,7 +55,7 @@ export function CameraBarcodeScanner({
           { video: { facingMode: { ideal: 'environment' } }, audio: false },
           videoRef.current ?? undefined,
           (result) => {
-            if (cancelled || detected) return;
+            if (cancelled || detected || pausedRef.current) return;
             if (!result) {
               if (Date.now() - lastSeenAt > 650) lastCode = '';
               return;

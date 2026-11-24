@@ -348,6 +348,7 @@ export function ProductForm({
   }
   const [image, setImage] = useState(initial?.image ?? '');
   const [imageBusy, setImageBusy] = useState(false);
+  const [lookupBusy, setLookupBusy] = useState(false);
   const [imageError, setImageError] = useState<unknown>(null);
   const profile = useQuery({
     queryKey: ['store-profile'],
@@ -424,6 +425,7 @@ export function ProductForm({
     <form ref={formRef} onSubmit={submit}>
       {!initial && (
         <BarcodeLookup
+          onBusyChange={setLookupBusy}
           onBarcode={(barcode) => fillField('barcodes', barcode, true)}
           onExisting={onExisting ?? setExistingProduct}
           onUse={async (suggestion) => {
@@ -697,7 +699,7 @@ export function ProductForm({
         <Button type="button" variant="outline" onClick={onDone}>
           {t('Cancel ')}
         </Button>
-        <Button disabled={mutation.isPending || imageBusy}>
+        <Button disabled={mutation.isPending || imageBusy || lookupBusy}>
           <PackagePlus size={17} />
           {mutation.isPending ? t('Saving…') : initial ? t('Save changes') : t('Create product')}
         </Button>
