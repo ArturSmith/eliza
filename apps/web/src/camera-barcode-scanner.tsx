@@ -12,6 +12,7 @@ export function CameraBarcodeScanner({
   alwaysOn = false,
   onOpen,
   paused = false,
+  scanTarget,
 }: {
   onScan: (barcode: string) => void;
   disabled?: boolean;
@@ -20,12 +21,15 @@ export function CameraBarcodeScanner({
   alwaysOn?: boolean;
   onOpen?: () => void;
   paused?: boolean;
+  scanTarget?: string;
 }) {
   useLanguage();
   const [open, setOpen] = useState(alwaysOn);
   const [error, setError] = useState('');
   const [retry, setRetry] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const scanTargetRef = useRef(scanTarget);
+  scanTargetRef.current = scanTarget;
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
   const onScanRef = useRef(onScan);
@@ -37,6 +41,7 @@ export function CameraBarcodeScanner({
     let controls: IScannerControls | undefined;
     let detected = false;
     let lastCode = '';
+    let lastTarget: string | undefined;
     let lastSeenAt = 0;
     const start = async () => {
       setError('');
@@ -63,7 +68,8 @@ export function CameraBarcodeScanner({
             const code = result.getText().trim();
             if (!code) return;
             lastSeenAt = Date.now();
-            if (continuous && code === lastCode) return;
+            if (continuous && code === lastCode && lastTarget === scanTargetRef.current) return;
+            lastTarget = scanTargetRef.current;
             lastCode = code;
             if (!continuous) detected = true;
             onScanRef.current(code);
@@ -99,6 +105,7 @@ export function CameraBarcodeScanner({
         <button
           type="button"
           className="camera-scan-button"
+          data-scan-control
           aria-label={t(open && inline ? 'Close camera' : 'Scan with camera')}
           title={t(open && inline ? 'Close camera' : 'Scan with camera')}
           aria-expanded={open}

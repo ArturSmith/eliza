@@ -1,3 +1,4 @@
+import { PhoneScannerControl } from './phone-scanner';
 import { ProductAdditionalInformation, ProductStatusIndicator } from './product-information';
 import { ProductTermField } from './product-term-field';
 import { ProductSizeField } from './product-size-field';
@@ -487,6 +488,15 @@ export function ProductForm({
               maxLength={120}
             />
           </Field>
+          <Field label={t('Description (optional)')}>
+            <textarea
+              name="description"
+              defaultValue={initial?.description ?? prefill?.description ?? ''}
+              maxLength={2000}
+              rows={3}
+              placeholder={t('Additional details about this product')}
+            />
+          </Field>
           <ProductTermField
             label={t('Category')}
             name="category"
@@ -506,6 +516,24 @@ export function ProductForm({
               ))}
             </select>
           </Field>
+          <Field
+            label={t('Barcodes (optional)')}
+            hint={t(
+              'Add one per line, or separate with commas. Leave blank to generate a barcode.',
+            )}
+          >
+            <div className="barcode-input-with-camera scan-input-row">
+              <textarea
+                aria-label={t('Barcodes (optional)')}
+                name="barcodes"
+                rows={2}
+                defaultValue={(initial?.barcodes ?? prefill?.barcodes)?.join('\n')}
+                placeholder={t('Scan or enter a barcode')}
+              />
+              <CameraBarcodeScanner onScan={(code) => fillField('barcodes', code, true)} />
+              <PhoneScannerControl />
+            </div>
+          </Field>
           <div className="form-grid">
             <ProductTermField
               label={t('Brand (optional)')}
@@ -523,31 +551,6 @@ export function ProductForm({
               disabled={mutation.isPending}
             />
           </div>
-          <Field label={t('Description (optional)')}>
-            <textarea
-              name="description"
-              defaultValue={initial?.description ?? prefill?.description ?? ''}
-              maxLength={2000}
-              rows={3}
-              placeholder={t('Additional details about this product')}
-            />
-          </Field>
-          <Field
-            label={t('Barcodes (optional)')}
-            hint={t(
-              'Add one per line, or separate with commas. Leave blank to generate a barcode.',
-            )}
-          >
-            <div className="barcode-input-with-camera">
-              <textarea
-                name="barcodes"
-                rows={2}
-                defaultValue={(initial?.barcodes ?? prefill?.barcodes)?.join('\n')}
-                placeholder={t('Scan or enter a barcode')}
-              />
-              <CameraBarcodeScanner onScan={(code) => fillField('barcodes', code, true)} />
-            </div>
-          </Field>
         </section>
         <ProductAdditionalInformation detailsRef={productAdditionalRef}>
           {source && (

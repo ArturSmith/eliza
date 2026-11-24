@@ -1,3 +1,4 @@
+import { phoneScanEvent, type PhoneScanDetail } from './phone-scan-fields';
 import { PhoneScannerControl } from './phone-scanner';
 import { t, useLanguage } from './i18n';
 import { useEffect, useId, useRef, useState } from 'react';
@@ -35,6 +36,23 @@ export function BarcodeLookup({
   const [result, setResult] = useState<Result>();
   const [busy, setBusy] = useState(false);
   const lookingUp = useRef(false);
+  const input = useRef<HTMLInputElement>(null);
+  const scanHandler = useRef<(code: string) => Promise<boolean>>(null!);
+  scanHandler.current = async (code) => {
+    if (disabled || busy || lookingUp.current) return false;
+    setBarcode(code);
+    return lookup(code);
+  };
+  useEffect(() => {
+    const field = input.current;
+    const receive = (event: Event) => {
+      const detail = (event as CustomEvent<PhoneScanDetail>).detail;
+      detail.handled = true;
+      detail.result = scanHandler.current(detail.code);
+    };
+    field?.addEventListener(phoneScanEvent, receive);
+    return () => field?.removeEventListener(phoneScanEvent, receive);
+  }, []);
   useEffect(() => {
     onBusyChange?.(busy);
     return () => onBusyChange?.(false);
@@ -72,8 +90,10 @@ export function BarcodeLookup({
             'Optional. Look up packaged food in Open Food Facts, then review before importing.',
           )}
         >
-          <div className="barcode-input-with-camera">
+          <div className="barcode-input-with-camera scan-input-row">
             <input
+              ref={input}
+              aria-label={t('Scan or enter barcode')}
               value={barcode}
               maxLength={100}
               onChange={(e) => {
@@ -95,6 +115,7 @@ export function BarcodeLookup({
                 void lookup(code);
               }}
             />
+            <PhoneScannerControl disabled={disabled || busy} />
           </div>
         </Field>
         <Button
@@ -188,15 +209,6 @@ export function BarcodeLookup({
           </div>
         )}
       </fieldset>
-      <PhoneScannerControl
-        label={t('Find product by barcode in open data')}
-        disabled={disabled || busy}
-        onScan={(code) => {
-          if (disabled || busy || lookingUp.current) return false;
-          setBarcode(code);
-          return lookup(code);
-        }}
-      />
     </section>
   );
 }

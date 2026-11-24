@@ -115,14 +115,19 @@ export function PhoneScannerPage() {
       !code
     )
       return;
-    if (!allowRepeat && lastSent.current?.code === code) return;
+    if (
+      !allowRepeat &&
+      lastSent.current?.target === current.targetId &&
+      lastSent.current.code === code
+    )
+      return;
     const body = scannerScanSchema.safeParse({
       id: crypto.randomUUID(),
       targetId: current.targetId,
       barcode: code,
     });
     if (!body.success) {
-      setError(new Error('Use a valid product barcode.'));
+      setError(new Error('Use valid scanned text.'));
       return;
     }
     lastSent.current = { target: current.targetId, code };
@@ -245,8 +250,9 @@ export function PhoneScannerPage() {
                   : pending
                     ? 'Keep this page open until the laptop confirms receipt.'
                     : ready
-                      ? 'The barcode will appear in the open product form.'
-                      : 'Open a product form on the laptop. The connection stays active between products.',
+                      ? 'Selected field: {field}'
+                      : 'Select an editable text field on the laptop. The connection stays active between products.',
+                { field: status?.label || t('Text field') },
               )}
             </p>
           </div>
@@ -255,6 +261,7 @@ export function PhoneScannerPage() {
           <CameraBarcodeScanner
             alwaysOn
             continuous
+            scanTarget={status?.targetId ?? undefined}
             disabled={!visible}
             paused={!ready}
             onScan={scan}
@@ -267,8 +274,8 @@ export function PhoneScannerPage() {
                 last.status === 'delivered'
                   ? 'Received on laptop'
                   : last.status === 'cancelled'
-                    ? 'Form changed. Scan again.'
-                    : 'Last barcode',
+                    ? 'Scan not inserted. Select a field and scan again.'
+                    : 'Last scan',
               )}
             </small>
             <strong>{last.barcode}</strong>
@@ -280,11 +287,11 @@ export function PhoneScannerPage() {
           </p>
         )}
         {pending && !busy && !ended && (
-          <Button onClick={() => void send(pending)}>{t('Retry sending this barcode')}</Button>
+          <Button onClick={() => void send(pending)}>{t('Retry sending this scan')}</Button>
         )}
         {!ended && (
           <details className="phone-manual">
-            <summary>{t('Enter barcode manually')}</summary>
+            <summary>{t('Enter code or text manually')}</summary>
             <form
               onSubmit={(event) => {
                 event.preventDefault();
@@ -292,11 +299,11 @@ export function PhoneScannerPage() {
               }}
             >
               <label>
-                {t('Barcode')}
-                <input
-                  aria-label={t('Barcode')}
+                {t('Code or text')}
+                <textarea
+                  aria-label={t('Code or text')}
                   value={manual}
-                  maxLength={100}
+                  maxLength={4096}
                   onChange={(event) => setManual(event.target.value)}
                   autoComplete="off"
                   inputMode="text"
@@ -309,9 +316,7 @@ export function PhoneScannerPage() {
           </details>
         )}
         <p className="muted">
-          {t(
-            'Review and save each product on the laptop. Keep this scanner open for the next product.',
-          )}
+          {t('Scanned text fills the selected field. Review and save on the laptop.')}
         </p>
       </main>
     </div>

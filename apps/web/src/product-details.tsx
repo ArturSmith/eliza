@@ -106,8 +106,6 @@ function ProductDetailsForm({
   const nameInput = useRef<HTMLInputElement>(null);
   const additionalRef = useRef<HTMLDetailsElement>(null);
   const [variants, setVariants] = useState<{ id: string; volume: string; barcode: string }[]>([]);
-  const [activeScanVariant, setActiveScanVariant] = useState<string | null>(null);
-  const scanVariant = variants.find((row) => row.id === activeScanVariant) ?? variants[0];
   const [created, setCreated] = useState<Product[]>([]);
   const [resetVersion, setResetVersion] = useState(0);
   const multiple = creating && variants.length > 1;
@@ -298,6 +296,18 @@ function ProductDetailsForm({
         </Field>
       </div>
       <div className="product-detail-field-wide">
+        <Field label={t('Description (optional)')}>
+          <textarea
+            {...controls}
+            name="description"
+            rows={4}
+            maxLength={2000}
+            value={draft.description}
+            onChange={(event) => change('description', event.target.value)}
+          />
+        </Field>
+      </div>
+      <div className="product-detail-field-wide">
         <ProductTermField
           label={t('Category')}
           name="category"
@@ -337,6 +347,52 @@ function ProductDetailsForm({
           ))}
         </select>
       </Field>
+      {!multiple && (
+        <>
+          <div className="product-detail-field-wide">
+            <Field
+              label={t('Barcodes (optional)')}
+              hint={
+                editing
+                  ? t(
+                      'Add one per line, or separate with commas. Leave blank to generate a barcode.',
+                    )
+                  : undefined
+              }
+            >
+              <div className="scan-input-row">
+                <textarea
+                  {...controls}
+                  name="barcodes"
+                  aria-label={t('Barcodes (optional)')}
+                  rows={2}
+                  value={draft.barcodes}
+                  onChange={(event) => change('barcodes', event.target.value)}
+                />
+                {editing ? (
+                  <>
+                    <CameraBarcodeScanner
+                      disabled={locked}
+                      onScan={(code) =>
+                        change(
+                          'barcodes',
+                          [...new Set([...productCodes(draft.barcodes), code])].join('\n'),
+                        )
+                      }
+                    />
+                    <PhoneScannerControl disabled={locked} />
+                  </>
+                ) : product?.barcodes.length ? (
+                  <Button variant="ghost" size="sm" onClick={() => setBarcode(true)}>
+                    <Barcode size={16} />
+                    {t('View barcode')}
+                  </Button>
+                ) : null}
+              </div>
+            </Field>
+          </div>
+        </>
+      )}
       <ProductTermField
         label={t('Brand (optional)')}
         name="brand"
@@ -357,72 +413,6 @@ function ProductDetailsForm({
           readOnly={locked}
           disabled={busy}
         />
-      )}
-      <div className="product-detail-field-wide">
-        <Field label={t('Description (optional)')}>
-          <textarea
-            {...controls}
-            name="description"
-            rows={4}
-            maxLength={2000}
-            value={draft.description}
-            onChange={(event) => change('description', event.target.value)}
-          />
-        </Field>
-      </div>
-      {!multiple && (
-        <>
-          <div className="product-detail-field-wide">
-            <Field
-              label={t('Barcodes (optional)')}
-              hint={
-                editing
-                  ? t(
-                      'Add one per line, or separate with commas. Leave blank to generate a barcode.',
-                    )
-                  : undefined
-              }
-            >
-              <textarea
-                {...controls}
-                name="barcodes"
-                rows={2}
-                value={draft.barcodes}
-                onChange={(event) => change('barcodes', event.target.value)}
-              />
-            </Field>
-            <div className="product-details-barcode-actions">
-              {editing ? (
-                <CameraBarcodeScanner
-                  onScan={(code) =>
-                    change(
-                      'barcodes',
-                      [...new Set([...productCodes(draft.barcodes), code])].join('\n'),
-                    )
-                  }
-                />
-              ) : product?.barcodes.length ? (
-                <Button variant="ghost" size="sm" onClick={() => setBarcode(true)}>
-                  <Barcode size={16} />
-                  {t('View barcode')}
-                </Button>
-              ) : null}
-            </div>
-            {editing && !creating && (
-              <PhoneScannerControl
-                label={t('Product barcodes')}
-                disabled={locked}
-                onScan={(code) => {
-                  change(
-                    'barcodes',
-                    [...new Set([...productCodes(draft.barcodes), code])].join('\n'),
-                  );
-                  return true;
-                }}
-              />
-            )}
-          </div>
-        </>
       )}
     </>
   );
@@ -468,11 +458,7 @@ function ProductDetailsForm({
                 )}
               </p>
               {variants.map((variant, index) => (
-                <div
-                  className="product-volume-row"
-                  key={variant.id}
-                  onFocusCapture={() => setActiveScanVariant(variant.id)}
-                >
+                <div className="product-volume-row" key={variant.id}>
                   <ProductSizeField
                     label={t('Volume {number}', { number: index + 1 })}
                     unitLabel={t('Size unit {number}', { number: index + 1 })}
@@ -491,19 +477,33 @@ function ProductDetailsForm({
                     }
                   />
                   <Field label={t('Barcode {number}', { number: index + 1 })}>
-                    <input
-                      {...controls}
-                      required
-                      maxLength={100}
-                      value={variant.barcode}
-                      onChange={(event) =>
-                        setVariants((rows) =>
-                          rows.map((row) =>
-                            row.id === variant.id ? { ...row, barcode: event.target.value } : row,
-                          ),
-                        )
-                      }
-                    />
+                    <div className="scan-input-row">
+                      <input
+                        aria-label={t('Barcode {number}', { number: index + 1 })}
+                        {...controls}
+                        required
+                        maxLength={100}
+                        value={variant.barcode}
+                        onChange={(event) =>
+                          setVariants((rows) =>
+                            rows.map((row) =>
+                              row.id === variant.id ? { ...row, barcode: event.target.value } : row,
+                            ),
+                          )
+                        }
+                      />
+                      <CameraBarcodeScanner
+                        disabled={locked}
+                        onScan={(code) =>
+                          setVariants((rows) =>
+                            rows.map((row) =>
+                              row.id === variant.id ? { ...row, barcode: code } : row,
+                            ),
+                          )
+                        }
+                      />
+                      <PhoneScannerControl disabled={locked} />
+                    </div>
                   </Field>
                   <Button
                     type="button"
@@ -527,27 +527,6 @@ function ProductDetailsForm({
                   </Button>
                 </div>
               ))}
-              {scanVariant && (
-                <div className="product-variant-phone">
-                  <p className="product-details-hint">
-                    {t('Select a variant barcode field, then scan it with your phone.')}
-                  </p>
-                  <PhoneScannerControl
-                    key={scanVariant.id}
-                    label={t('Barcode {number}', { number: variants.indexOf(scanVariant) + 1 })}
-                    disabled={locked}
-                    onScan={(code) => {
-                      if (locked) return false;
-                      setVariants((rows) =>
-                        rows.map((row) =>
-                          row.id === scanVariant.id ? { ...row, barcode: code } : row,
-                        ),
-                      );
-                      return true;
-                    }}
-                  />
-                </div>
-              )}
             </>
           )}
           <Button

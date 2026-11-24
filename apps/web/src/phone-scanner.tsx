@@ -14,20 +14,22 @@ import { api, ApiError, useSession } from './api';
 import { Button } from './components/ui/button';
 import { Dialog } from './components/ui/dialog';
 import { t, translateError, useLanguage } from './i18n';
+import {
+  fillScanField,
+  isScanField,
+  scanFieldLabel,
+  scanFieldReady,
+  scanFieldVisible,
+  type ScanField,
+} from './phone-scan-fields';
 import './phone-scanner.css';
-type Target = {
-  id: string;
-  label: string;
-  enabled: boolean;
-  receive: (code: string) => boolean | Promise<boolean>;
-};
+type Target = { id: string; field: ScanField };
 type RecordState = { tabId: string; linkId: string | null };
 type ScannerContext = {
   allowed: boolean;
   linked: boolean;
   online: boolean;
   show: () => void;
-  register: (target: Target) => () => void;
 };
 const Context = createContext<ScannerContext | null>(null);
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
@@ -45,13 +47,65 @@ export function PhoneScannerProvider({ children }: { children: ReactNode }) {
     [error, setError] = useState<unknown>();
   const target = useRef<Target | null>(null),
     ack = useRef<string | undefined>(undefined),
+    cancel = useRef<string | undefined>(undefined),
+    wake = useRef<(() => void) | null>(null),
+    linked = useRef(false),
     seen = useRef<string[]>([]);
-  const register = useCallback((next: Target) => {
-    target.current = next;
-    return () => {
-      if (target.current?.id === next.id) target.current = null;
+  linked.current = !!record?.linkId;
+  useEffect(() => {
+    if (record?.linkId) target.current?.field.setAttribute('data-phone-scanner-target', 'true');
+    else target.current?.field.removeAttribute('data-phone-scanner-target');
+  }, [record?.linkId]);
+  useEffect(() => {
+    if (!allowed) return;
+    const select = (field: ScanField | null) => {
+      if (field === target.current?.field) return;
+      target.current?.field.removeAttribute('data-phone-scanner-target');
+      target.current = field ? { id: crypto.randomUUID(), field } : null;
+      if (linked.current) field?.setAttribute('data-phone-scanner-target', 'true');
+      wake.current?.();
     };
-  }, []);
+    const focused = (event: FocusEvent) => {
+      const field = event.target;
+      if (isScanField(field)) select(scanFieldVisible(field) ? field : null);
+      else if (
+        field instanceof HTMLInputElement ||
+        field instanceof HTMLSelectElement ||
+        field instanceof HTMLTextAreaElement
+      )
+        select(null);
+    };
+    const control = (event: Event) => {
+      if (!(event.target instanceof Element) || !event.target.closest('[data-scan-control]'))
+        return;
+      const field = event.target.closest('.scan-input-row')?.querySelector('input, textarea');
+      if (isScanField(field) && scanFieldVisible(field)) select(field);
+    };
+    const submitted = () => select(null);
+    const observer = new MutationObserver(() => {
+      if (target.current && !scanFieldVisible(target.current.field)) select(null);
+    });
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['readonly', 'hidden', 'open', 'inert', 'style', 'class'],
+    });
+    document.addEventListener('focusin', focused, true);
+    document.addEventListener('pointerdown', control, true);
+    document.addEventListener('click', control, true);
+    document.addEventListener('submit', submitted, true);
+    if (isScanField(document.activeElement)) select(document.activeElement);
+    return () => {
+      observer.disconnect();
+      document.removeEventListener('focusin', focused, true);
+      document.removeEventListener('pointerdown', control, true);
+      document.removeEventListener('click', control, true);
+      document.removeEventListener('submit', submitted, true);
+      target.current?.field.removeAttribute('data-phone-scanner-target');
+      target.current = null;
+    };
+  }, [allowed, ownerKey]);
   const persist = useCallback(
     (next: RecordState) => {
       setRecord(next);
@@ -69,6 +123,7 @@ export function PhoneScannerProvider({ children }: { children: ReactNode }) {
     setPairing(null);
     setOpen(false);
     ack.current = undefined;
+    cancel.current = undefined;
     seen.current = [];
     if (!allowed || !ownerKey) return;
     let stopped = false,
@@ -111,7 +166,8 @@ export function PhoneScannerProvider({ children }: { children: ReactNode }) {
     const id = record.linkId;
     let stopped = false,
       timer: ReturnType<typeof setTimeout>,
-      running = false;
+      running = false,
+      urgent = false;
     try {
       seen.current = JSON.parse(sessionStorage.getItem(`${storageKey}:seen:${id}`) ?? '[]')
         .filter((v: unknown) => typeof v === 'string')
@@ -125,32 +181,40 @@ export function PhoneScannerProvider({ children }: { children: ReactNode }) {
       try {
         const receiver = target.current,
           visible = document.visibilityState === 'visible',
-          ackId = ack.current;
+          ackId = ack.current,
+          cancelId = cancel.current;
         const next = await api<ScannerDesktopStatus>(`/scanner-links/${id}/sync`, {
           targetId: receiver?.id ?? null,
-          ready: !!receiver?.enabled && visible,
-          label: receiver?.label ?? '',
+          ready: !!receiver && scanFieldReady(receiver.field) && visible,
+          label: receiver ? scanFieldLabel(receiver.field) || t('Text field') : '',
           ...(ackId ? { ackId } : {}),
+          ...(cancelId ? { cancelId } : {}),
         });
         if (stopped) return;
         setStatus(next);
         setError(undefined);
 
         if (ack.current === ackId) ack.current = undefined;
+        if (cancel.current === cancelId) cancel.current = undefined;
         const event = next.event;
         if (
           event &&
           target.current?.id === event.targetId &&
-          target.current.enabled &&
+          target.current === receiver &&
+          scanFieldReady(receiver.field) &&
           document.visibilityState === 'visible'
         ) {
           if (seen.current.includes(event.id)) ack.current = event.id;
-          else if (await target.current.receive(event.barcode)) {
-            seen.current = [...seen.current, event.id].slice(-64);
-            ack.current = event.id;
-            try {
-              sessionStorage.setItem(`${storageKey}:seen:${id}`, JSON.stringify(seen.current));
-            } catch {}
+          else {
+            const result = await fillScanField(receiver.field, event.barcode);
+            if (result === 'rejected') cancel.current = event.id;
+            else if (result) {
+              seen.current = [...seen.current, event.id].slice(-64);
+              ack.current = event.id;
+              try {
+                sessionStorage.setItem(`${storageKey}:seen:${id}`, JSON.stringify(seen.current));
+              } catch {}
+            }
           }
         }
       } catch (cause) {
@@ -163,9 +227,20 @@ export function PhoneScannerProvider({ children }: { children: ReactNode }) {
         }
       } finally {
         running = false;
-        if (!stopped) timer = setTimeout(() => void poll(), ack.current ? 150 : 1000);
+        if (!stopped)
+          timer = setTimeout(
+            () => void poll(),
+            urgent ? 0 : ack.current || cancel.current ? 150 : 1000,
+          );
+        urgent = false;
       }
     };
+    const syncNow = () => {
+      clearTimeout(timer);
+      if (running) urgent = true;
+      else void poll();
+    };
+    wake.current = syncNow;
     const pause = () => {
       if (document.visibilityState === 'visible') {
         clearTimeout(timer);
@@ -174,7 +249,7 @@ export function PhoneScannerProvider({ children }: { children: ReactNode }) {
         void api(`/scanner-links/${id}/sync`, {
           targetId: target.current?.id ?? null,
           ready: false,
-          label: target.current?.label ?? '',
+          label: target.current ? scanFieldLabel(target.current.field) : '',
         }).catch(() => {});
     };
     const pageHide = () => {
@@ -191,6 +266,7 @@ export function PhoneScannerProvider({ children }: { children: ReactNode }) {
     window.addEventListener('pagehide', pageHide);
     return () => {
       stopped = true;
+      wake.current = null;
       clearTimeout(timer);
       document.removeEventListener('visibilitychange', pause);
       window.removeEventListener('pagehide', pageHide);
@@ -244,14 +320,14 @@ export function PhoneScannerProvider({ children }: { children: ReactNode }) {
   const pairExpired = !!pairing && Date.parse(pairing.pairExpiresAt) <= Date.now();
   const url = pairing ? `${window.location.origin}/phone-scanner#pair=${pairing.pairingToken}` : '';
   return (
-    <Context.Provider value={{ allowed, linked: !!record?.linkId, online, show, register }}>
+    <Context.Provider value={{ allowed, linked: !!record?.linkId, online, show }}>
       {children}
       <Dialog
         open={open}
         onOpenChange={setOpen}
         title={t('Phone as scanner')}
         description={t(
-          'Connect once. Keep the phone scanner open while you create products on this laptop.',
+          'Connect once. Select a text field on the laptop, then scan with your phone.',
         )}
       >
         <div className="phone-pairing">
@@ -284,7 +360,7 @@ export function PhoneScannerProvider({ children }: { children: ReactNode }) {
                 <strong>{t(online ? 'Phone connected' : 'Phone is offline')}</strong>
                 <p>
                   {t(
-                    'Creating the next product keeps this connection. Open a product form to receive barcodes.',
+                    'Select an editable text field on the laptop. The connection stays active between products.',
                   )}
                 </p>
               </div>
@@ -307,7 +383,9 @@ export function PhoneScannerProvider({ children }: { children: ReactNode }) {
             </Button>
           )}
           <p className="muted">
-            {t('The phone can only send barcodes. Product review and saving stay on the laptop.')}
+            {t(
+              'The phone sends scanned text to the selected field. Review and saving stay on the laptop.',
+            )}
           </p>
           {['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname) && (
             <p className="notice">
@@ -337,54 +415,31 @@ export function PhoneScannerStatus() {
     </Button>
   );
 }
-export function PhoneScannerControl({
-  onScan,
-  disabled = false,
-  label,
-}: {
-  onScan: (code: string) => boolean | Promise<boolean>;
-  disabled?: boolean;
-  label: string;
-}) {
+export function PhoneScannerControl({ disabled = false }: { disabled?: boolean }) {
   useLanguage();
-  const scanner = useContext(Context),
-    root = useRef<HTMLDivElement>(null),
-    handler = useRef(onScan);
-  handler.current = onScan;
-  const [id] = useState(() => crypto.randomUUID()),
-    [sectionOpen, setSectionOpen] = useState(false);
-  useEffect(() => {
-    const details = root.current?.closest('details');
-    const update = () => setSectionOpen(!details || details.open);
-    update();
-    details?.addEventListener('toggle', update);
-    return () => details?.removeEventListener('toggle', update);
-  }, []);
-  useEffect(() => {
-    if (!scanner?.allowed) return;
-    return scanner.register({
-      id,
-      label,
-      enabled: !disabled && sectionOpen,
-      receive: (code) => handler.current(code),
-    });
-  }, [scanner?.allowed, scanner?.register, id, label, disabled, sectionOpen]);
+  const scanner = useContext(Context);
   if (!scanner?.allowed) return null;
+  const label = t(scanner.online ? 'Phone connected' : 'Connect phone');
   return (
-    <div className="phone-scanner-control" ref={root}>
-      <Button type="button" variant="outline" size="sm" onClick={scanner.show}>
-        <Smartphone size={16} />
-        {t(scanner.online ? 'Phone connected' : 'Connect phone')}
-      </Button>
-      {scanner.online && (
-        <small>
-          {t(
-            disabled
-              ? 'Scanner paused while the form is busy.'
-              : 'Scan a barcode on your phone to fill this form.',
-          )}
-        </small>
-      )}
-    </div>
+    <Button
+      type="button"
+      variant="outline"
+      size="icon"
+      className="camera-scan-button phone-scanner-control"
+      data-scan-control
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onPointerDown={(event) => event.preventDefault()}
+      onClick={(event) => {
+        const field = event.currentTarget
+          .closest('.scan-input-row')
+          ?.querySelector('input, textarea');
+        if (isScanField(field)) field.focus();
+        scanner.show();
+      }}
+    >
+      <Smartphone size={18} />
+    </Button>
   );
 }

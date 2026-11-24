@@ -138,6 +138,11 @@ export class PhoneScanner {
           "UPDATE scanner_link_scans SET status='delivered',delivered_at=COALESCE(delivered_at,now()) WHERE link_id=$1 AND id=$2 AND status='pending'",
           [id, b.ackId],
         );
+      if (b.cancelId)
+        await c.query(
+          "UPDATE scanner_link_scans SET status='cancelled' WHERE link_id=$1 AND id=$2 AND status='pending'",
+          [id, b.cancelId],
+        );
       if (l.target_id !== b.targetId)
         await c.query(
           "UPDATE scanner_link_scans SET status='cancelled' WHERE link_id=$1 AND status='pending'",

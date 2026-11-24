@@ -210,11 +210,11 @@ it('isolates sessions, stores and phones and rejects malformed input', async () 
   await sync(link.id, targetId);
   const body = { id: crypto.randomUUID(), targetId, barcode: '12345678' };
   expect((await mobile('scans', another.credential, body)).status).toBe(409);
-  expect((await mobile('scans', link.credential, { ...body, barcode: 'bad\ncode' })).status).toBe(
-    400,
-  );
   expect(
-    (await mobile('scans', link.credential, { ...body, barcode: 'x'.repeat(101) })).status,
+    (await mobile('scans', link.credential, { ...body, barcode: 'bad\u0000code' })).status,
+  ).toBe(400);
+  expect(
+    (await mobile('scans', link.credential, { ...body, barcode: 'x'.repeat(4097) })).status,
   ).toBe(400);
   expect(
     (await mobile('scans', link.credential, { ...body, productId: crypto.randomUUID() })).status,
@@ -291,6 +291,23 @@ it('pauses when the desktop heartbeat expires and rejects revoked employee permi
     JSON.stringify(originalPermissions),
   ]);
 });
+it('transports multiline QR text and cancels rejected values without acknowledging delivery', async () => {
+  const link = await connect(),
+    targetId = crypto.randomUUID();
+  await sync(link.id, targetId, { label: 'Description' });
+  const body = {
+    id: crypto.randomUUID(),
+    targetId,
+    barcode: 'QR description\n' + 'x'.repeat(1500),
+  };
+  expect((await mobile('scans', link.credential, body)).status).toBe(201);
+  expect((await sync(link.id, targetId)).body.event).toMatchObject(body);
+  expect((await sync(link.id, targetId, { cancelId: body.id })).body.event).toBeNull();
+  expect((await mobile('status', link.credential)).body.lastScan.status).toBe('cancelled');
+  await sync(link.id, targetId, { ackId: body.id });
+  expect((await mobile('status', link.credential)).body.lastScan.status).toBe('cancelled');
+});
+
 it('ends all linked phone access when the owning management login is closed', async () => {
   const link = await connect();
   expect((await owner.request('/auth/logout', {})).status).toBe(200);

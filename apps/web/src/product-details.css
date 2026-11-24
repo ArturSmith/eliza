@@ -266,8 +266,7 @@
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
-.product-photo-actions,
-.product-details-barcode-actions {
+.product-photo-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;

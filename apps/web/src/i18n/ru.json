@@ -2953,5 +2953,17 @@
   "Basic information": "Базовая информация",
   "Find product by barcode in open data": "Найти товар по штрихкоду в открытых данных",
   "Status: active": "Статус: активен",
-  "Status: inactive": "Статус: неактивен"
+  "Status: inactive": "Статус: неактивен",
+  "Text field": "Текстовое поле",
+  "Connect once. Select a text field on the laptop, then scan with your phone.": "Подключите телефон один раз. Выберите текстовое поле на ноутбуке и отсканируйте код телефоном.",
+  "Select an editable text field on the laptop. The connection stays active between products.": "Выберите редактируемое текстовое поле на ноутбуке. Подключение сохраняется между товарами.",
+  "The phone sends scanned text to the selected field. Review and saving stay on the laptop.": "Телефон передаёт отсканированный текст в выбранное поле. Проверяйте и сохраняйте данные на ноутбуке.",
+  "Selected field: {field}": "Выбранное поле: {field}",
+  "Scan not inserted. Select a field and scan again.": "Скан не вставлен. Выберите поле и отсканируйте снова.",
+  "Last scan": "Последний скан",
+  "Retry sending this scan": "Повторить отправку скана",
+  "Enter code or text manually": "Ввести код или текст вручную",
+  "Code or text": "Код или текст",
+  "Use valid scanned text.": "Введите корректный текст скана.",
+  "Scanned text fills the selected field. Review and save on the laptop.": "Отсканированный текст заполняет выбранное поле. Проверьте и сохраните данные на ноутбуке."
 }

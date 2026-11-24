@@ -6,6 +6,7 @@ export const scannerSyncSchema = z
     ready: z.boolean(),
     label: z.string().trim().max(120),
     ackId: z.uuid().optional(),
+    cancelId: z.uuid().optional(),
   })
   .strict();
 export const scannerClaimSchema = z
@@ -19,8 +20,8 @@ export const scannerScanSchema = z
       .string()
       .trim()
       .min(1)
-      .max(100)
-      .refine((v) => !/[\x00-\x1f\x7f]/.test(v), 'Use a valid product barcode.'),
+      .max(4096)
+      .refine((v) => !/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(v), 'Use valid scanned text.'),
   })
   .strict();
 export type ScannerEvent = {
