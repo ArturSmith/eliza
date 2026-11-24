@@ -37,6 +37,7 @@ test('barcode creation reviews suggestions, saves attribution, and falls back to
   await expect(form.getByRole('button', { name: 'Use these details' })).toBeVisible();
   await expect(form.getByLabel('Product name')).toHaveValue('');
   await form.getByRole('button', { name: 'Use these details' }).click();
+  await page.locator('.product-additional-information > summary').click();
   await expect(form.getByLabel('Product name')).toHaveValue('Chocolate spread');
   await expect(form.getByLabel('Description (optional)')).toHaveValue('Hazelnut spread with cocoa');
   await expect(form.getByAltText('Product photo preview')).toBeVisible();
@@ -49,6 +50,7 @@ test('barcode creation reviews suggestions, saves attribution, and falls back to
   await page.getByRole('link', { name: 'View product', exact: true }).click();
   await page.reload();
   await page.getByRole('button', { name: 'Edit product', exact: true }).click();
+  await page.locator('.product-additional-information > summary').click();
   await expect(page.getByLabel('Volume / size (optional)', { exact: true })).toHaveValue('500');
   await expect(page.getByLabel('Size unit', { exact: true })).toHaveValue('g');
   await expect(page.getByLabel('Description (optional)')).toHaveValue('Hazelnut spread with cocoa');

@@ -17,6 +17,7 @@ test('creates volume variants together, keeps an invalid draft, then resets for 
   });
   expect(setup.ok()).toBe(true);
   await page.goto('/products/new');
+  await page.locator('.product-additional-information > summary').click();
   await page.getByLabel('Product name', { exact: true }).fill('Cola');
   await page.getByLabel('Brand (optional)', { exact: true }).fill('Brand Cola');
   await page.getByLabel('Category', { exact: true }).fill('Drinks');

@@ -8,6 +8,7 @@ test('product photos upload, survive reload, and can be removed', async ({ page 
   await page.getByRole('button', { name: 'Create my store' }).click();
   await page.getByRole('link', { name: 'Products', exact: true }).click();
   await page.getByRole('link', { name: 'Add product' }).first().click();
+  await page.locator('.product-additional-information > summary').click();
   const form = page.locator('.product-details-page');
   const png = await page.evaluate(() => {
     const c = document.createElement('canvas');
@@ -41,6 +42,7 @@ test('product photos upload, survive reload, and can be removed', async ({ page 
   await page.getByRole('link', { name: 'View Photo product' }).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('button', { name: 'Edit product', exact: true }).click();
+  await page.locator('.product-additional-information > summary').click();
   await expect(page.locator('.product-details-photo img')).toBeVisible();
   await page.getByRole('button', { name: 'Remove photo' }).click();
   await page.getByRole('button', { name: 'Save', exact: true }).click();

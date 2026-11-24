@@ -23,6 +23,7 @@ test('creates a blank product, edits inline with dirty/cancel/save states, and p
   });
   await page.goto('/products');
   await page.getByRole('link', { name: 'Add product', exact: true }).first().click();
+  await page.locator('.product-additional-information > summary').click();
   await expect(page).toHaveURL('/products/new');
   await expect(page.getByRole('dialog')).toHaveCount(0);
   for (const label of [
@@ -107,6 +108,7 @@ test('creates a blank product, edits inline with dirty/cancel/save states, and p
   const name = page.getByLabel('Product name', { exact: true });
   await expect(name).toHaveAttribute('readonly');
   await page.getByRole('button', { name: 'Edit product', exact: true }).click();
+  await page.locator('.product-additional-information > summary').click();
   await expect(page).toHaveURL(url);
   await expect(name).not.toHaveAttribute('readonly');
   await expect(page.getByRole('button', { name: 'Cancel', exact: true })).toHaveCount(1);
@@ -118,6 +120,7 @@ test('creates a blank product, edits inline with dirty/cancel/save states, and p
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
   await expect(name).toHaveAttribute('readonly');
   await page.getByRole('button', { name: 'Edit product', exact: true }).click();
+  await page.locator('.product-additional-information > summary').click();
   await page.getByLabel('Selling price (optional)', { exact: true }).fill('75');
   await expect(page.getByLabel('Estimated gross margin', { exact: true })).toContainText('21.33%');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -141,6 +144,7 @@ test('creates a blank product, edits inline with dirty/cancel/save states, and p
   );
   await expect(page.getByRole('button', { name: 'Edit product', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Edit product', exact: true }).click();
+  await page.locator('.product-additional-information > summary').click();
   await page.getByRole('button', { name: 'Use as cover', exact: true }).click();
   await page
     .getByLabel('Description (optional)', { exact: true })

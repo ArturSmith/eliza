@@ -1,3 +1,4 @@
+import { ProductAdditionalInformation } from './product-information';
 import { ProductTermField } from './product-term-field';
 import { ProductSizeField } from './product-size-field';
 import { useProductOptions } from './product-options';
@@ -101,6 +102,7 @@ function ProductDetailsForm({
   const [confirmation, setConfirmation] = useState<'status' | 'delete' | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
+  const additionalRef = useRef<HTMLDetailsElement>(null);
   const [variants, setVariants] = useState<{ id: string; volume: string; barcode: string }[]>([]);
   const [created, setCreated] = useState<Product[]>([]);
   const [resetVersion, setResetVersion] = useState(0);
@@ -195,11 +197,21 @@ function ProductDetailsForm({
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!editing || !canEdit || busy || (!creating && !dirty)) return;
-    const input = productDraftInput(draft, creating ? (profile.data?.defaultTaxRate ?? '0') : '');
+    const input = productDraftInput(
+      draft,
+      creating ? (profile.data?.defaultTaxRate ?? '0') : (product?.taxRate ?? '0'),
+    );
     const parsed = multiple
       ? productVariantsSchema.safeParse({ ...input, variants })
       : productSchema.safeParse(input);
     if (!parsed.success) {
+      if (
+        parsed.error.issues.some(
+          (issue) => !['name', 'category', 'unit'].includes(String(issue.path[0])),
+        ) &&
+        additionalRef.current
+      )
+        additionalRef.current.open = true;
       setError(
         parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`).join('. '),
       );
@@ -232,7 +244,9 @@ function ProductDetailsForm({
   const previewInput = {
     price: draft.price,
     cost: product?.averageCost ?? null,
-    taxRate: draft.taxRate || (creating ? (profile.data?.defaultTaxRate ?? '0') : ''),
+    taxRate:
+      draft.taxRate.trim() ||
+      (creating ? (profile.data?.defaultTaxRate ?? '0') : (product?.taxRate ?? '0')),
   };
   const price = productSchema.shape.price.safeParse(previewInput.price);
   const cost = productSchema.shape.cost.safeParse(previewInput.cost);
@@ -253,6 +267,510 @@ function ProductDetailsForm({
           : t('In stock');
   const activePhoto = draft.images[Math.min(selectedPhoto, Math.max(0, draft.images.length - 1))];
   const controls = { form: formId, readOnly: locked, disabled: busy };
+
+  const requiredFields = (
+    <>
+      <div className="product-detail-field-wide">
+        <Field label={t('Product name')}>
+          <input
+            {...controls}
+            name="name"
+            ref={nameInput}
+            value={draft.name}
+            required
+            maxLength={120}
+            onChange={(event) => change('name', event.target.value)}
+          />
+        </Field>
+      </div>
+      <div className="product-detail-field-wide">
+        <ProductTermField
+          label={t('Category')}
+          name="category"
+          value={draft.category}
+          onChange={(value) => change('category', value)}
+          options={options.categories}
+          loading={options.isFetching}
+          form={formId}
+          required
+          readOnly={locked}
+          disabled={busy}
+        />
+      </div>
+      <Field
+        label={t('Unit')}
+        hint={
+          editing && !creating
+            ? t(
+                'Unit changes require a stock conversion workflow. Create a separate product instead.',
+              )
+            : undefined
+        }
+      >
+        <select
+          form={formId}
+          name="unit"
+          value={draft.unit}
+          required
+          disabled={!creating || locked}
+          onChange={(event) => change('unit', event.target.value)}
+        >
+          <option value="">{t('Choose a unit')}</option>
+          {units.map((unit) => (
+            <option key={unit} value={unit}>
+              {t(unit)}
+            </option>
+          ))}
+        </select>
+      </Field>
+    </>
+  );
+  const additionalFields = (
+    <>
+      <div className="product-detail-field-wide">
+        <Field label={t('Description (optional)')}>
+          <textarea
+            {...controls}
+            name="description"
+            rows={4}
+            maxLength={2000}
+            value={draft.description}
+            onChange={(event) => change('description', event.target.value)}
+          />
+        </Field>
+      </div>
+      <Field label={t('Status')}>
+        <output className="product-detail-value">
+          {product ? (product.active ? t('Active') : t('Inactive')) : '—'}
+        </output>
+      </Field>
+      {!multiple && (
+        <>
+          <div className="product-detail-field-wide">
+            <Field
+              label={t('Barcodes (optional)')}
+              hint={
+                editing
+                  ? t(
+                      'Add one per line, or separate with commas. Leave blank to generate a barcode.',
+                    )
+                  : undefined
+              }
+            >
+              <textarea
+                {...controls}
+                name="barcodes"
+                rows={2}
+                value={draft.barcodes}
+                onChange={(event) => change('barcodes', event.target.value)}
+              />
+            </Field>
+            <div className="product-details-barcode-actions">
+              {editing ? (
+                <CameraBarcodeScanner
+                  onScan={(code) =>
+                    change(
+                      'barcodes',
+                      [...new Set([...productCodes(draft.barcodes), code])].join('\n'),
+                    )
+                  }
+                />
+              ) : product?.barcodes.length ? (
+                <Button variant="ghost" size="sm" onClick={() => setBarcode(true)}>
+                  <Barcode size={16} />
+                  {t('View barcode')}
+                </Button>
+              ) : null}
+            </div>
+          </div>
+          <Field label={t('SKU')} hint={editing ? t('Leave blank to generate a code.') : undefined}>
+            <input
+              {...controls}
+              name="sku"
+              value={draft.sku}
+              maxLength={120}
+              onChange={(event) => change('sku', event.target.value)}
+            />
+          </Field>
+          <Field
+            label={t('PLU / short code (optional)')}
+            hint={creating ? t('Leave blank to generate a code.') : undefined}
+          >
+            <input
+              {...controls}
+              name="plu"
+              value={draft.plu}
+              maxLength={20}
+              onChange={(event) => change('plu', event.target.value)}
+            />
+          </Field>
+        </>
+      )}
+      <ProductTermField
+        label={t('Brand (optional)')}
+        name="brand"
+        value={draft.brand}
+        onChange={(value) => change('brand', value)}
+        options={options.brands}
+        loading={options.isFetching}
+        form={formId}
+        readOnly={locked}
+        disabled={busy}
+      />
+      {!multiple && (
+        <ProductSizeField
+          label={t('Volume / size (optional)')}
+          value={draft.volume}
+          onChange={(value) => change('volume', value)}
+          form={formId}
+          readOnly={locked}
+          disabled={busy}
+        />
+      )}
+    </>
+  );
+  const variantFields = (
+    <>
+      {creating && (
+        <div className="product-volume-variants">
+          {multiple && (
+            <>
+              <h2>{t('Volume variants')}</h2>
+              <p className="product-details-hint">
+                {t(
+                  'Each variant creates a separate product with the shared details above. SKU and PLU are generated for each product.',
+                )}
+              </p>
+              {variants.map((variant, index) => (
+                <div className="product-volume-row" key={variant.id}>
+                  <ProductSizeField
+                    label={t('Volume {number}', { number: index + 1 })}
+                    unitLabel={t('Size unit {number}', { number: index + 1 })}
+                    name={'variant-' + variant.id}
+                    value={variant.volume}
+                    form={formId}
+                    required
+                    readOnly={locked}
+                    disabled={busy}
+                    onChange={(value) =>
+                      setVariants((rows) =>
+                        rows.map((row) =>
+                          row.id === variant.id ? { ...row, volume: value } : row,
+                        ),
+                      )
+                    }
+                  />
+                  <Field label={t('Barcode {number}', { number: index + 1 })}>
+                    <input
+                      {...controls}
+                      required
+                      maxLength={100}
+                      value={variant.barcode}
+                      onChange={(event) =>
+                        setVariants((rows) =>
+                          rows.map((row) =>
+                            row.id === variant.id ? { ...row, barcode: event.target.value } : row,
+                          ),
+                        )
+                      }
+                    />
+                  </Field>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={busy}
+                    aria-label={t('Remove variant {number}', { number: index + 1 })}
+                    onClick={() => {
+                      const remaining = variants.filter((row) => row.id !== variant.id);
+                      if (remaining.length === 1) {
+                        setDraft((current) => ({
+                          ...current,
+                          volume: remaining[0].volume,
+                          barcodes: remaining[0].barcode,
+                        }));
+                        setVariants([]);
+                      } else setVariants(remaining);
+                      setError(undefined);
+                    }}
+                  >
+                    <Trash2 size={18} />
+                  </Button>
+                </div>
+              ))}
+            </>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy || variants.length >= 50}
+            onClick={() => {
+              if (!multiple && productCodes(draft.barcodes).length > 1) {
+                setError(t('Keep one barcode for the first volume before adding variants.'));
+                return;
+              }
+              const next = { id: crypto.randomUUID(), volume: '', barcode: '' };
+              setVariants((rows) =>
+                multiple
+                  ? [...rows, next]
+                  : [
+                      {
+                        id: crypto.randomUUID(),
+                        volume: draft.volume,
+                        barcode: productCodes(draft.barcodes)[0] ?? '',
+                      },
+                      next,
+                    ],
+              );
+              setError(undefined);
+            }}
+          >
+            <Plus size={16} />
+            {t('Add volume variant')}
+          </Button>
+        </div>
+      )}
+    </>
+  );
+  const barcodeLookup = (
+    <>
+      {creating && (
+        <BarcodeLookup
+          key={resetVersion}
+          disabled={busy || multiple}
+          onBarcode={(code) =>
+            change('barcodes', [...new Set([...productCodes(draft.barcodes), code])].join('\n'))
+          }
+          onExisting={(existing) =>
+            void navigate({ to: '/products/$id', params: { id: existing.id } })
+          }
+          onUse={async (suggestion) => {
+            let images = draft.images;
+            let imported = false;
+            if (!images.length && suggestion.image) {
+              setPhotoBusy(true);
+              try {
+                const blob = await (await fetch(suggestion.image)).blob();
+                images = [
+                  await prepareProductImage(new File([blob], 'product.jpg', { type: blob.type })),
+                ];
+                imported = true;
+              } catch {
+                setError(
+                  new Error(t('Product details were filled, but the photo could not be imported.')),
+                );
+              } finally {
+                setPhotoBusy(false);
+              }
+            }
+            setDraft((current) => ({
+              ...current,
+              name: current.name || suggestion.name,
+              description: current.description || suggestion.description || '',
+              category: current.category || suggestion.category,
+              unit: current.unit || 'piece',
+              brand: current.brand || suggestion.brand,
+              volume: current.volume || suggestion.quantity,
+              barcodes: [...new Set([...productCodes(current.barcodes), suggestion.barcode])].join(
+                '\n',
+              ),
+              images,
+              source: {
+                barcode: suggestion.barcode,
+                brand: suggestion.brand,
+                quantity: suggestion.quantity,
+                imageImported: imported,
+              },
+            }));
+          }}
+        />
+      )}
+    </>
+  );
+  const pricingContent = (
+    <>
+      <h2 id="product-pricing-heading">{t('Pricing and stock')}</h2>
+      <div className="product-details-fields">
+        {canReadCosts && !creating && (
+          <Field label={t('Average cost of remaining stock')}>
+            <output className="product-detail-value">
+              {formatMoney(product?.averageCost, currency)}
+            </output>
+          </Field>
+        )}
+        <Field label={t('On hand')}>
+          <output className="product-detail-value">
+            {product ? (
+              <>
+                {formatQuantity(product.stock)} {t(product.unit)} <small>{stockLabel}</small>
+              </>
+            ) : (
+              '—'
+            )}
+          </output>
+        </Field>
+        <Field label={t('Selling price (optional)')}>
+          <input
+            {...controls}
+            name="price"
+            inputMode="decimal"
+            value={draft.price}
+            onChange={(event) => change('price', event.target.value)}
+          />
+        </Field>
+        {canReadCosts && !creating && (
+          <Field label={t('Estimated gross margin')}>
+            <output className="product-detail-value product-margin-preview" aria-live="polite">
+              {margin ? (
+                <>
+                  {formatQuantity(margin.percent)}%{' '}
+                  <small>({formatMoney(margin.profit, currency)})</small>
+                </>
+              ) : (
+                '—'
+              )}
+            </output>
+          </Field>
+        )}
+        <Field
+          label={t('Tax rate (%)')}
+          hint={
+            creating && profile.data
+              ? t('Store default: {value}%', {
+                  value: formatQuantity(profile.data.defaultTaxRate),
+                })
+              : undefined
+          }
+        >
+          <input
+            {...controls}
+            name="taxRate"
+
+            inputMode="decimal"
+            value={draft.taxRate}
+            onChange={(event) => change('taxRate', event.target.value)}
+          />
+        </Field>
+        <Field label={t('Low-stock threshold')}>
+          <input
+            {...controls}
+            name="minStock"
+
+            inputMode="decimal"
+            value={draft.minStock}
+            onChange={(event) => change('minStock', event.target.value)}
+          />
+        </Field>
+      </div>
+    </>
+  );
+  const galleryContent = (
+    <>
+      <h2>{t('Product photo')}</h2>
+      <div className="product-details-photo">
+        {activePhoto ? (
+          <img src={activePhoto} alt={creating ? t('Product photo preview') : product!.name} />
+        ) : (
+          <Package size={72} strokeWidth={1.1} aria-label={t('No product photo')} />
+        )}
+      </div>
+      <div className="product-photo-thumbnails" aria-label={t('Product photo gallery')}>
+        {draft.images.map((image, index) => (
+          <button
+            key={index}
+            type="button"
+            className="product-photo-thumbnail"
+            aria-label={t('Photo {number}', { number: index + 1 })}
+            aria-pressed={index === Math.min(selectedPhoto, draft.images.length - 1)}
+            onClick={() => setSelectedPhoto(index)}
+          >
+            <img src={image} alt="" />
+          </button>
+        ))}
+        {canEdit && draft.images.length < maxProductPhotos && (
+          <button
+            type="button"
+            className="product-photo-add"
+            aria-label={t('Add photo')}
+            disabled={busy}
+            onClick={() => fileInput.current?.click()}
+          >
+            <Plus size={24} />
+          </button>
+        )}
+      </div>
+      {canEdit && (
+        <input
+          ref={fileInput}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          multiple
+          hidden
+          aria-label={t('Add product photos')}
+          disabled={busy}
+          onChange={(event) => {
+            const files = Array.from(event.target.files ?? []);
+            event.target.value = '';
+            void addFiles(files);
+          }}
+        />
+      )}
+      {photoBusy && <p role="status">{t('Preparing photos…')}</p>}
+      {editing && draft.images.length > 0 && (
+        <div className="product-photo-actions">
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              change(
+                'images',
+                draft.images.filter(
+                  (_, index) => index !== Math.min(selectedPhoto, draft.images.length - 1),
+                ),
+              );
+              setSelectedPhoto(0);
+            }}
+          >
+            {t('Remove photo')}
+          </Button>
+          {selectedPhoto > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => {
+                change('images', [
+                  draft.images[selectedPhoto],
+                  ...draft.images.filter((_, index) => index !== selectedPhoto),
+                ]);
+                setSelectedPhoto(0);
+              }}
+            >
+              {t('Use as cover')}
+            </Button>
+          )}
+        </div>
+      )}
+      <p className="product-details-hint">
+        {t('Up to {count} photos. The first photo is shown in the catalog.', {
+          count: maxProductPhotos,
+        })}
+      </p>
+      {draft.source && (
+        <p className="product-details-hint">
+          <a
+            href={'https://world.openfoodfacts.org/product/' + draft.source.barcode}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t('Open Food Facts contributors ')}
+          </a>{' '}
+          {t('· ODbL')}
+          {draft.source.imageImported && t(' · Photo resized, CC BY-SA 3.0')}
+        </p>
+      )}
+    </>
+  );
   return (
     <div className="product-details-page">
       <div className="product-details-navigation">
@@ -283,522 +801,52 @@ function ProductDetailsForm({
         </p>
       )}
       <form id={formId} onSubmit={submit} hidden />
-      <div className="product-details-columns">
+      <div className={'product-details-columns' + (editing ? ' product-details-editing' : '')}>
         <div className="product-details-main">
           <section
             className="panel product-details-section product-details-general"
             aria-labelledby="product-general-heading"
           >
-            <h1 id="product-general-heading">{t('General information')}</h1>
-            {creating && (
-              <BarcodeLookup
-                key={resetVersion}
-                disabled={busy || multiple}
-                onBarcode={(code) =>
-                  change(
-                    'barcodes',
-                    [...new Set([...productCodes(draft.barcodes), code])].join('\n'),
-                  )
-                }
-                onExisting={(existing) =>
-                  void navigate({ to: '/products/$id', params: { id: existing.id } })
-                }
-                onUse={async (suggestion) => {
-                  let images = draft.images;
-                  let imported = false;
-                  if (!images.length && suggestion.image) {
-                    setPhotoBusy(true);
-                    try {
-                      const blob = await (await fetch(suggestion.image)).blob();
-                      images = [
-                        await prepareProductImage(
-                          new File([blob], 'product.jpg', { type: blob.type }),
-                        ),
-                      ];
-                      imported = true;
-                    } catch {
-                      setError(
-                        new Error(
-                          t('Product details were filled, but the photo could not be imported.'),
-                        ),
-                      );
-                    } finally {
-                      setPhotoBusy(false);
-                    }
-                  }
-                  setDraft((current) => ({
-                    ...current,
-                    name: current.name || suggestion.name,
-                    description: current.description || suggestion.description || '',
-                    category: current.category || suggestion.category,
-                    unit: current.unit || 'piece',
-                    brand: current.brand || suggestion.brand,
-                    volume: current.volume || suggestion.quantity,
-                    barcodes: [
-                      ...new Set([...productCodes(current.barcodes), suggestion.barcode]),
-                    ].join('\n'),
-                    images,
-                    source: {
-                      barcode: suggestion.barcode,
-                      brand: suggestion.brand,
-                      quantity: suggestion.quantity,
-                      imageImported: imported,
-                    },
-                  }));
-                }}
-              />
-            )}
+            <h1 id="product-general-heading">
+              {t(editing ? 'Required information' : 'General information')}
+            </h1>
+            {barcodeLookup}
             <div className="product-details-fields">
-              <div className="product-detail-field-wide">
-                <Field label={t('Product name')}>
-                  <input
-                    {...controls}
-                    name="name"
-                    ref={nameInput}
-                    value={draft.name}
-                    required
-                    maxLength={120}
-                    onChange={(event) => change('name', event.target.value)}
-                  />
-                </Field>
-              </div>
-              <div className="product-detail-field-wide">
-                <Field label={t('Description (optional)')}>
-                  <textarea
-                    {...controls}
-                    name="description"
-                    rows={4}
-                    maxLength={2000}
-                    value={draft.description}
-                    onChange={(event) => change('description', event.target.value)}
-                  />
-                </Field>
-              </div>
-              <div className="product-detail-field-wide">
-                <ProductTermField
-                  label={t('Category')}
-                  name="category"
-                  value={draft.category}
-                  onChange={(value) => change('category', value)}
-                  options={options.categories}
-                  loading={options.isFetching}
-                  form={formId}
-                  required
-                  readOnly={locked}
-                  disabled={busy}
-                />
-              </div>
-              <Field
-                label={t('Unit')}
-                hint={
-                  editing && !creating
-                    ? t(
-                        'Unit changes require a stock conversion workflow. Create a separate product instead.',
-                      )
-                    : undefined
-                }
-              >
-                <select
-                  form={formId}
-                  name="unit"
-                  value={draft.unit}
-                  required
-                  disabled={!creating || locked}
-                  onChange={(event) => change('unit', event.target.value)}
-                >
-                  <option value="">{t('Choose a unit')}</option>
-                  {units.map((unit) => (
-                    <option key={unit} value={unit}>
-                      {t(unit)}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label={t('Status')}>
-                <output className="product-detail-value">
-                  {product ? (product.active ? t('Active') : t('Inactive')) : '—'}
-                </output>
-              </Field>
-              {!multiple && (
-                <>
-                  <div className="product-detail-field-wide">
-                    <Field
-                      label={t('Barcodes (optional)')}
-                      hint={
-                        editing
-                          ? t(
-                              'Add one per line, or separate with commas. Leave blank to generate a barcode.',
-                            )
-                          : undefined
-                      }
-                    >
-                      <textarea
-                        {...controls}
-                        name="barcodes"
-                        rows={2}
-                        value={draft.barcodes}
-                        onChange={(event) => change('barcodes', event.target.value)}
-                      />
-                    </Field>
-                    <div className="product-details-barcode-actions">
-                      {editing ? (
-                        <CameraBarcodeScanner
-                          onScan={(code) =>
-                            change(
-                              'barcodes',
-                              [...new Set([...productCodes(draft.barcodes), code])].join('\n'),
-                            )
-                          }
-                        />
-                      ) : product?.barcodes.length ? (
-                        <Button variant="ghost" size="sm" onClick={() => setBarcode(true)}>
-                          <Barcode size={16} />
-                          {t('View barcode')}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                  <Field
-                    label={t('SKU')}
-                    hint={editing ? t('Leave blank to generate a code.') : undefined}
-                  >
-                    <input
-                      {...controls}
-                      name="sku"
-                      value={draft.sku}
-                      maxLength={120}
-                      onChange={(event) => change('sku', event.target.value)}
-                    />
-                  </Field>
-                  <Field
-                    label={t('PLU / short code (optional)')}
-                    hint={creating ? t('Leave blank to generate a code.') : undefined}
-                  >
-                    <input
-                      {...controls}
-                      name="plu"
-                      value={draft.plu}
-                      maxLength={20}
-                      onChange={(event) => change('plu', event.target.value)}
-                    />
-                  </Field>
-                </>
-              )}
-              <ProductTermField
-                label={t('Brand (optional)')}
-                name="brand"
-                value={draft.brand}
-                onChange={(value) => change('brand', value)}
-                options={options.brands}
-                loading={options.isFetching}
-                form={formId}
-                readOnly={locked}
-                disabled={busy}
-              />
-              {!multiple && (
-                <ProductSizeField
-                  label={t('Volume / size (optional)')}
-                  value={draft.volume}
-                  onChange={(value) => change('volume', value)}
-                  form={formId}
-                  readOnly={locked}
-                  disabled={busy}
-                />
-              )}
+              {requiredFields}
+              {!editing && additionalFields}
             </div>
-            {creating && (
-              <div className="product-volume-variants">
-                {multiple && (
-                  <>
-                    <h2>{t('Volume variants')}</h2>
-                    <p className="product-details-hint">
-                      {t(
-                        'Each variant creates a separate product with the shared details above. SKU and PLU are generated for each product.',
-                      )}
-                    </p>
-                    {variants.map((variant, index) => (
-                      <div className="product-volume-row" key={variant.id}>
-                        <ProductSizeField
-                          label={t('Volume {number}', { number: index + 1 })}
-                          unitLabel={t('Size unit {number}', { number: index + 1 })}
-                          name={'variant-' + variant.id}
-                          value={variant.volume}
-                          form={formId}
-                          required
-                          readOnly={locked}
-                          disabled={busy}
-                          onChange={(value) =>
-                            setVariants((rows) =>
-                              rows.map((row) =>
-                                row.id === variant.id ? { ...row, volume: value } : row,
-                              ),
-                            )
-                          }
-                        />
-                        <Field label={t('Barcode {number}', { number: index + 1 })}>
-                          <input
-                            {...controls}
-                            required
-                            maxLength={100}
-                            value={variant.barcode}
-                            onChange={(event) =>
-                              setVariants((rows) =>
-                                rows.map((row) =>
-                                  row.id === variant.id
-                                    ? { ...row, barcode: event.target.value }
-                                    : row,
-                                ),
-                              )
-                            }
-                          />
-                        </Field>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          disabled={busy}
-                          aria-label={t('Remove variant {number}', { number: index + 1 })}
-                          onClick={() => {
-                            const remaining = variants.filter((row) => row.id !== variant.id);
-                            if (remaining.length === 1) {
-                              setDraft((current) => ({
-                                ...current,
-                                volume: remaining[0].volume,
-                                barcodes: remaining[0].barcode,
-                              }));
-                              setVariants([]);
-                            } else setVariants(remaining);
-                            setError(undefined);
-                          }}
-                        >
-                          <Trash2 size={18} />
-                        </Button>
-                      </div>
-                    ))}
-                  </>
-                )}
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={busy || variants.length >= 50}
-                  onClick={() => {
-                    if (!multiple && productCodes(draft.barcodes).length > 1) {
-                      setError(t('Keep one barcode for the first volume before adding variants.'));
-                      return;
-                    }
-                    const next = { id: crypto.randomUUID(), volume: '', barcode: '' };
-                    setVariants((rows) =>
-                      multiple
-                        ? [...rows, next]
-                        : [
-                            {
-                              id: crypto.randomUUID(),
-                              volume: draft.volume,
-                              barcode: productCodes(draft.barcodes)[0] ?? '',
-                            },
-                            next,
-                          ],
-                    );
-                    setError(undefined);
-                  }}
-                >
-                  <Plus size={16} />
-                  {t('Add volume variant')}
-                </Button>
+            {!editing && variantFields}
+          </section>
+          {editing && (
+            <ProductAdditionalInformation detailsRef={additionalRef} resetKey={resetVersion}>
+              <div className="product-additional-group">
+                <div className="product-details-fields">{additionalFields}</div>
+                {variantFields}
               </div>
-            )}
-          </section>
-          <section
-            className="panel product-details-section product-details-pricing"
-            aria-labelledby="product-pricing-heading"
-          >
-            <h2 id="product-pricing-heading">{t('Pricing and stock')}</h2>
-            <div className="product-details-fields">
-              {canReadCosts && !creating && (
-                <Field label={t('Average cost of remaining stock')}>
-                  <output className="product-detail-value">
-                    {formatMoney(product?.averageCost, currency)}
-                  </output>
-                </Field>
-              )}
-              <Field label={t('On hand')}>
-                <output className="product-detail-value">
-                  {product ? (
-                    <>
-                      {formatQuantity(product.stock)} {t(product.unit)} <small>{stockLabel}</small>
-                    </>
-                  ) : (
-                    '—'
-                  )}
-                </output>
-              </Field>
-              <Field label={t('Selling price (optional)')}>
-                <input
-                  {...controls}
-                  name="price"
-                  inputMode="decimal"
-                  value={draft.price}
-                  onChange={(event) => change('price', event.target.value)}
-                />
-              </Field>
-              {canReadCosts && !creating && (
-                <Field label={t('Estimated gross margin')}>
-                  <output
-                    className="product-detail-value product-margin-preview"
-                    aria-live="polite"
-                  >
-                    {margin ? (
-                      <>
-                        {formatQuantity(margin.percent)}%{' '}
-                        <small>({formatMoney(margin.profit, currency)})</small>
-                      </>
-                    ) : (
-                      '—'
-                    )}
-                  </output>
-                </Field>
-              )}
-              <Field
-                label={t('Tax rate (%)')}
-                hint={
-                  creating && profile.data
-                    ? t('Store default: {value}%', {
-                        value: formatQuantity(profile.data.defaultTaxRate),
-                      })
-                    : undefined
-                }
+              <section
+                className="product-additional-group"
+                aria-labelledby="product-pricing-heading"
               >
-                <input
-                  {...controls}
-                  name="taxRate"
-                  required={!creating}
-                  inputMode="decimal"
-                  value={draft.taxRate}
-                  onChange={(event) => change('taxRate', event.target.value)}
-                />
-              </Field>
-              <Field label={t('Low-stock threshold')}>
-                <input
-                  {...controls}
-                  name="minStock"
-                  required={!creating}
-                  inputMode="decimal"
-                  value={draft.minStock}
-                  onChange={(event) => change('minStock', event.target.value)}
-                />
-              </Field>
-            </div>
-          </section>
+                {pricingContent}
+              </section>
+              <section className="product-additional-group">{galleryContent}</section>
+            </ProductAdditionalInformation>
+          )}
+          {!editing && (
+            <section
+              className="panel product-details-section product-details-pricing"
+              aria-labelledby="product-pricing-heading"
+            >
+              {pricingContent}
+            </section>
+          )}
         </div>
         <aside className="product-details-aside">
-          <section className="panel product-details-section product-details-gallery">
-            <h2>{t('Product photo')}</h2>
-            <div className="product-details-photo">
-              {activePhoto ? (
-                <img
-                  src={activePhoto}
-                  alt={creating ? t('Product photo preview') : product!.name}
-                />
-              ) : (
-                <Package size={72} strokeWidth={1.1} aria-label={t('No product photo')} />
-              )}
-            </div>
-            <div className="product-photo-thumbnails" aria-label={t('Product photo gallery')}>
-              {draft.images.map((image, index) => (
-                <button
-                  key={index}
-                  type="button"
-                  className="product-photo-thumbnail"
-                  aria-label={t('Photo {number}', { number: index + 1 })}
-                  aria-pressed={index === Math.min(selectedPhoto, draft.images.length - 1)}
-                  onClick={() => setSelectedPhoto(index)}
-                >
-                  <img src={image} alt="" />
-                </button>
-              ))}
-              {canEdit && draft.images.length < maxProductPhotos && (
-                <button
-                  type="button"
-                  className="product-photo-add"
-                  aria-label={t('Add photo')}
-                  disabled={busy}
-                  onClick={() => fileInput.current?.click()}
-                >
-                  <Plus size={24} />
-                </button>
-              )}
-            </div>
-            {canEdit && (
-              <input
-                ref={fileInput}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                multiple
-                hidden
-                aria-label={t('Add product photos')}
-                disabled={busy}
-                onChange={(event) => {
-                  const files = Array.from(event.target.files ?? []);
-                  event.target.value = '';
-                  void addFiles(files);
-                }}
-              />
-            )}
-            {photoBusy && <p role="status">{t('Preparing photos…')}</p>}
-            {editing && draft.images.length > 0 && (
-              <div className="product-photo-actions">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => {
-                    change(
-                      'images',
-                      draft.images.filter(
-                        (_, index) => index !== Math.min(selectedPhoto, draft.images.length - 1),
-                      ),
-                    );
-                    setSelectedPhoto(0);
-                  }}
-                >
-                  {t('Remove photo')}
-                </Button>
-                {selectedPhoto > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => {
-                      change('images', [
-                        draft.images[selectedPhoto],
-                        ...draft.images.filter((_, index) => index !== selectedPhoto),
-                      ]);
-                      setSelectedPhoto(0);
-                    }}
-                  >
-                    {t('Use as cover')}
-                  </Button>
-                )}
-              </div>
-            )}
-            <p className="product-details-hint">
-              {t('Up to {count} photos. The first photo is shown in the catalog.', {
-                count: maxProductPhotos,
-              })}
-            </p>
-            {draft.source && (
-              <p className="product-details-hint">
-                <a
-                  href={'https://world.openfoodfacts.org/product/' + draft.source.barcode}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {t('Open Food Facts contributors ')}
-                </a>{' '}
-                {t('· ODbL')}
-                {draft.source.imageImported && t(' · Photo resized, CC BY-SA 3.0')}
-              </p>
-            )}
-          </section>
+          {!editing && (
+            <section className="panel product-details-section product-details-gallery">
+              {galleryContent}
+            </section>
+          )}
           {(canEdit || (canAdjustStock && product)) && (
             <section className="panel product-details-section product-details-actions">
               <ErrorMessage error={error ?? save.error ?? (creating ? profile.error : undefined)} />

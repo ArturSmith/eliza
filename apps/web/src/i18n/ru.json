@@ -2906,5 +2906,7 @@
   "Activate the product and supplier before receiving.": "Перед приёмкой активируйте товар и поставщика.",
   "Choose an active product and supplier from this store.": "Выберите активные товар и поставщика этого магазина.",
   "Back": "Назад",
-  "Purchase tax": "Налог на закупку"
+  "Purchase tax": "Налог на закупку",
+  "Required information": "Обязательные поля",
+  "Additional information": "Дополнительная информация"
 }

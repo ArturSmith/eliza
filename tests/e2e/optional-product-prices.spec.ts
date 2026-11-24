@@ -13,6 +13,7 @@ test('creates and reopens a product with unknown prices, then saves real prices'
   await page.getByRole('button', { name: 'Create my store' }).click();
   await page.getByRole('link', { name: 'Products', exact: true }).click();
   await page.getByRole('link', { name: 'Add product' }).first().click();
+  await page.locator('.product-additional-information > summary').click();
   const form = page.locator('.product-details-page');
   await form.getByLabel('Product name').fill('Unpriced yogurt');
   await form.getByLabel('SKU', { exact: true }).fill('UNKNOWN-YOG');
@@ -28,6 +29,7 @@ test('creates and reopens a product with unknown prices, then saves real prices'
   await page.goto('/products/' + product.id);
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('button', { name: 'Edit product', exact: true }).click();
+  await page.locator('.product-additional-information > summary').click();
   await expect(page.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('');
   await page.getByLabel('Selling price (optional)', { exact: true }).fill('70');
   await page.getByRole('button', { name: 'Save', exact: true }).click();

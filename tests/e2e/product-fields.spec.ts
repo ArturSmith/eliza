@@ -35,6 +35,7 @@ test('saved brands/categories open on focus, and numeric sizes preserve legacy d
     volume: '24 x 330 ml',
   });
   await page.goto('/products/new');
+  await page.locator('.product-additional-information > summary').click();
   const brand = page.getByLabel('Brand (optional)', { exact: true }),
     category = page.getByLabel('Category', { exact: true }),
     amount = page.getByLabel('Volume / size (optional)', { exact: true }),
@@ -82,6 +83,7 @@ test('saved brands/categories open on focus, and numeric sizes preserve legacy d
   });
   await expect(amount).toHaveValue('');
   await expect(unit).toHaveValue('');
+  await page.locator('.product-additional-information > summary').click();
   await brand.click();
   await expect(page.getByRole('option', { name: 'Fresh brand', exact: true })).toBeVisible();
   await page.goto('/products/' + legacy.id);
@@ -91,6 +93,7 @@ test('saved brands/categories open on focus, and numeric sizes preserve legacy d
     }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Edit product', exact: true }).click();
+  await page.locator('.product-additional-information > summary').click();
   await brand.click();
   await page.getByRole('option', { name: 'Coca-Cola', exact: true }).click();
   const saved = page.waitForResponse(
@@ -103,6 +106,7 @@ test('saved brands/categories open on focus, and numeric sizes preserve legacy d
     unit: 'piece',
   });
   await page.getByRole('button', { name: 'Edit product', exact: true }).click();
+  await page.locator('.product-additional-information > summary').click();
   await amount.fill('250');
   await unit.selectOption('ml');
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -113,6 +117,7 @@ test('saved brands/categories open on focus, and numeric sizes preserve legacy d
     }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Edit product', exact: true }).click();
+  await page.locator('.product-additional-information > summary').click();
   await amount.fill('250');
   await unit.selectOption('ml');
   const replacement = page.waitForResponse(
@@ -121,6 +126,7 @@ test('saved brands/categories open on focus, and numeric sizes preserve legacy d
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   expect(await (await replacement).json()).toMatchObject({ volume: '250 ml', unit: 'piece' });
   await page.goto('/products/new');
+  await page.locator('.product-additional-information > summary').click();
   await page.setViewportSize({ width: 390, height: 844 });
   await brand.click();
   await page.screenshot({
@@ -139,6 +145,7 @@ test('saved brands/categories open on focus, and numeric sizes preserve legacy d
   });
   await page.evaluate(() => localStorage.setItem('eliza.language', 'ru'));
   await page.reload();
+  await page.locator('.product-additional-information > summary').click();
   await page.getByLabel('Бренд (необязательно)', { exact: true }).click();
   await expect(page.getByRole('option', { name: 'Fresh brand', exact: true })).toBeVisible();
   await expect(

@@ -507,3 +507,28 @@
     align-self: center;
   }
 }
+
+/* Editing has two equally wide information cards, stacked in the main column. */
+.product-details-editing .product-details-general {
+  grid-row: 1;
+  align-self: start;
+  overflow: visible;
+}
+.product-details-editing .product-additional-information {
+  grid-column: 1;
+  grid-row: 2;
+}
+.product-details-editing .product-details-actions {
+  grid-row: 1;
+  align-self: start;
+}
+@media (max-width: 1000px) {
+  .product-details-editing .product-additional-information {
+    grid-column: auto;
+    grid-row: auto;
+  }
+}
+
+.product-details-editing .product-details-general .field:has(> select[name='unit']) {
+  grid-column: 1 / -1;
+}
