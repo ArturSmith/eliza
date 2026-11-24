@@ -29,6 +29,8 @@ type ScannerContext = {
   allowed: boolean;
   linked: boolean;
   online: boolean;
+  claimed: boolean;
+  initializing: boolean;
   show: () => void;
 };
 const Context = createContext<ScannerContext | null>(null);
@@ -320,7 +322,16 @@ export function PhoneScannerProvider({ children }: { children: ReactNode }) {
   const pairExpired = !!pairing && Date.parse(pairing.pairExpiresAt) <= Date.now();
   const url = pairing ? `${window.location.origin}/phone-scanner#pair=${pairing.pairingToken}` : '';
   return (
-    <Context.Provider value={{ allowed, linked: !!record?.linkId, online, show }}>
+    <Context.Provider
+      value={{
+        allowed,
+        linked: !!record?.linkId,
+        online,
+        claimed: !!status?.claimed,
+        initializing: !record || (!!record.linkId && !status && !error),
+        show,
+      }}
+    >
       {children}
       <Dialog
         open={open}
@@ -397,49 +408,50 @@ export function PhoneScannerProvider({ children }: { children: ReactNode }) {
     </Context.Provider>
   );
 }
-export function PhoneScannerStatus() {
-  useLanguage();
-  const scanner = useContext(Context);
-  if (!scanner?.allowed || !scanner.linked) return null;
-  return (
-    <Button
-      type="button"
-      size="sm"
-      variant="outline"
-      className="phone-scanner-header"
-      aria-label={t(scanner.online ? 'Phone connected' : 'Phone scanner')}
-      onClick={scanner.show}
-    >
-      <Smartphone size={16} />
-      <span>{t(scanner.online ? 'Phone connected' : 'Phone scanner')}</span>
-    </Button>
-  );
-}
-export function PhoneScannerControl({ disabled = false }: { disabled?: boolean }) {
+export function PhoneScannerDeviceCard() {
   useLanguage();
   const scanner = useContext(Context);
   if (!scanner?.allowed) return null;
-  const label = t(scanner.online ? 'Phone connected' : 'Connect phone');
+  const status = scanner.initializing
+    ? 'Connecting…'
+    : !scanner.linked
+      ? 'Not connected'
+      : !scanner.claimed
+        ? 'Waiting for phone'
+        : scanner.online
+          ? 'Phone connected'
+          : 'Phone is offline';
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="icon"
-      className="camera-scan-button phone-scanner-control"
-      data-scan-control
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onPointerDown={(event) => event.preventDefault()}
-      onClick={(event) => {
-        const field = event.currentTarget
-          .closest('.scan-input-row')
-          ?.querySelector('input, textarea');
-        if (isScanField(field)) field.focus();
-        scanner.show();
-      }}
+    <section
+      className="panel device-card phone-scanner-device-card"
+      aria-label={t('Phone as scanner')}
     >
-      <Smartphone size={18} />
-    </Button>
+      <div className="device-card-top">
+        <span className="icon-tile">
+          <Smartphone size={24} />
+        </span>
+        <span className={'badge badge-' + (scanner.online ? 'green' : 'gray')} role="status">
+          {t(status)}
+        </span>
+      </div>
+      <h2>{t('Phone as scanner')}</h2>
+      <p className="muted">
+        {t(
+          'Connect your phone here once, then scan into the selected field on any management page.',
+        )}
+      </p>
+      <small>
+        {t('The connection belongs to this browser tab. Keep the scanner open on your phone.')}
+      </small>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={scanner.initializing}
+        onClick={scanner.show}
+      >
+        <Smartphone size={16} />
+        {t(scanner.linked ? 'Manage scanner connection' : 'Connect phone')}
+      </Button>
+    </section>
   );
 }

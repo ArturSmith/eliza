@@ -2966,5 +2966,9 @@
   "Code or text": "Код или текст",
   "Use valid scanned text.": "Введите корректный текст скана.",
   "Scanned text fills the selected field. Review and save on the laptop.": "Отсканированный текст заполняет выбранное поле. Проверьте и сохраните данные на ноутбуке.",
-  "Enable scanner sound": "Включить звук сканера"
+  "Enable scanner sound": "Включить звук сканера",
+  "Waiting for phone": "Ожидание телефона",
+  "Manage scanner connection": "Управление подключением сканера",
+  "Connect your phone here once, then scan into the selected field on any management page.": "Подключите телефон здесь один раз, затем сканируйте в выбранное поле на любой странице управления.",
+  "The connection belongs to this browser tab. Keep the scanner open on your phone.": "Подключение привязано к этой вкладке браузера. Держите сканер открытым на телефоне."
 }

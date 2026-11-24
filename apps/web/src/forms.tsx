@@ -1,4 +1,3 @@
-import { PhoneScannerControl } from './phone-scanner';
 import { ProductAdditionalInformation, ProductStatusIndicator } from './product-information';
 import { ProductTermField } from './product-term-field';
 import { ProductSizeField } from './product-size-field';
@@ -531,7 +530,6 @@ export function ProductForm({
                 placeholder={t('Scan or enter a barcode')}
               />
               <CameraBarcodeScanner onScan={(code) => fillField('barcodes', code, true)} />
-              <PhoneScannerControl />
             </div>
           </Field>
           <div className="form-grid">

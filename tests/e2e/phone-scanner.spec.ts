@@ -20,10 +20,10 @@ test('a paired phone scans into successive products, survives reloads and discon
     timezone: 'Europe/Oslo',
   });
   await page.route('**/api/products/lookup/*', (r) => r.fulfill({ json: { suggestion: null } }));
-  await page.goto('/products/new');
-  await page.getByLabel('Product name', { exact: true }).fill('Phone bread');
-  await page.getByLabel('Category', { exact: true }).fill('Bakery');
-  await page.getByLabel('Unit', { exact: true }).selectOption('piece');
+  await page.goto('/devices');
+  const scannerCard = page.getByRole('region', { name: 'Phone as scanner', exact: true });
+  await expect(scannerCard).toBeVisible();
+  await expect(scannerCard.getByRole('status')).toHaveText('Not connected');
   let pairs = 0;
   page.on('response', (r) => {
     if (r.url().endsWith('/api/scanner-links') && r.request().method() === 'POST') pairs++;
@@ -31,10 +31,7 @@ test('a paired phone scans into successive products, survives reloads and discon
   const connection = page.waitForResponse(
     (r) => r.url().endsWith('/api/scanner-links') && r.request().method() === 'POST',
   );
-  await page
-    .locator('.product-lookup-panel')
-    .getByRole('button', { name: 'Connect phone', exact: true })
-    .click();
+  await scannerCard.getByRole('button', { name: 'Connect phone', exact: true }).click();
   const link = await (await connection).json();
   await expect(page.locator('.phone-pairing-qr svg')).toBeVisible();
   await page.screenshot({ path: '/private/tmp/eliza-phone-pairing.png', fullPage: true });
@@ -71,9 +68,34 @@ test('a paired phone scans into successive products, survives reloads and discon
   );
   try {
     await phone.goto('/phone-scanner#pair=' + link.pairingToken);
+    await expect(scannerCard.getByRole('status')).toHaveText('Phone connected');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.screenshot({ path: '/private/tmp/eliza-device-phone-scanner.png', fullPage: true });
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await page.screenshot({
+      path: '/private/tmp/eliza-device-phone-scanner-mobile.png',
+      fullPage: true,
+    });
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.getByRole('link', { name: 'Products', exact: true }).click();
+    await page.getByRole('link', { name: 'Add product', exact: true }).first().click();
+    await page.getByLabel('Product name', { exact: true }).fill('Phone bread');
+    await page.getByLabel('Category', { exact: true }).fill('Bakery');
+    await page.getByLabel('Unit', { exact: true }).selectOption('piece');
+    await page.getByLabel('Scan or enter barcode').focus();
+    await expect(page.getByRole('button', { name: 'Connect phone', exact: true })).toHaveCount(0);
+    await expect(
+      page.getByRole('button', { name: 'Manage scanner connection', exact: true }),
+    ).toHaveCount(0);
     const firstTarget = (await (await readyResponse).json()).targetId;
     await expect(phone.getByText('Ready to scan', { exact: true })).toBeVisible();
     await expect(phone).toHaveURL('/phone-scanner');
+    await expect(phone.locator('.phone-mobile-status')).toContainText(
+      'Selected field: Scan or enter barcode',
+    );
     await phone.getByRole('button', { name: 'Enable scanner sound', exact: true }).click();
     await expect(
       phone.getByRole('button', { name: 'Enable scanner sound', exact: true }),
@@ -137,20 +159,17 @@ test('a paired phone scans into successive products, survives reloads and discon
     // The same QR may populate a different selected field without reconnecting.
     await scanInto('Product name', 'Scanned brand');
     await scanInto('Product name', 'Scanned bread');
-    // Camera and phone controls remain on the same line as the input, including mobile widths.
+    // Only the camera stays beside barcode inputs; phone pairing is exclusive to Devices.
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 900 });
       const row = page.locator('.product-lookup-panel .scan-input-row');
       const input = await row.locator('input').boundingBox();
       const camera = await row.getByRole('button', { name: 'Scan with camera' }).boundingBox();
-      const phoneButton = await row
-        .getByRole('button', { name: 'Phone connected', exact: true })
-        .boundingBox();
       expect(Math.abs(input!.y + input!.height / 2 - camera!.y - camera!.height / 2)).toBeLessThan(
         2,
       );
-      expect(Math.abs(camera!.y - phoneButton!.y)).toBeLessThan(2);
-      expect(phoneButton!.x - camera!.x - camera!.width).toBeGreaterThanOrEqual(6);
+      await expect(row.locator('button')).toHaveCount(1);
+      await expect(page.getByRole('button', { name: 'Connect phone', exact: true })).toHaveCount(0);
       await page.screenshot({
         path: '/private/tmp/eliza-scan-fields-' + width + '.png',
         fullPage: true,
@@ -169,9 +188,7 @@ test('a paired phone scans into successive products, survives reloads and discon
     await page.getByRole('button', { name: 'Add product', exact: true }).click();
     await expect(page.getByLabel('Product name', { exact: true })).toHaveValue('');
     await nextReady;
-    await expect(
-      page.getByRole('button', { name: 'Phone connected', exact: true }).first(),
-    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Connect phone', exact: true })).toHaveCount(0);
     await page.getByLabel('Product name', { exact: true }).fill('Phone milk');
     await page.getByLabel('Category', { exact: true }).fill('Dairy');
     await page.getByLabel('Unit', { exact: true }).selectOption('piece');
@@ -196,9 +213,7 @@ test('a paired phone scans into successive products, survives reloads and discon
     await phone.reload();
     await expect(phone.getByText('Ready to scan', { exact: true })).toBeVisible();
     await page.reload();
-    await expect(
-      page.getByRole('button', { name: 'Phone connected', exact: true }).first(),
-    ).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Connect phone', exact: true })).toHaveCount(0);
     expect(pairs).toBe(1);
     await page.getByLabel('Product name', { exact: true }).fill('Phone cola');
     await page.getByLabel('Category', { exact: true }).fill('Drinks');
@@ -259,13 +274,17 @@ test('a paired phone scans into successive products, survives reloads and discon
       name: 'Edited scanned bread',
       barcodes: expect.arrayContaining(['87654321']),
     });
-    await page.getByRole('button', { name: 'Phone connected', exact: true }).first().click();
+    await page.getByRole('link', { name: 'Devices', exact: true }).click();
+    await expect(scannerCard.getByRole('status')).toHaveText('Phone connected');
+    expect(pairs).toBe(1);
+    await scannerCard
+      .getByRole('button', { name: 'Manage scanner connection', exact: true })
+      .click();
     await page.getByRole('button', { name: 'Disconnect phone', exact: true }).click();
     await expect(phone.getByText('Scanner connection ended', { exact: true })).toBeVisible();
-    await expect(page.locator('.phone-scanner-header')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Edit product', exact: true }).click();
+    await expect(scannerCard.getByRole('status')).toHaveText('Not connected');
     await expect(
-      page.getByRole('button', { name: 'Connect phone', exact: true }).first(),
+      scannerCard.getByRole('button', { name: 'Connect phone', exact: true }),
     ).toBeVisible();
   } finally {
     await mobile.close();

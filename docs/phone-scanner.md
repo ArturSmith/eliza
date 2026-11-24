@@ -4,14 +4,14 @@ The staff scanner is part of the main platform at `/phone-scanner`. It is separa
 
 ## Use
 
-1. In a product creation form, choose the phone icon beside a barcode input; it sits next to the camera icon.
+1. Open **Devices → Phone as scanner → Connect phone** on the laptop. This is the single place to connect and manage the phone scanner.
 2. Scan the connection QR with the phone's normal camera and open the link. Allow camera access.
 3. Keep the scanner page open. Select any editable text field on the laptop. The phone shows the selected field name and readiness; a successful scan is confirmed after the laptop receives it.
 4. Review the product on the laptop and save it. The same phone connection remains active for the next product, navigation and page reloads in supported modern browsers.
 
 The phone plays one short scanner beep and vibrates after the laptop confirms insertion. Duplicate detections, retries and cancelled scans do not produce extra success sounds. Mobile browsers require a tap to enable audio: tap **Enable scanner sound** if shown. Audio is also enabled by other interactions on the scanner page; after a reload or browser audio suspension, a new tap may be needed. Device volume and silent-mode settings still apply.
 
-The connected-phone indicator in the management header opens connection details and the disconnect action. One laptop tab owns each connection; duplicated tabs receive their own unpaired connection to prevent misdirected scans. Other product forms, including supplier product creation and inline barcode editing, use the same connection. Focus any intended text or number field before scanning, including names, brands, descriptions and individual variant barcodes. Scanned text replaces ordinary field contents; the product barcode list appends unique codes. Passwords, read-only fields and hidden fields cannot receive scans. Invalid or oversized values are rejected without losing existing contents. Barcode lookup runs only when its own input is selected. The mobile page also offers manual entry and retries after a lost response.
+The **Phone as scanner** card on **Devices** shows connection status; **Manage scanner connection** opens connection details and the disconnect action. Product forms and the management header have no phone connection buttons. One laptop tab owns each connection; duplicated tabs receive their own unpaired connection to prevent misdirected scans. Other product forms, including supplier product creation and inline barcode editing, use the same connection. Focus any intended text or number field before scanning, including names, brands, descriptions and individual variant barcodes. Scanned text replaces ordinary field contents; the product barcode list appends unique codes. Passwords, read-only fields and hidden fields cannot receive scans. Invalid or oversized values are rejected without losing existing contents. Barcode lookup runs only when its own input is selected. The mobile page also offers manual entry and retries after a lost response.
 
 Both devices need access to the same public HTTPS platform address. They can use different networks. A laptop's `localhost` address cannot be reached by a separate phone, and phone camera access requires a secure origin.
 

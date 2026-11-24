@@ -1,5 +1,4 @@
 import { phoneScanEvent, type PhoneScanDetail } from './phone-scan-fields';
-import { PhoneScannerControl } from './phone-scanner';
 import { t, useLanguage } from './i18n';
 import { useEffect, useId, useRef, useState } from 'react';
 import type { Product } from '@eliza/contracts';
@@ -115,7 +114,6 @@ export function BarcodeLookup({
                 void lookup(code);
               }}
             />
-            <PhoneScannerControl disabled={disabled || busy} />
           </div>
         </Field>
         <Button

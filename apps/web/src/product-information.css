@@ -114,9 +114,6 @@
   background: transparent;
   min-width: 0;
 }
-.product-lookup-panel .phone-scanner-control {
-  margin-top: 0;
-}
 .product-entry-form {
   display: grid;
   gap: 24px;

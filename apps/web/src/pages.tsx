@@ -1,4 +1,4 @@
-import { PhoneScannerStatus } from './phone-scanner';
+import { PhoneScannerDeviceCard } from './phone-scanner';
 import { productDisplayName } from '@eliza/contracts';
 import { ProductCatalogCard } from './product-catalog-card';
 import { formatQuantity } from './quantity-format';
@@ -403,7 +403,6 @@ export function Shell() {
             <strong>{t(current?.label ?? 'Page')}</strong>
           </div>
           <div className="topbar-right">
-            <PhoneScannerStatus />
             {!advancedHidden && (!current || canVisit(current)) && (
               <PageOnboarding storeId={store.id} employeeId={user.id} endpoint="/auth/onboarding" />
             )}
@@ -1029,6 +1028,7 @@ export function DevicesPage() {
       />
       <ErrorMessage error={query.error} />
       <div className="device-grid">
+        <PhoneScannerDeviceCard />
         {devices?.map((d) => (
           <section
             className={`panel device-card${d.id === session.device.id ? ' device-card-current' : ''}`}

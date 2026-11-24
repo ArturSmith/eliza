@@ -1,4 +1,3 @@
-import { PhoneScannerControl } from './phone-scanner';
 import { ProductAdditionalInformation, ProductStatusIndicator } from './product-information';
 import { ProductTermField } from './product-term-field';
 import { ProductSizeField } from './product-size-field';
@@ -380,7 +379,6 @@ function ProductDetailsForm({
                         )
                       }
                     />
-                    <PhoneScannerControl disabled={locked} />
                   </>
                 ) : product?.barcodes.length ? (
                   <Button variant="ghost" size="sm" onClick={() => setBarcode(true)}>
@@ -502,7 +500,6 @@ function ProductDetailsForm({
                           )
                         }
                       />
-                      <PhoneScannerControl disabled={locked} />
                     </div>
                   </Field>
                   <Button
