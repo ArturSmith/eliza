@@ -2965,5 +2965,6 @@
   "Enter code or text manually": "Ввести код или текст вручную",
   "Code or text": "Код или текст",
   "Use valid scanned text.": "Введите корректный текст скана.",
-  "Scanned text fills the selected field. Review and save on the laptop.": "Отсканированный текст заполняет выбранное поле. Проверьте и сохраните данные на ноутбуке."
+  "Scanned text fills the selected field. Review and save on the laptop.": "Отсканированный текст заполняет выбранное поле. Проверьте и сохраните данные на ноутбуке.",
+  "Enable scanner sound": "Включить звук сканера"
 }

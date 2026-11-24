@@ -45,6 +45,20 @@ test('a paired phone scans into successive products, survives reloads and discon
     hasTouch: true,
   });
   const phone = await mobile.newPage();
+  // Keep the real Web Audio implementation: observe actual tones after mobile gesture unlock.
+  await phone.addInitScript(() => {
+    (window as any).__scanTones = [];
+    const create = AudioContext.prototype.createOscillator;
+    AudioContext.prototype.createOscillator = function () {
+      const tone = create.call(this);
+      const start = tone.start.bind(tone);
+      tone.start = (when) => {
+        (window as any).__scanTones.push({ frequency: tone.frequency.value, type: tone.type });
+        start(when);
+      };
+      return tone;
+    };
+  });
   // The camera decoder is replaced only in this test; its real component callback is exercised.
   await phone.route('**/*zxing*', (r) =>
     r.fulfill({
@@ -60,6 +74,11 @@ test('a paired phone scans into successive products, survives reloads and discon
     const firstTarget = (await (await readyResponse).json()).targetId;
     await expect(phone.getByText('Ready to scan', { exact: true })).toBeVisible();
     await expect(phone).toHaveURL('/phone-scanner');
+    await phone.getByRole('button', { name: 'Enable scanner sound', exact: true }).click();
+    await expect(
+      phone.getByRole('button', { name: 'Enable scanner sound', exact: true }),
+    ).toHaveCount(0);
+    expect(await phone.evaluate(() => (window as any).__scanTones)).toHaveLength(0);
     expect((await phone.request.get('/api/products')).status()).toBe(401);
     await phone.waitForFunction(() => typeof (window as any).__scannerCallback === 'function');
     await phone.screenshot({ path: '/private/tmp/eliza-phone-scanner-mobile.png', fullPage: true });
@@ -74,6 +93,11 @@ test('a paired phone scans into successive products, survives reloads and discon
     await expect(page.getByLabel('Scan or enter barcode')).toHaveValue('3017620422003');
     await expect(phone.getByText('Received on laptop', { exact: true })).toBeVisible();
     expect(sent).toBe(1);
+    await expect
+      .poll(() => phone.evaluate(() => (window as any).__scanTones))
+      .toEqual([{ frequency: 1200, type: 'square' }]);
+    await phone.evaluate(() => (window as any).__scannerCallback('3017620422003'));
+    expect(await phone.evaluate(() => (window as any).__scanTones)).toHaveLength(1);
     const scanInto = async (label: string, value: string) => {
       await page.getByLabel(label, { exact: true }).focus();
       await expect(phone.locator('.phone-mobile-status')).toContainText('Selected field: ' + label);
@@ -101,11 +125,15 @@ test('a paired phone scans into successive products, survives reloads and discon
     await expect(phone.locator('.phone-mobile-status')).toContainText(
       'Selected field: Brand (optional)',
     );
+    const tonesBeforeRejection = await phone.evaluate(() => (window as any).__scanTones.length);
     await phone.evaluate(() => (window as any).__scannerCallback('x'.repeat(121)));
     await expect(
       phone.getByText('Scan not inserted. Select a field and scan again.', { exact: true }),
     ).toBeVisible();
     await expect(page.getByLabel('Brand (optional)', { exact: true })).toHaveValue('Scanned brand');
+    expect(await phone.evaluate(() => (window as any).__scanTones.length)).toBe(
+      tonesBeforeRejection,
+    );
     // The same QR may populate a different selected field without reconnecting.
     await scanInto('Product name', 'Scanned brand');
     await scanInto('Product name', 'Scanned bread');

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Smartphone, WifiOff } from 'lucide-react';
+import { Check, Smartphone, Volume2, WifiOff } from 'lucide-react';
 import type { ScannerEvent, ScannerPhoneStatus, ScannerScanInput } from '@eliza/contracts';
 import { scannerScanSchema } from '@eliza/contracts';
 import { api, ApiError } from './api';
@@ -8,6 +8,7 @@ import { Button } from './components/ui/button';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
 import { LanguageSwitcher } from './i18n/LanguageSwitcher';
 import { t, translateError, useLanguage } from './i18n';
+import { useScannerSound } from './use-scanner-sound';
 import './phone-scanner.css';
 const key = 'eliza:phone-scanner:mobile';
 let claimInFlight: { token: string; promise: Promise<{ credential: string }> } | undefined;
@@ -29,6 +30,7 @@ function readSaved() {
 }
 export function PhoneScannerPage() {
   useLanguage();
+  const sound = useScannerSound();
   const [visible, setVisible] = useState(document.visibilityState === 'visible');
   const [healthy, setHealthy] = useState(false);
   useEffect(() => {
@@ -69,6 +71,7 @@ export function PhoneScannerPage() {
     if (event.status === 'cancelled') lastSent.current = null;
     if (event.status === 'delivered' && confirmed.current !== event.id) {
       confirmed.current = event.id;
+      sound.play();
       navigator.vibrate?.(80);
       setError(undefined);
     }
@@ -257,6 +260,12 @@ export function PhoneScannerPage() {
             </p>
           </div>
         </div>
+        {credential && !ended && sound.supported && !sound.enabled && (
+          <Button type="button" variant="outline" onClick={() => void sound.enable()}>
+            <Volume2 size={18} />
+            {t('Enable scanner sound')}
+          </Button>
+        )}
         {credential && !ended && (
           <CameraBarcodeScanner
             alwaysOn
