@@ -49,8 +49,6 @@ test('product photos upload, survive reload, and can be removed', async ({ page 
   await expect(page).toHaveURL(/\/products\/[^/]+$/);
   await expect(page.getByRole('button', { name: 'Edit product', exact: true })).toBeVisible();
   await page.reload();
-  await expect(
-    page.getByRole('heading', { name: 'General information', exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Basic information', exact: true })).toBeVisible();
   await expect(page.locator('.product-details-photo img')).toHaveCount(0);
 });

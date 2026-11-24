@@ -127,9 +127,7 @@ test('catalog cards retain search, editing, barcode printing and read-only acces
   await yogurt.getByRole('link', { name: 'View Yogurt', exact: true }).click();
   await expect(page).toHaveURL('/products/' + products[0].id);
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(
-    page.getByRole('heading', { name: 'General information', exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Basic information', exact: true })).toBeVisible();
   await expect(page.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('70.00');
   await expect(page.locator('.product-details-page')).toContainText('15.71%');
   await expect(page.locator('.product-supplier-card')).toHaveCount(2);
@@ -159,9 +157,7 @@ test('catalog cards retain search, editing, barcode printing and read-only acces
   await expect(page.getByRole('button', { name: 'Edit product', exact: true })).toBeVisible();
   await expect(page.getByLabel('Selling price (optional)', { exact: true })).toHaveValue('75.00');
   await page.reload();
-  await expect(
-    page.getByRole('heading', { name: 'General information', exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Basic information', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'Back to products', exact: true }).click();
   await expect(yogurt.locator('.catalog-card-price')).toContainText('75.00');
   await yogurt.getByRole('button', { name: products[0].barcodes[0], exact: true }).click();

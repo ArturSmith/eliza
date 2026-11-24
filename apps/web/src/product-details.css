@@ -30,26 +30,14 @@
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
   gap: 24px;
-  align-items: stretch;
+  align-items: start;
 }
-/* Share rows between columns so card edges stay aligned as content changes. */
 .product-details-main,
 .product-details-aside {
-  display: contents;
-}
-.product-details-main > * {
-  grid-column: 1;
-}
-.product-details-aside > * {
-  grid-column: 2;
-}
-.product-details-general,
-.product-details-gallery {
-  grid-row: 1;
-}
-.product-details-pricing,
-.product-details-actions {
-  grid-row: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-width: 0;
 }
 .product-details-section {
   display: grid;
@@ -167,7 +155,7 @@
   }
   .product-details-main,
   .product-details-aside {
-    display: grid;
+    display: flex;
     gap: 24px;
     min-width: 0;
   }
@@ -508,27 +496,21 @@
   }
 }
 
-/* Editing has two equally wide information cards, stacked in the main column. */
 .product-details-editing .product-details-general {
-  grid-row: 1;
-  align-self: start;
   overflow: visible;
 }
-.product-details-editing .product-additional-information {
-  grid-column: 1;
-  grid-row: 2;
-}
-.product-details-editing .product-details-actions {
-  grid-row: 1;
-  align-self: start;
-}
-@media (max-width: 1000px) {
-  .product-details-editing .product-additional-information {
-    grid-column: auto;
-    grid-row: auto;
-  }
+.product-details-general .field:has(> select[name='unit']) {
+  grid-column: 1 / -1;
 }
 
-.product-details-editing .product-details-general .field:has(> select[name='unit']) {
-  grid-column: 1 / -1;
+.product-details-navigation .product-status-indicator {
+  margin-left: auto;
+}
+@media (max-width: 600px) {
+  .product-details-navigation nav {
+    order: 2;
+  }
+  .product-details-navigation .product-status-indicator {
+    order: 1;
+  }
 }

@@ -138,3 +138,10 @@
   border-color: transparent;
   background: var(--page);
 }
+
+.product-size-unit-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

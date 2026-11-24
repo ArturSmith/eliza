@@ -96,8 +96,8 @@ test('creates and reopens a product with unknown prices, then saves real prices'
   const actions = await page.locator('.product-details-actions').boundingBox();
   const card = await batchesCard.boundingBox();
   const suppliers = await page.locator('.product-details-suppliers').boundingBox();
-  expect(card!.y).toBeGreaterThanOrEqual(actions!.y + actions!.height);
-  expect(suppliers!.y).toBeGreaterThanOrEqual(card!.y + card!.height);
+  expect(suppliers!.y - actions!.y - actions!.height).toBeCloseTo(24, 0);
+  expect(card!.y).toBeGreaterThanOrEqual(suppliers!.y + suppliers!.height);
   await batchesCard.getByRole('button', { name: /Show all/ }).click();
   await expect(batchRows).toHaveCount(3);
   await expect(batchesCard).toContainText('Cost is unknown');

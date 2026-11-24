@@ -1,4 +1,4 @@
-import { ProductAdditionalInformation } from './product-information';
+import { ProductAdditionalInformation, ProductStatusIndicator } from './product-information';
 import { ProductTermField } from './product-term-field';
 import { ProductSizeField } from './product-size-field';
 import { useProductOptions } from './product-options';
@@ -395,7 +395,10 @@ export function ProductForm({
     if (!result.success) {
       if (
         result.error.issues.some(
-          (issue) => !['name', 'category', 'unit'].includes(String(issue.path[0])),
+          (issue) =>
+            !['name', 'category', 'unit', 'brand', 'volume', 'description', 'barcodes'].includes(
+              String(issue.path[0]),
+            ),
         ) &&
         productAdditionalRef.current
       )
@@ -422,7 +425,10 @@ export function ProductForm({
   if (!initial && (profile.error || nextPlu.error))
     return <ErrorMessage error={profile.error ?? nextPlu.error} />;
   return (
-    <form ref={formRef} onSubmit={submit}>
+    <form ref={formRef} onSubmit={submit} className="product-entry-form">
+      <div className="product-entry-status">
+        <ProductStatusIndicator active={initial?.active ?? true} />
+      </div>
       {!initial && (
         <BarcodeLookup
           onBusyChange={setLookupBusy}
@@ -470,7 +476,7 @@ export function ProductForm({
           className="panel product-information-required"
           aria-labelledby="product-required-heading"
         >
-          <h2 id="product-required-heading">{t('Required information')}</h2>
+          <h2 id="product-required-heading">{t('Basic information')}</h2>
           <Field label={t('Product name')}>
             <input
               name="name"
@@ -499,6 +505,48 @@ export function ProductForm({
                 </option>
               ))}
             </select>
+          </Field>
+          <div className="form-grid">
+            <ProductTermField
+              label={t('Brand (optional)')}
+              name="brand"
+              value={brand}
+              onChange={setBrand}
+              options={options.brands}
+              loading={options.isFetching}
+              disabled={mutation.isPending}
+            />
+            <ProductSizeField
+              label={t('Volume / size (optional)')}
+              value={volume}
+              onChange={setVolume}
+              disabled={mutation.isPending}
+            />
+          </div>
+          <Field label={t('Description (optional)')}>
+            <textarea
+              name="description"
+              defaultValue={initial?.description ?? prefill?.description ?? ''}
+              maxLength={2000}
+              rows={3}
+              placeholder={t('Additional details about this product')}
+            />
+          </Field>
+          <Field
+            label={t('Barcodes (optional)')}
+            hint={t(
+              'Add one per line, or separate with commas. Leave blank to generate a barcode.',
+            )}
+          >
+            <div className="barcode-input-with-camera">
+              <textarea
+                name="barcodes"
+                rows={2}
+                defaultValue={(initial?.barcodes ?? prefill?.barcodes)?.join('\n')}
+                placeholder={t('Scan or enter a barcode')}
+              />
+              <CameraBarcodeScanner onScan={(code) => fillField('barcodes', code, true)} />
+            </div>
           </Field>
         </section>
         <ProductAdditionalInformation detailsRef={productAdditionalRef}>
@@ -588,32 +636,6 @@ export function ProductForm({
               </Button>
             </div>
           )}
-          <div className="form-grid">
-            <ProductTermField
-              label={t('Brand (optional)')}
-              name="brand"
-              value={brand}
-              onChange={setBrand}
-              options={options.brands}
-              loading={options.isFetching}
-              disabled={mutation.isPending}
-            />
-            <ProductSizeField
-              label={t('Volume / size (optional)')}
-              value={volume}
-              onChange={setVolume}
-              disabled={mutation.isPending}
-            />
-          </div>
-          <Field label={t('Description (optional)')}>
-            <textarea
-              name="description"
-              defaultValue={initial?.description ?? prefill?.description ?? ''}
-              maxLength={2000}
-              rows={3}
-              placeholder={t('Additional details about this product')}
-            />
-          </Field>
           <Field label={t('SKU')}>
             <input
               name="sku"
@@ -659,22 +681,6 @@ export function ProductForm({
             />
           </Field>
 
-          <Field
-            label={t('Barcodes (optional)')}
-            hint={t(
-              'Add one per line, or separate with commas. Leave blank to generate a barcode.',
-            )}
-          >
-            <div className="barcode-input-with-camera">
-              <textarea
-                name="barcodes"
-                rows={2}
-                defaultValue={(initial?.barcodes ?? prefill?.barcodes)?.join('\n')}
-                placeholder={t('Scan or enter a barcode')}
-              />
-              <CameraBarcodeScanner onScan={(code) => fillField('barcodes', code, true)} />
-            </div>
-          </Field>
           {!initial && (
             <p className="muted">
               {t('Codes are suggested automatically. The next PLU is confirmed when you save.')}

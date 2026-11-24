@@ -1,4 +1,5 @@
 .product-additional-information {
+  width: 100%;
   padding: 0;
   min-width: 0;
   align-self: start;
@@ -89,5 +90,72 @@
 @media (prefers-reduced-motion: reduce) {
   .product-additional-information > summary svg {
     transition: none;
+  }
+}
+
+.product-lookup-panel {
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  overflow: visible;
+}
+.product-lookup-panel .barcode-lookup-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 17px;
+  line-height: 1.4;
+  font-weight: 600;
+}
+.product-lookup-panel .barcode-lookup {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  min-width: 0;
+}
+.product-lookup-panel .phone-scanner-control {
+  margin-top: 0;
+}
+.product-entry-form {
+  display: grid;
+  gap: 24px;
+}
+.product-entry-status {
+  display: flex;
+  justify-content: flex-end;
+}
+.product-status-indicator {
+  --product-status-color: #2e7d53;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--page);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  color: var(--text);
+  flex-shrink: 0;
+}
+.product-status-indicator.is-inactive {
+  --product-status-color: #b64242;
+}
+.product-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--product-status-color);
+  flex-shrink: 0;
+}
+@media (max-width: 600px) {
+  .product-lookup-panel {
+    padding: 18px;
+  }
+  .product-entry-form {
+    gap: 16px;
   }
 }

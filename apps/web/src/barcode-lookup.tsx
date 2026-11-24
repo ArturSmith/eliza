@@ -1,6 +1,6 @@
 import { PhoneScannerControl } from './phone-scanner';
 import { t, useLanguage } from './i18n';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { Product } from '@eliza/contracts';
 import { api } from './api';
 import { Button } from './components/ui/button';
@@ -30,6 +30,7 @@ export function BarcodeLookup({
   onExisting: (product: Product) => void;
 }) {
   useLanguage();
+  const titleId = useId();
   const [barcode, setBarcode] = useState('');
   const [result, setResult] = useState<Result>();
   const [busy, setBusy] = useState(false);
@@ -60,15 +61,11 @@ export function BarcodeLookup({
     return true;
   }
   return (
-    <div className="barcode-lookup-wrap">
-      <p id="barcode-lookup-title" className="barcode-lookup-title">
-        {t('Find product by barcode')}
-      </p>
-      <fieldset
-        disabled={busy || disabled}
-        className="barcode-lookup"
-        aria-labelledby="barcode-lookup-title"
-      >
+    <section className="panel barcode-lookup-wrap product-lookup-panel" aria-labelledby={titleId}>
+      <h2 id={titleId} className="barcode-lookup-title">
+        {t('Find product by barcode in open data')}
+      </h2>
+      <fieldset disabled={busy || disabled} className="barcode-lookup" aria-labelledby={titleId}>
         <Field
           label={t('Scan or enter barcode')}
           hint={t(
@@ -192,7 +189,7 @@ export function BarcodeLookup({
         )}
       </fieldset>
       <PhoneScannerControl
-        label={t('Find product by barcode')}
+        label={t('Find product by barcode in open data')}
         disabled={disabled || busy}
         onScan={(code) => {
           if (disabled || busy || lookingUp.current) return false;
@@ -200,6 +197,6 @@ export function BarcodeLookup({
           return lookup(code);
         }}
       />
-    </div>
+    </section>
   );
 }

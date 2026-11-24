@@ -80,7 +80,9 @@ export function ProductSizeField({
         />
         <div className={'product-size-unit' + (readOnly ? ' is-readonly' : '')}>
           <span className="product-size-unit-value" aria-hidden="true">
-            {size.unit ? t(size.unit) : t('Choose unit')}
+            <span className="product-size-unit-label">
+              {size.unit ? t(size.unit) : t('Choose unit')}
+            </span>
             {!readOnly && <ChevronDown size={16} />}
           </span>
           <select

@@ -1,5 +1,5 @@
 import { PhoneScannerControl } from './phone-scanner';
-import { ProductAdditionalInformation } from './product-information';
+import { ProductAdditionalInformation, ProductStatusIndicator } from './product-information';
 import { ProductTermField } from './product-term-field';
 import { ProductSizeField } from './product-size-field';
 import { useProductOptions } from './product-options';
@@ -211,7 +211,17 @@ function ProductDetailsForm({
     if (!parsed.success) {
       if (
         parsed.error.issues.some(
-          (issue) => !['name', 'category', 'unit'].includes(String(issue.path[0])),
+          (issue) =>
+            ![
+              'name',
+              'category',
+              'unit',
+              'brand',
+              'volume',
+              'description',
+              'barcodes',
+              'variants',
+            ].includes(String(issue.path[0])),
         ) &&
         additionalRef.current
       )
@@ -272,7 +282,7 @@ function ProductDetailsForm({
   const activePhoto = draft.images[Math.min(selectedPhoto, Math.max(0, draft.images.length - 1))];
   const controls = { form: formId, readOnly: locked, disabled: busy };
 
-  const requiredFields = (
+  const basicFields = (
     <>
       <div className="product-detail-field-wide">
         <Field label={t('Product name')}>
@@ -327,10 +337,27 @@ function ProductDetailsForm({
           ))}
         </select>
       </Field>
-    </>
-  );
-  const additionalFields = (
-    <>
+      <ProductTermField
+        label={t('Brand (optional)')}
+        name="brand"
+        value={draft.brand}
+        onChange={(value) => change('brand', value)}
+        options={options.brands}
+        loading={options.isFetching}
+        form={formId}
+        readOnly={locked}
+        disabled={busy}
+      />
+      {!multiple && (
+        <ProductSizeField
+          label={t('Volume / size (optional)')}
+          value={draft.volume}
+          onChange={(value) => change('volume', value)}
+          form={formId}
+          readOnly={locked}
+          disabled={busy}
+        />
+      )}
       <div className="product-detail-field-wide">
         <Field label={t('Description (optional)')}>
           <textarea
@@ -343,11 +370,6 @@ function ProductDetailsForm({
           />
         </Field>
       </div>
-      <Field label={t('Status')}>
-        <output className="product-detail-value">
-          {product ? (product.active ? t('Active') : t('Inactive')) : '—'}
-        </output>
-      </Field>
       {!multiple && (
         <>
           <div className="product-detail-field-wide">
@@ -400,6 +422,14 @@ function ProductDetailsForm({
               />
             )}
           </div>
+        </>
+      )}
+    </>
+  );
+  const additionalFields = (
+    <>
+      {!multiple && (
+        <>
           <Field label={t('SKU')} hint={editing ? t('Leave blank to generate a code.') : undefined}>
             <input
               {...controls}
@@ -422,27 +452,6 @@ function ProductDetailsForm({
             />
           </Field>
         </>
-      )}
-      <ProductTermField
-        label={t('Brand (optional)')}
-        name="brand"
-        value={draft.brand}
-        onChange={(value) => change('brand', value)}
-        options={options.brands}
-        loading={options.isFetching}
-        form={formId}
-        readOnly={locked}
-        disabled={busy}
-      />
-      {!multiple && (
-        <ProductSizeField
-          label={t('Volume / size (optional)')}
-          value={draft.volume}
-          onChange={(value) => change('volume', value)}
-          form={formId}
-          readOnly={locked}
-          disabled={busy}
-        />
       )}
     </>
   );
@@ -832,6 +841,7 @@ function ProductDetailsForm({
           )}
           <strong>{creating ? t('New product') : product!.name}</strong>
         </nav>
+        <ProductStatusIndicator active={product?.active ?? true} />
       </div>
       {creating && created.length > 0 && (
         <p role="status" className="notice">
@@ -846,26 +856,25 @@ function ProductDetailsForm({
       <form id={formId} onSubmit={submit} hidden />
       <div className={'product-details-columns' + (editing ? ' product-details-editing' : '')}>
         <div className="product-details-main">
+          {barcodeLookup}
           <section
             className="panel product-details-section product-details-general"
             aria-labelledby="product-general-heading"
           >
-            <h1 id="product-general-heading">
-              {t(editing ? 'Required information' : 'General information')}
-            </h1>
-            {barcodeLookup}
+            <h1 id="product-general-heading">{t('Basic information')}</h1>
             <div className="product-details-fields">
-              {requiredFields}
+              {basicFields}
               {!editing && additionalFields}
             </div>
-            {!editing && variantFields}
+            {variantFields}
           </section>
           {editing && (
             <ProductAdditionalInformation detailsRef={additionalRef} resetKey={resetVersion}>
-              <div className="product-additional-group">
-                <div className="product-details-fields">{additionalFields}</div>
-                {variantFields}
-              </div>
+              {!multiple && (
+                <div className="product-additional-group">
+                  <div className="product-details-fields">{additionalFields}</div>
+                </div>
+              )}
               <section
                 className="product-additional-group"
                 aria-labelledby="product-pricing-heading"
@@ -982,7 +991,6 @@ function ProductDetailsForm({
               )}
             </section>
           )}
-          {canReadCosts && product && <ProductBatchCosts key={product.id} product={product} />}
           {canReadSuppliers &&
             (product ? (
               <div className="product-details-suppliers">
@@ -996,6 +1004,7 @@ function ProductDetailsForm({
                 </p>
               </section>
             ))}
+          {canReadCosts && product && <ProductBatchCosts key={product.id} product={product} />}
         </aside>
       </div>
       <ProductBarcode

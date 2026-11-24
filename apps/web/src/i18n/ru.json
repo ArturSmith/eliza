@@ -2949,5 +2949,9 @@
   "Move the barcode away before scanning again.": "Уберите штрихкод из кадра перед повторным сканированием.",
   "Use a valid product barcode.": "Введите корректный штрихкод товара.",
   "Select a variant barcode field, then scan it with your phone.": "Выберите поле штрихкода нужного варианта и отсканируйте код телефоном.",
-  "Connection QR expired. Refresh it on this laptop.": "QR подключения истёк. Обновите его на ноутбуке."
+  "Connection QR expired. Refresh it on this laptop.": "QR подключения истёк. Обновите его на ноутбуке.",
+  "Basic information": "Базовая информация",
+  "Find product by barcode in open data": "Найти товар по штрихкоду в открытых данных",
+  "Status: active": "Статус: активен",
+  "Status: inactive": "Статус: неактивен"
 }

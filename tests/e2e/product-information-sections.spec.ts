@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 
-test('required fields and collapsed additional information preserve data across creation, editing and supplier creation', async ({
+test('basic fields and collapsed additional information preserve data across creation, editing and supplier creation', async ({
   page,
 }) => {
   const headers = { Origin: 'http://localhost:5174', 'X-Eliza-Request': '1' };
@@ -20,11 +20,33 @@ test('required fields and collapsed additional information preserve data across 
   await page.goto('/products/new');
   const additional = page.locator('.product-additional-information'),
     summary = additional.locator('summary');
-  await expect(
-    page.getByRole('heading', { name: 'Required information', exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Basic information', exact: true })).toBeVisible();
   await expect(additional).not.toHaveAttribute('open');
-  await expect(page.getByLabel('Brand (optional)', { exact: true })).toBeHidden();
+  const lookup = page.getByRole('region', {
+    name: 'Find product by barcode in open data',
+    exact: true,
+  });
+  await expect(lookup).toBeVisible();
+  await expect(page.locator('.product-details-general .barcode-lookup-wrap')).toHaveCount(0);
+  const lookupBox = await lookup.boundingBox(),
+    basicBox = await page.locator('.product-details-general').boundingBox();
+  expect(basicBox!.y - lookupBox!.y - lookupBox!.height).toBeCloseTo(24, 0);
+  for (const name of [
+    'Brand (optional)',
+    'Volume / size (optional)',
+    'Description (optional)',
+    'Barcodes (optional)',
+  ])
+    await expect(
+      page.locator('.product-details-general').getByLabel(name, { exact: true }),
+    ).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Product status', exact: true })).toHaveText(
+    'Status: active',
+  );
+  await page.getByLabel('Product name', { exact: true }).waitFor({ state: 'visible' });
+  await page.screenshot({ path: '/private/tmp/eliza-product-basic-create.png', fullPage: true });
+
+  await expect(page.getByLabel('Brand (optional)', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Selling price (optional)', { exact: true })).toBeHidden();
   await page.getByLabel('Product name', { exact: true }).fill('Basic bread');
   await page.getByLabel('Category', { exact: true }).fill('Bakery');
@@ -68,6 +90,26 @@ test('required fields and collapsed additional information preserve data across 
   });
   await expect(additional).not.toHaveAttribute('open');
   await page.goto('/products/' + detailed.id);
+  const badge = page.getByRole('status', { name: 'Product status', exact: true });
+  await expect(badge).toHaveText('Status: active');
+  await expect(page.locator('.product-details-navigation .product-status-indicator')).toHaveCount(
+    1,
+  );
+  await expect(page.locator('.product-details-columns .product-status-indicator')).toHaveCount(0);
+  const actions = await page.locator('.product-details-actions').boundingBox(),
+    suppliers = await page.locator('.product-details-suppliers').boundingBox();
+  expect(suppliers!.y - actions!.y - actions!.height).toBeCloseTo(24, 0);
+  await page.getByRole('button', { name: 'Deactivate', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+  await expect(badge).toHaveText('Status: inactive');
+  await expect(badge).toHaveClass(/is-inactive/);
+  expect(
+    await badge.locator('.product-status-dot').evaluate((e) => getComputedStyle(e).backgroundColor),
+  ).toBe('rgb(182, 66, 66)');
+  await page.getByRole('button', { name: 'Activate', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+  await expect(badge).toHaveText('Status: active');
+
   await page.getByRole('button', { name: 'Edit product', exact: true }).click();
   await expect(additional).not.toHaveAttribute('open');
   await page.getByLabel('Product name', { exact: true }).fill('Renamed bread');
@@ -102,6 +144,10 @@ test('required fields and collapsed additional information preserve data across 
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
+  const mobileActions = await page.locator('.product-details-actions').boundingBox(),
+    mobileSuppliers = await page.locator('.product-details-suppliers').boundingBox();
+  expect(mobileSuppliers!.y - mobileActions!.y - mobileActions!.height).toBeCloseTo(16, 0);
+
   await page.screenshot({
     path: '/private/tmp/eliza-product-information-collapsed.png',
     fullPage: true,
@@ -126,7 +172,7 @@ test('required fields and collapsed additional information preserve data across 
   await page.getByRole('button', { name: 'Add volume variant', exact: true }).click();
   await summary.click();
   await page.getByRole('button', { name: 'Create 2 products', exact: true }).click();
-  await expect(additional).toHaveAttribute('open');
+  await expect(additional).not.toHaveAttribute('open');
   await expect(page.getByLabel('Volume 1', { exact: true })).toBeVisible();
   const supplier = await post('/suppliers', {
     requestId: crypto.randomUUID(),

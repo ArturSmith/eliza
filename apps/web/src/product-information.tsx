@@ -30,3 +30,17 @@ export function ProductAdditionalInformation({
     </details>
   );
 }
+
+export function ProductStatusIndicator({ active }: { active: boolean }) {
+  useLanguage();
+  return (
+    <span
+      className={'product-status-indicator ' + (active ? 'is-active' : 'is-inactive')}
+      role="status"
+      aria-label={t('Product status')}
+    >
+      <span className="product-status-dot" aria-hidden="true" />
+      {t(active ? 'Status: active' : 'Status: inactive')}
+    </span>
+  );
+}
