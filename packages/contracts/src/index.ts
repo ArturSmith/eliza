@@ -138,6 +138,8 @@ export const productSchema = z.object({
 export const adjustmentSchema = z.object({
   productId: z.uuid(),
   unitCost: money.nullable().optional(),
+  sellingPrice: money.optional(),
+  expectedSellingPrice: money.nullable().optional(),
   supplierId: z.uuid().optional(),
   quantity: quantity.refine(
     (v) => isQuantity(v) && toScaled(v, 3) !== 0n,

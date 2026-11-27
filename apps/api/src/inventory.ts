@@ -5,6 +5,7 @@ import {
   ConflictException,
   Controller,
   Get,
+  ForbiddenException,
   Module,
   NotFoundException,
   Param,
@@ -131,6 +132,8 @@ export class InventoryController {
   ) {
     const body = parse(adjustmentSchema, input);
     const { user, store, device } = req.context;
+    if (body.sellingPrice !== undefined && !user.permissions.includes('catalog.write'))
+      throw new ForbiddenException('You cannot change selling prices.');
     const requestHash = hash(JSON.stringify({ ...body, employeeId: user.id, deviceId: device.id }));
     return this.database.db.transaction(async (tx) => {
       await tx.execute(
@@ -158,6 +161,19 @@ export class InventoryController {
       if (!product.active)
         throw new BadRequestException('Activate this product before changing its stock.');
       const change = toScaled(body.quantity, 3);
+      if (body.sellingPrice !== undefined) {
+        if (change <= 0n)
+          throw new BadRequestException('Selling price can only be set when adding stock.');
+        if (
+          body.expectedSellingPrice === undefined ||
+          (body.expectedSellingPrice === null || product.price === null
+            ? body.expectedSellingPrice !== product.price
+            : toScaled(body.expectedSellingPrice, 2) !== toScaled(product.price, 2))
+        )
+          throw new ConflictException(
+            'The selling price changed. Refresh the page and review the current price.',
+          );
+      }
       if (['piece', 'pack', 'box'].includes(product.unit) && change % 1000n !== 0n)
         throw new BadRequestException('This product needs a whole-number quantity.');
       if (['damaged', 'expired', 'lost', 'internal_use'].includes(body.reason) && change > 0n)
@@ -226,7 +242,13 @@ export class InventoryController {
             ON CONFLICT(supplier_id,product_id) DO NOTHING`);
         }
       }
-      await tx.update(products).set({ stock: balance }).where(eq(products.id, product.id));
+      await tx
+        .update(products)
+        .set({
+          stock: balance,
+          ...(body.sellingPrice !== undefined ? { price: body.sellingPrice } : {}),
+        })
+        .where(eq(products.id, product.id));
       const [movement] = await tx
         .insert(movements)
         .values({
@@ -257,6 +279,12 @@ export class InventoryController {
           reason: body.reason,
           notes: body.notes,
           movementId: movement.id,
+          ...(body.sellingPrice !== undefined
+            ? {
+                previousSellingPrice: product.price,
+                sellingPrice: body.sellingPrice,
+              }
+            : {}),
           ...(change > 0n
             ? {
                 unitCost: body.unitCost === undefined ? product.cost : body.unitCost,

@@ -2974,5 +2974,8 @@
   "Period and filters": "Период и фильтры",
   "Sales totals": "Итоги продаж",
   "Expense totals": "Итоги расходов",
-  "Expense history": "История расходов"
+  "Expense history": "История расходов",
+  "The new price applies to future sales of this product.": "Новая цена применяется к будущим продажам этого товара.",
+  "Selling price can only be set when adding stock.": "Цену продажи можно задать только при добавлении остатков.",
+  "The selling price changed. Refresh the page and review the current price.": "Цена продажи изменилась. Обновите страницу и проверьте текущую цену."
 }

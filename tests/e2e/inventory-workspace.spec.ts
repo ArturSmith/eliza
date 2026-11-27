@@ -69,14 +69,21 @@ test('four stock actions lead to directed forms, counts and traceable history', 
     .getByLabel('Supplier', { exact: true })
     .selectOption((await deliverySupplier.json()).id);
   await form.getByLabel('Cost per unit for this stock').fill('59');
+  await expect(form).toContainText('Current selling price:');
+  await form.getByLabel('New selling price incl. tax (optional)', { exact: true }).fill('89,50');
   await form.getByLabel('Notes').fill('Shelf arrival');
   await form.getByRole('button', { name: 'Add stock', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Stock operation recorded' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Stock operation recorded' })).toContainText(
     '5 piece',
   );
+  const priced = await (await page.request.get('/api/products')).json();
+  expect(priced.find((p: { id: string }) => p.id === product.id).price).toBe('89.50');
   await page.goto('/inventory/remove');
   form = page.locator('.inventory-operation-panel');
+  await expect(
+    form.getByLabel('New selling price incl. tax (optional)', { exact: true }),
+  ).toHaveCount(0);
   await form.getByRole('button', { name: 'Select a product', exact: true }).click();
   await page.getByRole('option', { name: /Stock yogurt/ }).click();
   await expect(form.getByLabel('Reason', { exact: true }).locator('option')).toHaveText([

@@ -4,6 +4,8 @@ Product cards describe the SKU and its optional selling price. The current produ
 
 Each purchase receipt records its own unit cost and creates immutable cost layers in `stock_batches`. Manual deliveries record supplier, quantity and explicit `unitCost` through `/inventory/adjustments`. Their supplier link is created without inventing a supplier quotation or changing an existing quote.
 
+Opening balances and other positive manual stock adjustments can also set an optional selling price, including tax. The current price is shown in the form; a blank field preserves it. Price changes require `catalog.write` and the reviewed `expectedSellingPrice` (including null for an unpriced product). The server locks the product, rejects a stale price, and saves stock, the incoming cost layer and the new catalog price in one idempotent transaction. The audit records the old and new selling prices. Removing stock cannot change the selling price, and retrying a completed adjustment never reapplies its price. Existing sale prices and cost snapshots stay unchanged. No migration is required.
+
 Opening balances record their own unit cost. Explicit `unitCost: null` means unknown; `unitCost: "0"` means a known, genuinely free acquisition. Unknown cost is stored as SQL NULL with `cost_source='unknown'`. It is never replaced with a later catalog or receipt price. Inventory-count surpluses with no acquisition evidence also create unknown-cost layers.
 
 The product page shows read-only average cost of remaining stock, stock value and the last purchase, plus a batch breakdown. If any remaining layer has unknown cost, its full valuation and average are unavailable, and the unknown quantity is displayed. Supplier quotations remain separate from actual costs.

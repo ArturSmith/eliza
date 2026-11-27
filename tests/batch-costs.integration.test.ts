@@ -590,4 +590,202 @@ describe.sequential('batch purchase costs', () => {
       (await manager.request(`/inventory/products/${id}/batches`)).body.batches[0].unitCost,
     ).toBe('3.20');
   });
+  it('records opening stock and a selling price atomically, with stable retries and historical sale snapshots', async () => {
+    const created = await manager.request('/products', {
+      name: 'Opening retail price',
+      sku: 'OPEN-RETAIL',
+      category: 'Food',
+      unit: 'piece',
+      price: null,
+      taxRate: '0',
+      minStock: '0',
+      barcodes: [],
+    });
+    expect(created.status).toBe(201);
+    const id = created.body.id;
+    const command = {
+      productId: id,
+      requestId: crypto.randomUUID(),
+      quantity: '5',
+      unitCost: '4',
+      reason: 'opening_balance',
+      sellingPrice: '10',
+      expectedSellingPrice: null,
+    };
+    const first = await manager.request('/inventory/adjustments', command);
+    expect(first.status).toBe(201);
+    const productState = async () =>
+      (await db.pool.query('SELECT stock::text,price::text FROM products WHERE id=$1', [id]))
+        .rows[0];
+    expect(await productState()).toEqual({ stock: '5.000', price: '10.00' });
+    const sold = await register.request(
+      '/pos/sales',
+      sale({
+        lines: [{ productId: id, quantity: '1', expectedPrice: '10', expectedTaxRate: '0' }],
+        payment: { method: 'cash', tendered: '10' },
+      }),
+    );
+    expect(sold.status, JSON.stringify(sold.body)).toBe(201);
+    const saleSnapshot = async () =>
+      (
+        await db.pool.query(
+          'SELECT price::text,cost_total::text FROM sale_items WHERE sale_id=$1',
+          [sold.body.id],
+        )
+      ).rows[0];
+    expect(await saleSnapshot()).toMatchObject({ price: '10.00', cost_total: '4.00' });
+    const changed = await manager.request('/inventory/adjustments', {
+      productId: id,
+      requestId: crypto.randomUUID(),
+      quantity: '2',
+      unitCost: '5',
+      reason: 'other',
+      sellingPrice: '12',
+      expectedSellingPrice: '10',
+    });
+    expect(changed.status).toBe(201);
+    expect(await productState()).toEqual({ stock: '6.000', price: '12.00' });
+    expect((await manager.request('/inventory/adjustments', command)).body.id).toBe(first.body.id);
+    expect(await productState()).toEqual({ stock: '6.000', price: '12.00' });
+    expect(await saleSnapshot()).toMatchObject({ price: '10.00', cost_total: '4.00' });
+    expect(
+      (
+        await db.pool.query(
+          'SELECT unit_cost::text FROM stock_batches WHERE product_id=$1 ORDER BY created_at,id',
+          [id],
+        )
+      ).rows.map((r) => r.unit_cost),
+    ).toEqual(['4.00', '5.00']);
+    const audit = (
+      await db.pool.query(
+        "SELECT details FROM audits WHERE entity_id=$1 AND action='Stock adjusted' ORDER BY created_at",
+        [id],
+      )
+    ).rows[0].details;
+    expect(audit).toMatchObject({ previousSellingPrice: null, sellingPrice: '10', unitCost: '4' });
+    expect(
+      (
+        await manager.request('/inventory/adjustments', {
+          productId: id,
+          requestId: crypto.randomUUID(),
+          quantity: '1',
+          unitCost: null,
+          reason: 'other',
+        })
+      ).status,
+    ).toBe(201);
+    expect(await productState()).toEqual({ stock: '7.000', price: '12.00' });
+  });
+
+  it('rejects stale, invalid and outgoing price changes without partial stock or price writes', async () => {
+    const id = (
+      await manager.request('/products', {
+        name: 'Guarded stock price',
+        sku: 'GUARDED-PRICE',
+        category: 'Food',
+        unit: 'piece',
+        price: '10',
+        taxRate: '0',
+        minStock: '0',
+        barcodes: [],
+      })
+    ).body.id;
+    const command = {
+      productId: id,
+      requestId: crypto.randomUUID(),
+      quantity: '2',
+      unitCost: '4',
+      reason: 'opening_balance',
+      sellingPrice: '12',
+      expectedSellingPrice: '9',
+    };
+    expect((await manager.request('/inventory/adjustments', command)).status).toBe(409);
+    const { expectedSellingPrice, ...noExpected } = command;
+    expect((await manager.request('/inventory/adjustments', noExpected)).status).toBe(409);
+    for (const sellingPrice of ['-1', '1.999', '', null])
+      expect(
+        (
+          await manager.request('/inventory/adjustments', {
+            ...command,
+            expectedSellingPrice: '10',
+            sellingPrice,
+          })
+        ).status,
+      ).toBe(400);
+    expect(
+      (
+        await manager.request('/inventory/adjustments', {
+          ...command,
+          expectedSellingPrice: '10',
+          quantity: '-1',
+          reason: 'other',
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (await db.pool.query('SELECT stock::text,price::text FROM products WHERE id=$1', [id]))
+        .rows[0],
+    ).toEqual({ stock: '0.000', price: '10.00' });
+    expect(
+      (await db.pool.query('SELECT id FROM stock_batches WHERE product_id=$1', [id])).rowCount,
+    ).toBe(0);
+    expect(
+      (await db.pool.query('SELECT id FROM movements WHERE product_id=$1', [id])).rowCount,
+    ).toBe(0);
+  });
+
+  it('requires catalog write permission for price changes but still allows stock-only operations', async () => {
+    const id = (
+      await manager.request('/products', {
+        name: 'Limited price permissions',
+        sku: 'LIMITED-PRICE',
+        category: 'Food',
+        unit: 'piece',
+        price: '10',
+        taxRate: '0',
+        minStock: '0',
+        barcodes: [],
+      })
+    ).body.id;
+    const role = (await manager.request('/team/roles')).body.find((r: any) => r.name === 'Owner');
+    const originalPermissions = (
+      await db.pool.query('SELECT permissions FROM roles WHERE id=$1', [role.id])
+    ).rows[0].permissions;
+    await db.pool.query('UPDATE roles SET permissions=$2 WHERE id=$1', [
+      role.id,
+      JSON.stringify(originalPermissions.filter((p: string) => p !== 'catalog.write')),
+    ]);
+    try {
+      const command = {
+        productId: id,
+        requestId: crypto.randomUUID(),
+        quantity: '2',
+        unitCost: '4',
+        reason: 'opening_balance',
+      };
+      expect(
+        (
+          await manager.request('/inventory/adjustments', {
+            ...command,
+            sellingPrice: '12',
+            expectedSellingPrice: '10',
+          })
+        ).status,
+      ).toBe(403);
+      expect(
+        (await db.pool.query('SELECT stock::text,price::text FROM products WHERE id=$1', [id]))
+          .rows[0],
+      ).toEqual({ stock: '0.000', price: '10.00' });
+      expect((await manager.request('/inventory/adjustments', command)).status).toBe(201);
+      expect(
+        (await db.pool.query('SELECT stock::text,price::text FROM products WHERE id=$1', [id]))
+          .rows[0],
+      ).toEqual({ stock: '2.000', price: '10.00' });
+    } finally {
+      await db.pool.query('UPDATE roles SET permissions=$2 WHERE id=$1', [
+        role.id,
+        JSON.stringify(originalPermissions),
+      ]);
+    }
+  });
 });

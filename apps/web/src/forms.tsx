@@ -43,6 +43,7 @@ import { Dialog } from './components/ui/dialog';
 import { prepareProductImage } from './product-image';
 import { BarcodeLookup } from './barcode-lookup';
 import { CameraBarcodeScanner } from './camera-barcode-scanner';
+import { formatMoney } from './receipts';
 export function ErrorMessage({ error }: { error: unknown }) {
   useLanguage();
   return error ? (
@@ -904,11 +905,13 @@ export function AdjustmentForm({
   const [productId, setProductId] = useState(fixedProduct?.id ?? '');
   const session = useSession().data!;
   const canCost = session.user.permissions.includes('costs.read');
+  const canSetPrice = session.user.permissions.includes('catalog.write');
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState<AdjustmentInput['reason'] | ''>(
     direction === 'signed' ? (fixedProduct ? 'received' : 'opening_balance') : '',
   );
   const [unitCost, setUnitCost] = useState('');
+  const [sellingPrice, setSellingPrice] = useState('');
   const [costUnknown, setCostUnknown] = useState(false);
   const [supplierId, setSupplierId] = useState('');
   const incoming =
@@ -937,6 +940,7 @@ export function AdjustmentForm({
     }
     setProductId(matches[0].id);
     setUnitCost('');
+    setSellingPrice('');
     setCostUnknown(false);
     setSupplierId('');
     setRequestId(crypto.randomUUID());
@@ -944,8 +948,16 @@ export function AdjustmentForm({
     setError(null);
   }
   const mutation = useMutation({
-    mutationFn: (body: unknown) => api<StockAdjustmentResult>('/inventory/adjustments', body),
-    onSuccess: (movement) => {
+    mutationFn: (body: AdjustmentInput) =>
+      api<StockAdjustmentResult>('/inventory/adjustments', body),
+    onSuccess: (movement, body) => {
+      if (body.sellingPrice !== undefined) {
+        try {
+          localStorage.setItem(productCatalogUpdateKey, crypto.randomUUID());
+        } catch {
+          /* Device polling also refreshes checkout. */
+        }
+      }
       void refresh();
       if (onRecorded) onRecorded(movement);
       else onDone();
@@ -971,6 +983,12 @@ export function AdjustmentForm({
       ...(toScaled(signedQuantity, 3) > 0n
         ? {
             unitCost: costUnknown || !canCost ? null : unitCost.trim().replace(',', '.'),
+            ...(canSetPrice && selected && sellingPrice.trim()
+              ? {
+                  sellingPrice: sellingPrice.trim().replace(',', '.'),
+                  expectedSellingPrice: selected.price,
+                }
+              : {}),
             ...(reason === 'received' ? { supplierId } : {}),
           }
         : {}),
@@ -1022,6 +1040,7 @@ export function AdjustmentForm({
               onSelect={(id) => {
                 setProductId(id);
                 setUnitCost('');
+                setSellingPrice('');
                 setCostUnknown(false);
                 setSupplierId('');
                 setRequestId(crypto.randomUUID());
@@ -1128,6 +1147,29 @@ export function AdjustmentForm({
               </p>
             )}
           </>
+        )}
+        {incoming && canSetPrice && (
+          <Field
+            label={t('New selling price incl. tax (optional)')}
+            hint={[
+              selected
+                ? selected.price === null
+                  ? t('Selling price is not set for this product.')
+                  : t('Current selling price:') +
+                    ' ' +
+                    formatMoney(selected.price, session.store.currency)
+                : t('Select a product'),
+              t('Leave blank to keep the current selling price.'),
+              t('The new price applies to future sales of this product.'),
+            ].join(' ')}
+          >
+            <input
+              inputMode="decimal"
+              value={sellingPrice}
+              disabled={!selected}
+              onChange={(event) => setSellingPrice(event.target.value)}
+            />
+          </Field>
         )}
         <Field label={t('Notes')}>
           <textarea
