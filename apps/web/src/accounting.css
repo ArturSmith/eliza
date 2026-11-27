@@ -1,4 +1,8 @@
 .accounting-page,
+.accounting-summary,
+.accounting-profit-sections,
+.accounting-sales,
+.accounting-expenses,
 .accounting-breakdowns {
   display: grid;
   gap: 24px;
@@ -7,9 +11,56 @@
 .accounting-page > .page-heading {
   margin-bottom: 0;
 }
-.accounting-breakdowns {
-  margin-top: 24px;
+.accounting-page .accounting-card {
+  min-width: 0;
+  padding: 24px;
 }
+.accounting-page .accounting-card > :first-child {
+  margin-top: 0;
+}
+.accounting-page .accounting-card > :last-child {
+  margin-bottom: 0;
+}
+.accounting-page .accounting-card > h2,
+.accounting-page .accounting-card > h3,
+.accounting-page .panel-heading h2,
+.accounting-page .panel-heading h3 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  line-height: 1.4;
+}
+.accounting-page .panel-heading {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+}
+.accounting-page .panel-heading > :last-child {
+  margin-bottom: 0;
+}
+.accounting-page .expenses-filters,
+.accounting-page .expenses-filters .field {
+  margin-bottom: 0;
+}
+.accounting-page .panel-heading p {
+  line-height: 1.6;
+}
+.accounting-page .analytics-financial {
+  margin: 0;
+}
+.accounting-page .accounting-sales > .page-heading,
+.accounting-page .accounting-expenses > .page-heading {
+  margin: 0;
+}
+.accounting-page .expenses-summary {
+  margin: 0;
+}
+.accounting-page .expenses-note {
+  margin: 16px 0 0;
+}
+.accounting-page .expenses-pagination {
+  margin: 0;
+}
+
 .accounting-page .analytics-financial-metrics {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -47,9 +98,6 @@
   }
 }
 
-.accounting-expense-categories {
-  margin-top: 24px;
-}
 .accounting-expense-categories h3 {
   margin-bottom: 12px;
 }
@@ -77,9 +125,6 @@
 .accounting-sales {
   min-width: 0;
 }
-.accounting-sales > .page-heading {
-  margin-bottom: 16px;
-}
 .accounting-sales > .page-heading h2 {
   font-size: 22px;
 }
@@ -101,9 +146,6 @@
 }
 
 .accounting-loyalty {
-  margin-top: 28px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border);
   min-width: 0;
 }
 .accounting-loyalty > p {
@@ -188,5 +230,22 @@
   }
   .loyalty-financial-reconciliation dd {
     text-align: left;
+  }
+}
+
+@media (max-width: 600px) {
+  .accounting-page,
+  .accounting-summary,
+  .accounting-profit-sections,
+  .accounting-sales,
+  .accounting-expenses,
+  .accounting-breakdowns {
+    gap: 16px;
+  }
+  .accounting-page .accounting-card {
+    padding: 18px;
+  }
+  .accounting-page .panel-heading {
+    padding: 18px;
   }
 }

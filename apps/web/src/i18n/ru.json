@@ -2970,5 +2970,9 @@
   "Waiting for phone": "Ожидание телефона",
   "Manage scanner connection": "Управление подключением сканера",
   "Connect your phone here once, then scan into the selected field on any management page.": "Подключите телефон здесь один раз, затем сканируйте в выбранное поле на любой странице управления.",
-  "The connection belongs to this browser tab. Keep the scanner open on your phone.": "Подключение привязано к этой вкладке браузера. Держите сканер открытым на телефоне."
+  "The connection belongs to this browser tab. Keep the scanner open on your phone.": "Подключение привязано к этой вкладке браузера. Держите сканер открытым на телефоне.",
+  "Period and filters": "Период и фильтры",
+  "Sales totals": "Итоги продаж",
+  "Expense totals": "Итоги расходов",
+  "Expense history": "История расходов"
 }

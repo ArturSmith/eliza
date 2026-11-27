@@ -19,18 +19,20 @@ export function SalesHistorySection() {
   });
   return (
     <section className="accounting-sales" aria-labelledby="sales-history-heading">
-      <div className="page-heading">
+      <div className="panel panel-padding page-heading accounting-card">
         <div>
           <h2 id="sales-history-heading">{t('Sales history')}</h2>
           <p className="muted">
             {t('Completed receipts with the original prices, tax, and payment details.')}
           </p>
         </div>
+        <ReceiptSearch />
       </div>
-      <ReceiptSearch />
-      <h2 style={{ marginTop: 24, marginBottom: 16 }}>{t('Recent receipts')}</h2>
       <ErrorMessage error={query.error} />
       <section className="panel">
+        <div className="panel-heading">
+          <h3>{t('Recent receipts')}</h3>
+        </div>
         {query.isPending ? (
           <p className="panel-padding muted">{t('Loading sales…')}</p>
         ) : query.data?.rows.length ? (

@@ -26,7 +26,10 @@ export function LoyaltyFinancialsPanel({
   useLanguage();
   const money = (value: string) => formatMoney(value, currency);
   return (
-    <section className="accounting-loyalty" aria-label={t('Loyalty and profit')}>
+    <section
+      className="panel panel-padding accounting-card accounting-loyalty"
+      aria-label={t('Loyalty and profit')}
+    >
       <h3>{t('Loyalty and profit')}</h3>
       <p className="muted">
         {t(

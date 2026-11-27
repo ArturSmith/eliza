@@ -61,7 +61,7 @@ export function ExpensesSection() {
   });
   return (
     <section className="accounting-expenses" aria-labelledby="expenses-heading">
-      <div className="page-heading">
+      <div className="panel panel-padding page-heading accounting-card">
         <div>
           <h2 id="expenses-heading">{t('Expenses')}</h2>
           <p className="muted">
@@ -103,20 +103,26 @@ export function ExpensesSection() {
         </Field>
       </section>
       <ErrorMessage error={list.error} />
-      <div className="expenses-summary">
-        <div>
-          <span className="muted">{t('Total expenses in selected period')}</span>
-          <strong>{money(list.data?.total ?? '0')}</strong>
+      <section className="panel panel-padding accounting-card" aria-label={t('Expense totals')}>
+        <h3>{t('Expense totals')}</h3>
+        <div className="expenses-summary">
+          <div>
+            <span className="muted">{t('Total expenses in selected period')}</span>
+            <strong>{money(list.data?.total ?? '0')}</strong>
+          </div>
+          <div>
+            <span className="muted">{t('Entries')}</span>
+            <strong>{list.data?.count ?? 0}</strong>
+          </div>
         </div>
-        <div>
-          <span className="muted">{t('Entries')}</span>
-          <strong>{list.data?.count ?? 0}</strong>
-        </div>
-      </div>
-      <p className="muted expenses-note">
-        {t('Expense records do not change register cash or purchase payments.')}
-      </p>
+        <p className="muted expenses-note">
+          {t('Expense records do not change register cash or purchase payments.')}
+        </p>
+      </section>
       <section className="panel expenses-table">
+        <div className="panel-heading">
+          <h3>{t('Expense history')}</h3>
+        </div>
         <table>
           <thead>
             <tr>
