@@ -2977,5 +2977,15 @@
   "Expense history": "История расходов",
   "The new price applies to future sales of this product.": "Новая цена применяется к будущим продажам этого товара.",
   "Selling price can only be set when adding stock.": "Цену продажи можно задать только при добавлении остатков.",
-  "The selling price changed. Refresh the page and review the current price.": "Цена продажи изменилась. Обновите страницу и проверьте текущую цену."
+  "The selling price changed. Refresh the page and review the current price.": "Цена продажи изменилась. Обновите страницу и проверьте текущую цену.",
+  "Category (optional)": "Категория (необязательно)",
+  "Choosing a category selects all its products. You can adjust the selection below or choose products individually.": "При выборе категории отмечаются все её товары. Ниже можно изменить выбор или отметить товары по одному.",
+  "Select at most 500 products. Narrow your selection before creating the count.": "Можно выбрать не более 500 товаров. Уменьшите выбор перед созданием инвентаризации.",
+  "Start counting to unlock quantity entry. Stock changes only after finalization.": "Нажмите «Начать пересчёт», чтобы ввести фактическое количество. Остатки изменятся только после применения результатов.",
+  "Saved quantities: {saved} of {total} products.": "Сохранено количество: {saved} из {total} товаров.",
+  "Unsaved quantities — save before reviewing.": "Есть несохранённые количества — сохраните их перед проверкой.",
+  "Start counting first": "Сначала начните пересчёт",
+  "Enter zero or a positive quantity with at most three decimal places.": "Введите ноль или положительное количество — не более трёх знаков после запятой.",
+  "Enter the counted quantity for {product}, including zero.": "Укажите фактическое количество товара «{product}», включая ноль.",
+  "Enter a quantity for at least one product.": "Укажите количество хотя бы одного товара."
 }

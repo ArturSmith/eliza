@@ -1,6 +1,8 @@
 import { formatQuantity, quantityInputValue } from './quantity-format';
 import { countText, t, useLanguage, getLocale } from './i18n';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { normalizeCountQuantity } from './stock-count-quantities';
+import './stock-counts.css';
 import { useQuery } from '@tanstack/react-query';
 import { Search } from 'lucide-react';
 import { api, ApiError, refresh, useProducts, useSession } from './api';
@@ -172,16 +174,25 @@ function CreateCount({ done }: { done: (id: string) => void }) {
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
   const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('');
   const [ids, setIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>();
   const [payload, setPayload] = useState<Record<string, unknown>>();
+  const catalog = products.data ?? [];
+  const categories = [...new Set(catalog.map((p) => p.category))].sort((a, b) =>
+    a.localeCompare(b, getLocale()),
+  );
+  const categoryProducts = catalog.filter((p) => !category || p.category === category);
   const terms = search.trim().toLowerCase();
-  const matches = (products.data ?? []).filter((p) =>
-    [p.name, p.sku].some((v) => v.toLowerCase().includes(terms)),
+  const matches = categoryProducts.filter((p) =>
+    [p.name, p.sku, p.brand ?? '', p.volume ?? '', ...p.barcodes].some((value) =>
+      value.toLowerCase().includes(terms),
+    ),
   );
   async function submit() {
     setBusy(true);
+    setError(undefined);
     try {
       const body = payload ?? { requestId: crypto.randomUUID(), name, notes, productIds: ids };
       setPayload(body);
@@ -209,6 +220,30 @@ function CreateCount({ done }: { done: (id: string) => void }) {
         <Field label={t('Count notes')}>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
         </Field>
+        <Field
+          label={t('Category (optional)')}
+          hint={t(
+            'Choosing a category selects all its products. You can adjust the selection below or choose products individually.',
+          )}
+        >
+          <select
+            value={category}
+            disabled={products.isPending}
+            onChange={(event) => {
+              const next = event.target.value;
+              setCategory(next);
+              setSearch('');
+              if (next) setIds(catalog.filter((p) => p.category === next).map((p) => p.id));
+            }}
+          >
+            <option value="">{t('All categories')}</option>
+            {categories.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </Field>
         <div className="count-picker">
           <div className="count-picker-toolbar">
             <div className="search-box">
@@ -223,14 +258,7 @@ function CreateCount({ done }: { done: (id: string) => void }) {
             <Button
               type="button"
               variant="outline"
-              onClick={() =>
-                setIds(
-                  (products.data ?? [])
-                    .filter((p) => p.active)
-                    .slice(0, 500)
-                    .map((p) => p.id),
-                )
-              }
+              onClick={() => setIds(categoryProducts.filter((p) => p.active).map((p) => p.id))}
             >
               {t('Select all active ')}
             </Button>
@@ -243,8 +271,15 @@ function CreateCount({ done }: { done: (id: string) => void }) {
               {ids.length} {t(' of 500 products selected ')}
             </span>
           </div>
+          {ids.length > 500 && (
+            <p className="count-selection-warning" role="alert">
+              {t('Select at most 500 products. Narrow your selection before creating the count.')}
+            </p>
+          )}
           <div className="count-picker-list">
-            {matches.length ? (
+            {products.isPending ? (
+              <p className="count-picker-empty">{t('Loading products…')}</p>
+            ) : matches.length ? (
               matches.map((p) => (
                 <label key={p.id} className="count-picker-option">
                   <input
@@ -274,7 +309,7 @@ function CreateCount({ done }: { done: (id: string) => void }) {
       </fieldset>
       <ErrorMessage error={products.error ?? error} />
       <div className="form-actions">
-        <Button disabled={busy || !ids.length || ids.length > 500}>
+        <Button disabled={busy || products.isPending || !ids.length || ids.length > 500}>
           {busy ? t('Creating…') : payload ? t('Retry creation') : t('Create draft')}
         </Button>
       </div>
@@ -283,12 +318,20 @@ function CreateCount({ done }: { done: (id: string) => void }) {
 }
 function CountDetail({ id }: { id: string }) {
   useLanguage();
+  const root = useRef<HTMLElement>(null);
   const q = useQuery({
     queryKey: ['stock-count', id],
     queryFn: () => api<Count>('/stock-counts/' + id),
   });
+  useEffect(() => {
+    if (q.isSuccess) root.current?.scrollIntoView({ block: 'start' });
+  }, [id, q.isSuccess]);
   return (
-    <section className="panel panel-padding" style={{ marginTop: 24 }}>
+    <section
+      className="panel panel-padding stock-count-detail"
+      ref={root}
+      style={{ marginTop: 24 }}
+    >
       <ErrorMessage error={q.error} />
       {q.data ? (
         <CountEditor key={id + ':' + q.data.version} count={q.data} />
@@ -304,7 +347,9 @@ function CountEditor({ count }: { count: Count }) {
   const manage = session.user.permissions.includes('counts.manage'),
     finalize = session.user.permissions.includes('counts.finalize');
   const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(count.lines.map((l) => [l.product_id, quantityInputValue(l.counted_quantity ?? '')])),
+    Object.fromEntries(
+      count.lines.map((l) => [l.product_id, quantityInputValue(l.counted_quantity ?? '')]),
+    ),
   );
   const [error, setError] = useState<unknown>();
   const [busy, setBusy] = useState(false);
@@ -313,6 +358,50 @@ function CountEditor({ count }: { count: Count }) {
   const [reason, setReason] = useState('');
   const changed = count.lines.some((l) => l.stock_changed);
   const complete = ['finalized', 'cancelled'].includes(count.status);
+  const hasUnsavedQuantities = count.lines.some((line) => {
+    const raw = values[line.product_id] ?? '';
+    if (!raw.trim()) return line.counted_quantity !== null;
+    try {
+      return normalizeCountQuantity(raw, line.unit) !== line.counted_quantity;
+    } catch {
+      return true;
+    }
+  });
+  const savedCount = count.lines.filter((line) => line.counted_quantity !== null).length;
+  function saveQuantities() {
+    const lines: { productId: string; quantity: string }[] = [];
+    for (const line of count.lines) {
+      const raw = values[line.product_id] ?? '';
+      if (!raw.trim()) {
+        if (line.counted_quantity !== null) {
+          setError(
+            new Error(
+              t('Enter the counted quantity for {product}, including zero.', {
+                product: line.product_name,
+              }),
+            ),
+          );
+          return;
+        }
+        continue;
+      }
+      try {
+        lines.push({
+          productId: line.product_id,
+          quantity: normalizeCountQuantity(raw, line.unit),
+        });
+      } catch (cause) {
+        setError(new Error(line.product_name + ': ' + t((cause as Error).message)));
+        return;
+      }
+    }
+    if (!lines.length) {
+      setError(new Error(t('Enter a quantity for at least one product.')));
+      return;
+    }
+    void send('quantities', { lines });
+  }
+
   async function send(path: string, body: Record<string, unknown>) {
     setBusy(true);
     setError(undefined);
@@ -370,54 +459,22 @@ function CountEditor({ count }: { count: Count }) {
           </Button>
         </div>
       )}
-      <fieldset disabled={busy || !!pending}>
-        <div className="table-scroll">
-          <table aria-label={t('Count quantities')}>
-            <thead>
-              <tr>
-                <th>{t('Product')}</th>
-                <th>{t('System quantity')}</th>
-                <th>{t('Counted quantity')}</th>
-                <th>{t('Difference')}</th>
-                <th>{t('Counted by')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {count.lines.map((l) => (
-                <tr key={l.product_id}>
-                  <td>
-                    <strong>{l.product_name}</strong>
-                    <small>
-                      {l.sku} · {t(l.unit ?? '')}
-                    </small>
-                  </td>
-                  <td>{formatQuantity(l.system_quantity)}</td>
-                  <td>
-                    {count.status === 'counting' && manage ? (
-                      <input
-                        aria-label={t('Counted {value0}', { value0: l.product_name })}
-                        inputMode="decimal"
-                        style={{ minWidth: 110 }}
-                        value={values[l.product_id]}
-                        onChange={(e) => setValues({ ...values, [l.product_id]: e.target.value })}
-                      />
-                    ) : (
-                      (l.counted_quantity === null ? t('Not counted') : formatQuantity(l.counted_quantity))
-                    )}
-                  </td>
-                  <td>{formatQuantity(l.difference)}</td>
-                  <td>{l.counter ?? '—'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        {count.status === 'counting' && (
-          <p className="muted">
-            {t('Enter zero for products with no stock. Differences reflect saved quantities. ')}
-          </p>
-        )}
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 16 }}>
+      {count.status === 'draft' && manage && (
+        <p className="notice">
+          {t('Start counting to unlock quantity entry. Stock changes only after finalization.')}
+        </p>
+      )}
+      {count.status === 'counting' && (
+        <p className="stock-count-progress" role="status">
+          {t('Saved quantities: {saved} of {total} products.', {
+            saved: savedCount,
+            total: count.lines.length,
+          })}
+          {hasUnsavedQuantities && <span>{t('Unsaved quantities — save before reviewing.')}</span>}
+        </p>
+      )}
+      <fieldset className="stock-count-fields" disabled={busy || !!pending}>
+        <div className="stock-count-actions">
           {manage && (
             <>
               {count.status === 'draft' && (
@@ -425,22 +482,13 @@ function CountEditor({ count }: { count: Count }) {
               )}
               {count.status === 'counting' && (
                 <>
-                  <Button
-                    onClick={() =>
-                      void send('quantities', {
-                        lines: Object.entries(values)
-                          .filter(([, v]) => v !== '')
-                          .map(([productId, quantity]) => ({ productId, quantity })),
-                      })
-                    }
-                  >
+                  <Button onClick={saveQuantities} disabled={!hasUnsavedQuantities}>
                     {t('Save quantities ')}
                   </Button>
                   <Button
                     variant="outline"
                     disabled={
-                      count.lines.some((l) => l.counted_quantity === null) ||
-                      count.lines.some((l) => values[l.product_id] !== quantityInputValue(l.counted_quantity ?? ''))
+                      count.lines.some((l) => l.counted_quantity === null) || hasUnsavedQuantities
                     }
                     onClick={() => void action('review')}
                   >
@@ -466,6 +514,70 @@ function CountEditor({ count }: { count: Count }) {
             </Button>
           )}
         </div>
+
+        <div className="table-scroll stock-count-table">
+          <table aria-label={t('Count quantities')}>
+            <thead>
+              <tr>
+                <th>{t('Product')}</th>
+                <th>{t('System quantity')}</th>
+                <th>{t('Counted quantity')}</th>
+                <th>{t('Difference')}</th>
+                <th>{t('Counted by')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {count.lines.map((l) => (
+                <tr key={l.product_id}>
+                  <td className="stock-count-product" data-label={t('Product')}>
+                    <strong>{l.product_name}</strong>
+                    <small>
+                      {l.sku} · {t(l.unit ?? '')}
+                    </small>
+                  </td>
+                  <td className="stock-count-system" data-label={t('System quantity')}>
+                    {formatQuantity(l.system_quantity)}
+                  </td>
+                  <td className="stock-count-quantity" data-label={t('Counted quantity')}>
+                    {['draft', 'counting'].includes(count.status) && manage ? (
+                      <input
+                        aria-label={t('Counted {value0}', { value0: l.product_name })}
+                        inputMode="decimal"
+                        disabled={count.status !== 'counting'}
+                        placeholder={t(
+                          count.status === 'draft' ? 'Start counting first' : 'Not counted',
+                        )}
+                        autoComplete="off"
+                        style={{ minWidth: 110 }}
+                        value={values[l.product_id]}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setValues((current) => ({ ...current, [l.product_id]: value }));
+                          setError(undefined);
+                        }}
+                      />
+                    ) : l.counted_quantity === null ? (
+                      t('Not counted')
+                    ) : (
+                      formatQuantity(l.counted_quantity)
+                    )}
+                  </td>
+                  <td className="stock-count-difference" data-label={t('Difference')}>
+                    {formatQuantity(l.difference)}
+                  </td>
+                  <td className="stock-count-counter" data-label={t('Counted by')}>
+                    {l.counter ?? '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {count.status === 'counting' && (
+          <p className="muted">
+            {t('Enter zero for products with no stock. Differences reflect saved quantities. ')}
+          </p>
+        )}
       </fieldset>
       <Dialog
         open={!!confirmation}
