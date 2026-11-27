@@ -1,6 +1,5 @@
 export const advancedFeatures = [
   { path: '/action-center', label: 'Action Center' },
-  { path: '/stock-counts', label: 'Stock counts' },
   { path: '/replenishment', label: 'Replenishment' },
   { path: '/digital-purchases', label: 'Digital purchases' },
 ] as const;

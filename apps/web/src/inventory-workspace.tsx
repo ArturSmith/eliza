@@ -77,11 +77,6 @@ export function InventoryPage() {
               </span>
               <h2>{t(title)}</h2>
               <p>{t(description)}</p>
-              {to === '/stock-counts' && !session.store.advancedFeaturesEnabled && (
-                <small className="inventory-action-note">
-                  {t('Available when advanced features are enabled.')}
-                </small>
-              )}
               <span className="inventory-action-cta">
                 {allowed ? (
                   <>

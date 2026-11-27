@@ -1,4 +1,4 @@
-import { test, expect, enableAdvancedFeatures } from './fixtures';
+import { test, expect } from './fixtures';
 
 test('four stock actions lead to directed forms, counts and traceable history', async ({
   page,
@@ -39,7 +39,7 @@ test('four stock actions lead to directed forms, counts and traceable history', 
   const cards = page.locator('.inventory-action-card');
   await expect(cards).toHaveCount(4);
   await expect(page.locator('.movement-filters')).toHaveCount(0);
-  await expect(page.getByText('Available when advanced features are enabled.')).toBeVisible();
+  await expect(page.getByText('Available when advanced features are enabled.')).toHaveCount(0);
   await page
     .locator('.inventory-actions')
     .getByRole('link', { name: /^Add stock/ })
@@ -106,8 +106,6 @@ test('four stock actions lead to directed forms, counts and traceable history', 
     .click();
   await expect(page.getByRole('cell', { name: 'Missing during shelf check' })).toBeVisible();
   await page.getByRole('link', { name: 'Back to inventory', exact: true }).click();
-  await enableAdvancedFeatures(page);
-  await page.reload();
   await page
     .locator('.inventory-actions')
     .getByRole('link', { name: /^Stock count/ })

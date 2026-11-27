@@ -27,13 +27,19 @@ test('advanced tools are opt-in, persist for the store, preserve data and retain
   ).toBe(false);
   await page.goto('/');
   const nav = page.getByRole('navigation', { name: 'Main navigation' });
-  const optional = ['Action Center', 'Stock counts', 'Replenishment', 'Digital purchases'];
+  const optional = ['Action Center', 'Replenishment', 'Digital purchases'];
   for (const name of optional)
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
-  for (const name of ['Sales', 'Products', 'Inventory', 'Suppliers & purchases'])
+  for (const name of [
+    'Accounting',
+    'Products',
+    'Inventory',
+    'Stock counts',
+    'Suppliers & purchases',
+  ])
     await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
   await expect(page.getByRole('heading', { name: /Manager Action Center/ })).toHaveCount(0);
-  for (const path of ['/action-center', '/stock-counts', '/replenishment', '/digital-purchases']) {
+  for (const path of ['/action-center', '/replenishment', '/digital-purchases']) {
     await page.goto(path);
     await expect(
       page.getByRole('heading', { name: 'Advanced features are turned off' }),
@@ -62,7 +68,7 @@ test('advanced tools are opt-in, persist for the store, preserve data and retain
     await expect(nav.getByRole('link', { name, exact: true })).toBeVisible();
   await page.reload();
   await expect(toggle).toBeChecked();
-  await page.goto('/');
+  await page.goto('/action-center');
   await expect(page.getByRole('heading', { name: /Manager Action Center/ })).toBeVisible();
 
   // A real record survives switching to basic mode and back.
@@ -182,9 +188,8 @@ test('advanced tools are opt-in, persist for the store, preserve data and retain
   for (const name of optional)
     await expect(nav.getByRole('link', { name, exact: true })).toHaveCount(0);
   await page.goto('/stock-counts');
-  await expect(
-    page.getByRole('heading', { name: 'Advanced features are turned off' }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Stock counts', exact: true })).toBeVisible();
+  await expect(page.getByRole('row').filter({ hasText: 'Preserved stock count' })).toBeVisible();
   expect((await page.request.get('/api/stock-counts/' + countId)).ok()).toBe(true);
   await page.goto('/settings');
   await toggle.check();
